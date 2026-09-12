@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from os import PathLike
-from typing import Optional
 
 from ..rng import RNG
 
@@ -122,5 +121,7 @@ class MSA:
         """
 
 class Tree:
-    def __init__(self, newick: Optional[str] = None): ...
+    def __init__(self): ...
+    @classmethod
+    def from_newick(cls, newick: str) -> Tree: ...
     def __str__(self) -> str: ...

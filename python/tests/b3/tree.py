@@ -8,7 +8,7 @@ import itertools
 from aspartik.b3.config import MCMCConfig
 from aspartik.b3.parameters import Tree
 from aspartik.data.msa import MSA
-from aspartik.data.newick import Tree as NewickTree
+from aspartik.data.tree import Tree as NewickTree
 from aspartik.rng import RNG
 
 
@@ -89,26 +89,26 @@ def test_ola(rng: RNG):
     # figure 1
     tree = Tree([str(i) for i in range(4)], rng)
 
-    newick = NewickTree("(((0:0,1:0):0,3:0):0,2:0);")
+    newick = NewickTree.from_newick("(((0:0,1:0):0,3:0):0,2:0);")
     tree.load_newick(newick)
     assert tree.ola() == [0, -1, -1]
 
-    newick = NewickTree("(((0:0,2:0):0,3:0):0,1:0);")
+    newick = NewickTree.from_newick("(((0:0,2:0):0,3:0):0,1:0);")
     tree.load_newick(newick)
     assert tree.ola() == [0, 0, -2]
 
-    newick = NewickTree("(((1:0,2:0):0,3:0):0,0:0);")
+    newick = NewickTree.from_newick("(((1:0,2:0):0,3:0):0,0:0);")
     tree.load_newick(newick)
     assert tree.ola() == [0, 1, -2]
 
     # figure 2
     tree = Tree([str(i) for i in range(6)], rng)
 
-    newick = NewickTree("(((0:0,(1:0,5:0):0):0,(3:0,4:0):0):0,2:0);")
+    newick = NewickTree.from_newick("(((0:0,(1:0,5:0):0):0,(3:0,4:0):0):0,2:0);")
     tree.load_newick(newick)
     assert tree.ola() == [0, -1, -1, 3, 1]
 
-    newick = NewickTree("((0:0,1:0):0,(((5:0,3:0):0,4:0):0,2:0):0);")
+    newick = NewickTree.from_newick("((0:0,1:0):0,(((5:0,3:0):0,4:0):0,2:0):0);")
     tree.load_newick(newick)
     assert tree.ola() == [0, -1, 2, 3, 3]
 
@@ -116,19 +116,19 @@ def test_ola(rng: RNG):
     tree = Tree([str(i) for i in range(5)], rng)
 
     # figure 1
-    newick = NewickTree("((0:0,(2:0,3:0):0):0,(1:0,4:0):0);")
+    newick = NewickTree.from_newick("((0:0,(2:0,3:0):0):0,(1:0,4:0):0);")
     tree.load_newick(newick)
     assert tree.ola() == [0, 0, 2, 1]
 
     # figure 2
-    newick = NewickTree("((0:0,((1:0,3:0):0,4:0):0):0,2:0);")
+    newick = NewickTree.from_newick("((0:0,((1:0,3:0):0,4:0):0):0,2:0);")
     tree.load_newick(newick)
     assert tree.ola() == [0, -1, 1, -3]
 
 
 def test_mrca(rng: RNG):
     tree = Tree([str(i) for i in range(4)], rng)
-    newick = NewickTree("((0:0,1:0):0,(2:0,3:0):0);")
+    newick = NewickTree.from_newick("((0:0,1:0):0,(2:0,3:0):0);")
     tree.load_newick(newick)
 
     leaf0, leaf1, leaf2, leaf3 = tree.leaves()
@@ -155,16 +155,16 @@ def test_robinson_foulds(rng: RNG):
     other = Tree([str(i) for i in range(4)], rng)
 
     # identical -> 0
-    tree.load_newick(NewickTree("((0:0,1:0):0,(2:0,3:0):0);"))
-    other.load_newick(NewickTree("((0:0,1:0):0,(2:0,3:0):0);"))
+    tree.load_newick(NewickTree.from_newick("((0:0,1:0):0,(2:0,3:0):0);"))
+    other.load_newick(NewickTree.from_newick("((0:0,1:0):0,(2:0,3:0):0);"))
     assert tree.robinson_foulds(other) == 0
 
     # shared clade {0,1}, differ on the other -> RF 2
-    other.load_newick(NewickTree("(((0:0,1:0):0,2:0):0,3:0);"))
+    other.load_newick(NewickTree.from_newick("(((0:0,1:0):0,2:0):0,3:0);"))
     assert tree.robinson_foulds(other) == 2
 
     # no shared non-trivial clades -> RF 4 (maximum for 4 taxa)
-    other.load_newick(NewickTree("((0:0,2:0):0,(1:0,3:0):0);"))
+    other.load_newick(NewickTree.from_newick("((0:0,2:0):0,(1:0,3:0):0);"))
     assert tree.robinson_foulds(other) == 4
 
     # 5 taxa
@@ -172,33 +172,39 @@ def test_robinson_foulds(rng: RNG):
     other = Tree([str(i) for i in range(5)], rng)
 
     # identical
-    tree.load_newick(NewickTree("((0:0,1:0):0,(2:0,(3:0,4:0):0):0);"))
-    other.load_newick(NewickTree("((0:0,1:0):0,(2:0,(3:0,4:0):0):0);"))
+    tree.load_newick(NewickTree.from_newick("((0:0,1:0):0,(2:0,(3:0,4:0):0):0);"))
+    other.load_newick(NewickTree.from_newick("((0:0,1:0):0,(2:0,(3:0,4:0):0):0);"))
     assert tree.robinson_foulds(other) == 0
 
     # one NNI move: {0,1} and {3,4} shared -> RF 2
-    other.load_newick(NewickTree("((0:0,1:0):0,((2:0,3:0):0,4:0):0);"))
+    other.load_newick(NewickTree.from_newick("((0:0,1:0):0,((2:0,3:0):0,4:0):0);"))
     assert tree.robinson_foulds(other) == 2
 
     # caterpillar: only {0,1} shared -> RF 4
-    other.load_newick(NewickTree("((((0:0,1:0):0,2:0):0,3:0):0,4:0);"))
+    other.load_newick(NewickTree.from_newick("((((0:0,1:0):0,2:0):0,3:0):0,4:0);"))
     assert tree.robinson_foulds(other) == 4
 
     # maximally different (left comb vs right comb)
-    tree.load_newick(NewickTree("(0:0,(1:0,(2:0,(3:0,4:0):0):0):0);"))
-    other.load_newick(NewickTree("((((0:0,1:0):0,2:0):0,3:0):0,4:0);"))
+    tree.load_newick(NewickTree.from_newick("(0:0,(1:0,(2:0,(3:0,4:0):0):0):0);"))
+    other.load_newick(NewickTree.from_newick("((((0:0,1:0):0,2:0):0,3:0):0,4:0);"))
     assert tree.robinson_foulds(other) == 6
 
     # 6 taxa
     tree = Tree([str(i) for i in range(6)], rng)
     other = Tree([str(i) for i in range(6)], rng)
 
-    tree.load_newick(NewickTree("(((0:0,1:0):0,(2:0,3:0):0):0,(4:0,5:0):0);"))
-    other.load_newick(NewickTree("(((0:0,1:0):0,(2:0,3:0):0):0,(4:0,5:0):0);"))
+    tree.load_newick(
+        NewickTree.from_newick("(((0:0,1:0):0,(2:0,3:0):0):0,(4:0,5:0):0);")
+    )
+    other.load_newick(
+        NewickTree.from_newick("(((0:0,1:0):0,(2:0,3:0):0):0,(4:0,5:0):0);")
+    )
     assert tree.robinson_foulds(other) == 0
 
     # reroot: {0,1} and {2,3} shared, root clade differs
-    other.load_newick(NewickTree("((0:0,1:0):0,((2:0,3:0):0,(4:0,5:0):0):0);"))
+    other.load_newick(
+        NewickTree.from_newick("((0:0,1:0):0,((2:0,3:0):0,(4:0,5:0):0):0);")
+    )
     assert tree.robinson_foulds(other) == 2
 
     # symmetrical
@@ -209,8 +215,8 @@ def test_robinson_foulds(rng: RNG):
     other = Tree([str(i) for i in range(8)], rng)
 
     balanced = "((((0:0,1:0):0,(2:0,3:0):0):0,(4:0,5:0):0):0,(6:0,7:0):0);"
-    tree.load_newick(NewickTree(balanced))
-    other.load_newick(NewickTree(balanced))
+    tree.load_newick(NewickTree.from_newick(balanced))
+    other.load_newick(NewickTree.from_newick(balanced))
     assert tree.robinson_foulds(other) == 0
 
 

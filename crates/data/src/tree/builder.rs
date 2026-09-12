@@ -4,7 +4,7 @@ use smallvec::SmallVec;
 
 use std::collections::VecDeque;
 
-use super::{BinaryTree, Node};
+use super::{BinaryTree, Node, ROOT_PARENT};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NodeData {
@@ -28,24 +28,28 @@ impl NodeData {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EdgeData {
-	pub length: f64,
+	pub length: Option<f64>,
 	pub attributes: String,
 }
 
 impl EdgeData {
-	pub const fn new(length: f64, attributes: String) -> Self {
+	pub const fn new(length: Option<f64>, attributes: String) -> Self {
 		EdgeData { length, attributes }
 	}
 
 	pub const fn from_distance(length: f64) -> EdgeData {
-		EdgeData::new(length, String::new())
+		EdgeData::new(Some(length), String::new())
+	}
+
+	pub const fn without_distance() -> EdgeData {
+		EdgeData::new(None, String::new())
 	}
 }
 
 #[derive(Debug, Clone)]
 pub struct TreeBuilder {
 	pub(super) children: Vec<SmallVec<[Node; 2]>>,
-	pub(super) parents: Vec<Option<Node>>,
+	pub(super) parents: Vec<Node>,
 	pub(super) edges: Vec<Option<EdgeData>>,
 	pub(super) nodes: Vec<NodeData>,
 	pub(super) root: Node,
@@ -65,7 +69,7 @@ impl TreeBuilder {
 	pub fn with_root(data: NodeData) -> Self {
 		Self {
 			children: vec![SmallVec::new()],
-			parents: vec![None],
+			parents: vec![Node(ROOT_PARENT)],
 			edges: vec![None],
 			nodes: vec![data],
 			root: Node(0),
@@ -103,7 +107,10 @@ impl TreeBuilder {
 	}
 
 	pub fn parent_of(&self, node: Node) -> Option<Node> {
-		self.parents.get(node.i()).copied().flatten()
+		self.parents
+			.get(node.i())
+			.copied()
+			.filter(|parent| parent.index() != ROOT_PARENT)
 	}
 
 	pub fn edge(&self, node: Node) -> Option<&EdgeData> {
@@ -130,9 +137,7 @@ impl TreeBuilder {
 				children.iter().copied().filter_map(
 					move |child| {
 						(self.parents[child.i()]
-							!= Some(Node(
-								parent as u32
-							)))
+							!= Node(parent as u32))
 						.then_some((
 							Node(parent as u32),
 							child,
@@ -156,7 +161,7 @@ impl TreeBuilder {
 		let node = Node(index);
 		self.nodes.push(data);
 		self.children.push(SmallVec::new());
-		self.parents.push(Some(parent));
+		self.parents.push(parent);
 		self.edges.push(Some(edge));
 		self.children[parent.i()].push(node);
 		Ok(node)
@@ -171,7 +176,7 @@ impl TreeBuilder {
 		self.ensure_nodes(parent, child)?;
 		ensure!(child != self.root, "The root cannot have a parent");
 		ensure!(
-			self.parents[child.i()].is_none(),
+			self.parents[child.i()].index() == ROOT_PARENT,
 			"Node {} already has a canonical parent",
 			child.index()
 		);
@@ -180,7 +185,7 @@ impl TreeBuilder {
 			"Adding the edge would create a cycle"
 		);
 
-		self.parents[child.i()] = Some(parent);
+		self.parents[child.i()] = parent;
 		self.edges[child.i()] = Some(edge);
 		self.children[parent.i()].push(child);
 		Ok(())
@@ -193,7 +198,7 @@ impl TreeBuilder {
 	) -> Result<EdgeData> {
 		self.ensure_nodes(parent, child)?;
 		ensure!(
-			self.parents[child.i()] == Some(parent),
+			self.parents[child.i()] == parent,
 			"Node {} is not a canonical child of node {}",
 			child.index(),
 			parent.index()
@@ -208,7 +213,7 @@ impl TreeBuilder {
 				)
 			})?;
 		self.children[parent.i()].remove(index);
-		self.parents[child.i()] = None;
+		self.parents[child.i()] = Node(ROOT_PARENT);
 		self.edges[child.i()].take().ok_or_else(|| {
 			anyhow!("The canonical edge has no data")
 		})
@@ -221,7 +226,7 @@ impl TreeBuilder {
 	) -> Result<()> {
 		self.ensure_nodes(child, new_parent)?;
 		ensure!(child != self.root, "The root cannot have a parent");
-		let old_parent = self.parents[child.i()].ok_or_else(|| {
+		let old_parent = self.parent_of(child).ok_or_else(|| {
 			anyhow!("Node {} has no parent", child.index())
 		})?;
 		if old_parent == new_parent {
@@ -242,7 +247,7 @@ impl TreeBuilder {
 			})?;
 		self.children[old_parent.i()].remove(index);
 		self.children[new_parent.i()].push(child);
-		self.parents[child.i()] = Some(new_parent);
+		self.parents[child.i()] = new_parent;
 		Ok(())
 	}
 
@@ -272,7 +277,7 @@ impl TreeBuilder {
 		self.ensure_nodes(parent, child)?;
 		ensure!(parent != child, "A node cannot be its own parent");
 		ensure!(
-			self.parents[child.i()] != Some(parent),
+			self.parents[child.i()] != parent,
 			"The edge is already the canonical parent relation"
 		);
 		ensure!(
@@ -295,7 +300,7 @@ impl TreeBuilder {
 	) -> Result<()> {
 		self.ensure_nodes(parent, child)?;
 		ensure!(
-			self.parents[child.i()] != Some(parent),
+			self.parents[child.i()] != parent,
 			"The edge is the canonical parent relation"
 		);
 		let index = self.children[parent.i()]
@@ -323,7 +328,7 @@ impl TreeBuilder {
 		let mut current = node;
 		while current != self.root {
 			let parent =
-				self.parents[current.i()].ok_or_else(|| {
+				self.parent_of(current).ok_or_else(|| {
 					anyhow!("The new root is disconnected")
 				})?;
 			let edge = self.edges[current.i()].take().ok_or_else(
@@ -344,11 +349,11 @@ impl TreeBuilder {
 				})?;
 			self.children[parent.i()].remove(index);
 			self.children[child.i()].push(parent);
-			self.parents[parent.i()] = Some(child);
+			self.parents[parent.i()] = child;
 			self.edges[parent.i()] = Some(edge);
 		}
 
-		self.parents[node.i()] = None;
+		self.parents[node.i()] = Node(ROOT_PARENT);
 		self.edges[node.i()] = None;
 		self.root = node;
 		self.validate()
@@ -384,7 +389,7 @@ impl TreeBuilder {
 				);
 				unique.push(child);
 				if self.parents[child.i()]
-					== Some(Node(parent as u32))
+					== Node(parent as u32)
 				{
 					ensure!(
 						!seen[child.i()],
@@ -399,7 +404,8 @@ impl TreeBuilder {
 		for node in self.nodes() {
 			if node == self.root {
 				ensure!(
-					self.parents[node.i()].is_none(),
+					self.parents[node.i()].index()
+						== ROOT_PARENT,
 					"The root has a parent"
 				);
 				ensure!(
@@ -413,7 +419,8 @@ impl TreeBuilder {
 					node.index()
 				);
 				ensure!(
-					self.parents[node.i()].is_some(),
+					self.parents[node.i()].index()
+						!= ROOT_PARENT,
 					"Node {} has no canonical parent",
 					node.index()
 				);
@@ -437,7 +444,7 @@ impl TreeBuilder {
 				.iter()
 				.copied()
 				.filter(|child| {
-					self.parents[child.i()] == Some(node)
+					self.parents[child.i()] == node
 				}));
 		}
 		ensure!(
@@ -561,7 +568,12 @@ impl TryFrom<TreeBuilder> for BinaryTree {
 					)
 				},
 			)?;
-			edge_lengths[index] = edge.length;
+			edge_lengths[index] = edge.length.ok_or_else(|| {
+				anyhow!(
+					"Node {} has no edge length",
+					old.index()
+				)
+			})?;
 			edge_attributes[index] = nonempty(&edge.attributes);
 		}
 

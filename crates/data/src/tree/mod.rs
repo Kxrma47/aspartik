@@ -2,9 +2,14 @@ mod binary;
 pub mod builder;
 mod distance;
 mod newick;
+mod parse_newick;
+#[cfg(feature = "python")]
+pub mod python;
+mod serialize_newick;
 
 pub use binary::BinaryTree;
 pub use distance::robinson_foulds_matrix;
+pub use parse_newick::parse as parse_newick;
 
 const ROOT_PARENT: u32 = u32::MAX;
 

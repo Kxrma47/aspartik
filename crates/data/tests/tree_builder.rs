@@ -15,7 +15,7 @@ fn node_data(
 }
 
 fn edge_data(length: f64, attributes: impl Into<String>) -> EdgeData {
-	EdgeData::new(length, attributes.into())
+	EdgeData::new(Some(length), attributes.into())
 }
 
 fn add(
@@ -43,7 +43,7 @@ fn balanced_builder() -> Result<TreeBuilder> {
 	Ok(tree)
 }
 
-fn canonical_edges(tree: &TreeBuilder) -> Vec<(u32, u32, u64, String)> {
+fn canonical_edges(tree: &TreeBuilder) -> Vec<(u32, u32, Option<u64>, String)> {
 	let mut edges = tree
 		.nodes()
 		.filter_map(|child| {
@@ -52,7 +52,7 @@ fn canonical_edges(tree: &TreeBuilder) -> Vec<(u32, u32, u64, String)> {
 			Some((
 				parent.index(),
 				child.index(),
-				edge.length.to_bits(),
+				edge.length.map(f64::to_bits),
 				edge.attributes.clone(),
 			))
 		})
@@ -119,11 +119,11 @@ fn node_and_edge_mutations() -> Result<()> {
 	assert!(tree.children_of(right).unwrap().contains(&child));
 
 	let old = tree.replace_edge(child, edge_data(4.0, "replacement"))?;
-	assert_eq!(old.length, 3.0);
+	assert_eq!(old.length, Some(3.0));
 	assert_eq!(old.attributes, "changed_edge");
 
 	let removed = tree.remove_edge(right, child)?;
-	assert_eq!(removed.length, 4.0);
+	assert_eq!(removed.length, Some(4.0));
 	assert!(tree
 		.replace_edge(child, edge_data(5.0, "detached"))
 		.is_err());
@@ -196,7 +196,7 @@ fn binary_sealing_preserves_node_and_edge_data() -> Result<()> {
 			Some(edge) => {
 				assert_eq!(
 					sealed.edge_length(node),
-					Some(edge.length)
+					edge.length
 				);
 				assert_eq!(
 					sealed.edge_metadata(node),
@@ -358,7 +358,7 @@ fn random_binary_builder_roundtrips() {
 				Some(edge) => {
 					assert_eq!(
 						sealed.edge_length(target),
-						Some(edge.length)
+						edge.length
 					);
 					assert_eq!(
 						sealed.edge_metadata(target),
