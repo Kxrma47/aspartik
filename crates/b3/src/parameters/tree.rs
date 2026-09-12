@@ -1,4 +1,4 @@
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use bytemuck::{Pod, Zeroable, allocation::cast_vec};
 use parking_lot::Mutex;
 use pyo3::{
@@ -11,7 +11,7 @@ use rustc_hash::{FxBuildHasher, FxHashSet};
 
 use std::{
 	cmp::{Reverse, max, min},
-	collections::{BinaryHeap, HashMap, VecDeque},
+	collections::{BinaryHeap, VecDeque},
 	io::Write,
 	mem,
 	ops::Deref,
@@ -19,9 +19,10 @@ use std::{
 
 use crate::{clock::PyClock, impl_pyparameter_common, parameters::Parameter};
 use bitmap::Bitmap;
-use data::newick::{
-	Edge as NewickEdge, Node as NewickNode, NodeIdx as NewickNodeIndex,
-	Tree as NewickTree, python::PyTree as PyNewickTree,
+use data::tree::{
+	Node as DataNode,
+	builder::{EdgeData, NodeData, TreeBuilder},
+	python::PyTree as PyNewickTree,
 };
 use rng::{PyRng, Rng};
 use sk::EpochBuf;
@@ -264,94 +265,78 @@ impl Tree {
 		self.accept();
 	}
 
-	pub fn load_newick(&mut self, newick: &NewickTree) -> Result<()> {
-		ensure!(newick.leaves().count() == self.num_leaves() as usize);
-		ensure!(newick.num_nodes() == self.num_nodes() as usize);
+	pub fn load_newick(&mut self, newick: &TreeBuilder) -> Result<()> {
+		let tree = newick.clone().into_binary()?;
+		ensure!(tree.num_leaves() == self.num_leaves());
+		ensure!(tree.num_nodes() == self.num_nodes());
 
-		let mut mapping = HashMap::<NewickNodeIndex, u32>::new();
-		for n_leaf_idx in newick.leaves() {
-			let name = newick.get_node(n_leaf_idx).name();
-			let Some(s_idx) =
-				self.names().iter().position(|n| *n == name)
-			else {
-				bail!("Node {name} not found in tree");
-			};
-			mapping.insert(n_leaf_idx, s_idx as u32);
+		let mut mapping = vec![ROOT; tree.num_nodes() as usize];
+		let mut seen = vec![false; self.num_leaves() as usize];
+		for leaf in tree.leaves() {
+			let node = DataNode::from(leaf);
+			let name = tree.name(node).unwrap_or_default();
+			let index = self
+				.names()
+				.iter()
+				.position(|candidate| candidate == name)
+				.with_context(|| {
+					format!("Node {name} not found in tree")
+				})?;
+			ensure!(
+				!seen[index],
+				"Node {name} occurs more than once"
+			);
+			seen[index] = true;
+			mapping[node.index() as usize] = index as u32;
+		}
+		ensure!(seen.into_iter().all(|value| value));
+
+		let mut internal_index = self.num_leaves();
+		for node in tree.postorder() {
+			if tree.is_internal(node) {
+				mapping[node.index() as usize] = internal_index;
+				internal_index += 1;
+			}
 		}
 
-		for i in 0..self.num_edges() as usize {
-			self.children[i] = ROOT;
+		for index in 0..self.num_edges() as usize {
+			self.children[index] = ROOT;
 		}
+		for index in 0..self.num_nodes() as usize {
+			self.parents[index] = ROOT;
+		}
+		for internal in tree.internals() {
+			let parent = mapping[internal.index() as usize];
+			let offset = (parent - self.num_leaves()) as usize * 2;
+			let (left, right) = tree.children_of(internal);
+			for (slot, child) in
+				[left, right].into_iter().enumerate()
+			{
+				let child = mapping[child.index() as usize];
+				self.children[offset + slot] = child;
+				self.parents[child as usize] = parent;
+			}
+		}
+		let root = mapping[tree.root().index() as usize];
+		self.set_root(Internal(root));
 
-		let mut queue = VecDeque::from_iter(newick.leaves());
-		let num_leaves = self.num_leaves();
-		let mut internal_idx = self.num_leaves();
-		while let Some(n_idx) = queue.pop_front() {
-			let Some(parent) = newick.parent_of(n_idx) else {
-				self.set_root(Internal(mapping[&n_idx]));
+		let mut heights = vec![0.0; tree.num_nodes() as usize];
+		for node in tree.preorder() {
+			let Some(parent) = tree.parent_of(node) else {
 				continue;
 			};
-			let s_parent_idx =
-				*mapping.entry(parent).or_insert_with(|| {
-					queue.push_back(parent);
-					let idx = internal_idx;
-					internal_idx += 1;
-					idx
-				});
-
-			let current_idx = mapping[&n_idx];
-			self.parents[current_idx as usize] = s_parent_idx;
-			let child_offset =
-				(s_parent_idx - num_leaves) as usize * 2;
-			if self.children[child_offset] == ROOT {
-				self.children[child_offset] = current_idx;
-			} else {
-				self.children[child_offset + 1] = current_idx;
-			}
+			let length = tree.edge_length(node).context(
+				"Encountered Newick node without length",
+			)?;
+			heights[node.index() as usize] =
+				heights[parent.index() as usize] - length;
 		}
-
-		let rmapping: HashMap<Node, NewickNodeIndex> = mapping
-			.into_iter()
-			.map(|(k, v)| (Node(v), k))
-			.collect();
-
-		self.set_height(*self.root(), 0.0);
-		let mut queue = VecDeque::from([*self.root()]);
-		while let Some(node) = queue.pop_front() {
-			if let Some(node) = self.as_internal(node) {
-				let (left, right) = self.children_of(node);
-				queue.push_back(left);
-				queue.push_back(right);
-			}
-
-			let Some(parent) = self.parent_of(node) else {
-				continue;
-			};
-			let parent_height = self.height_of(*parent);
-			let edge =
-				newick.edge_to_parent(rmapping[&node]).unwrap();
-			let Some(edge_length) = edge.distance() else {
-				bail!("Encountered Newick node without length");
-			};
-
-			self.set_height(node, parent_height - edge_length);
-		}
-		let mut min = 0.0;
-		for &height in self.heights.iter() {
-			if height < min {
-				min = height;
-			}
-		}
-
-		for node in self.nodes() {
-			self.set_height(node, self.height_of(node) - min);
-		}
-
-		// set root
-		for internal in self.internals() {
-			if self.parents[internal.i()] == ROOT {
-				self.set_root(internal);
-			}
+		let minimum = heights.iter().copied().fold(0.0, f64::min);
+		for node in tree.nodes() {
+			self.set_height(
+				Node(mapping[node.index() as usize]),
+				heights[node.index() as usize] - minimum,
+			);
 		}
 
 		Ok(())
@@ -944,41 +929,42 @@ impl Tree {
 		&self,
 		internal_ids: bool,
 		clock_rate: &dyn Fn(u32) -> f64,
-	) -> String {
-		let mut tree = NewickTree::new();
-
-		let mut map = HashMap::<Node, NewickNodeIndex>::new();
-
-		for node in self.nodes() {
-			let name = if self.is_leaf(node) {
-				self.names[node.i()].clone()
-			} else if internal_ids {
-				node.0.to_string()
-			} else {
-				String::new()
-			};
-
-			let newick_node = tree
-				.add_node(NewickNode::new(name, String::new()));
-
-			map.insert(node, newick_node);
-		}
-
-		for node in self.nodes() {
-			let Some(parent) = self.parent_of(node) else {
-				tree.set_root(map[&node]);
+	) -> Result<String> {
+		let root = *self.root();
+		let root_name = if internal_ids {
+			root.0.to_string()
+		} else {
+			String::new()
+		};
+		let mut tree =
+			TreeBuilder::with_root(NodeData::named(root_name));
+		let mut stack = vec![(root, tree.root())];
+		while let Some((source, target)) = stack.pop() {
+			let Some(source) = self.as_internal(source) else {
 				continue;
 			};
-
-			let edge_len =
-				self.edge_length(node.0) * clock_rate(node.0);
-			let edge =
-				NewickEdge::new(Some(edge_len), String::new());
-
-			tree.add_edge(map[&parent], map[&node], edge);
+			let (left, right) = self.children_of(source);
+			let mut next = Vec::with_capacity(2);
+			for child in [left, right] {
+				let name = if self.is_leaf(child) {
+					self.names[child.i()].clone()
+				} else if internal_ids {
+					child.0.to_string()
+				} else {
+					String::new()
+				};
+				let length = self.edge_length(child.0)
+					* clock_rate(child.0);
+				let child_target = tree.add_node(
+					target,
+					NodeData::named(name),
+					EdgeData::from_distance(length),
+				)?;
+				next.push((child, child_target));
+			}
+			stack.extend(next.into_iter().rev());
 		}
-
-		tree.into_string()
+		tree.to_newick()
 	}
 
 	fn postorder(&self) -> Postorder<'_> {
@@ -1608,7 +1594,7 @@ impl_pyparameter_common!(PyTree, Tree, {
 		&self,
 		internal_ids: bool,
 		clock: Option<Py<PyClock>>,
-	) -> String {
+	) -> Result<String> {
 		if let Some(clock) = clock {
 			let clock = clock.get().inner();
 			self.inner().to_newick(internal_ids, &|edge| {

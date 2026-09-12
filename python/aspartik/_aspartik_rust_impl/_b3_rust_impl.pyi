@@ -10,7 +10,7 @@ from ..b3.likelihoods import Likelihood
 from ..b3.parameters import Node, Parameter, Scalable
 from ..b3.substitutions import Substitution4
 from ..data.msa import MSA
-from ..data.newick import Tree as NewickTree
+from ..data.tree import Tree as NewickTree
 from ..distributions import Continuous, Sample
 from ..rng import RNG
 

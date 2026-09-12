@@ -1,7 +1,6 @@
 mod aa;
 pub mod fasta;
 mod msa;
-pub mod newick;
 mod nucleotides;
 mod parser;
 mod phred;
@@ -28,7 +27,7 @@ pub mod pymodule {
 	use crate::{
 		AminoAcid, DnaNucleotide, Phred,
 		fasta::python::PyFastaDnaRecord, msa::python::PyMsa,
-		newick::python::PyTree, seq::python::PyDnaSeq,
+		seq::python::PyDnaSeq, tree::python::PyTree,
 	};
 
 	#[pymodule_init]
