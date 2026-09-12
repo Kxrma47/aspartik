@@ -26,8 +26,10 @@ pub mod pymodule {
 	#[pymodule_export]
 	use crate::{
 		AminoAcid, DnaNucleotide, Phred,
-		fasta::python::PyFastaDnaRecord, msa::python::PyMsa,
-		seq::python::PyDnaSeq, tree::python::PyTree,
+		fasta::python::PyFastaDnaRecord,
+		msa::python::PyMsa,
+		seq::python::PyDnaSeq,
+		tree::python::{PyBinaryTree, PyTree},
 	};
 
 	#[pymodule_init]
