@@ -1,6 +1,11 @@
 import pytest
 
-from aspartik.data.tree import BinaryTree, Tree
+from aspartik.data.tree import (
+    BinaryTree,
+    Tree,
+    TreeCollection,
+    robinson_foulds_matrix,
+)
 
 
 def test_empty_tree():
@@ -184,3 +189,75 @@ def test_binary_children_reject_leaf():
     tree = BinaryTree.from_newick("(A:1,B:2);")
     with pytest.raises(RuntimeError, match="is a leaf"):
         tree.children_of(tree.leaves()[0])
+
+
+def test_tree_collection_normalizes_leaf_order():
+    trees = TreeCollection.from_newick(
+        [
+            "((A:1,B:1):1,(C:1,D:1):1);",
+            "((D:1,C:1):1,(B:1,A:1):1);",
+            "((A:1,C:1):1,(B:1,D:1):1);",
+        ]
+    )
+    distances = robinson_foulds_matrix(trees)
+
+    assert len(trees) == trees.num_trees == 3
+    assert trees.num_leaves == 4
+    assert trees.leaf_names == ["A", "B", "C", "D"]
+    assert distances.dtype.name == "uint32"
+    assert distances.shape == (3, 3)
+    assert distances.tolist() == [[0, 0, 4], [0, 0, 4], [4, 4, 0]]
+    assert not distances.flags.writeable
+
+
+def test_empty_tree_collection():
+    trees = TreeCollection.from_newick([])
+    distances = robinson_foulds_matrix(trees)
+
+    assert len(trees) == trees.num_trees == trees.num_leaves == 0
+    assert trees.leaf_names == []
+    assert distances.shape == (0, 0)
+
+
+def test_tree_collection_keeps_tree_data():
+    trees = TreeCollection.from_newick(
+        ["((A:1,B:2)left:3,C:4)root;", "(C:4,(B:2,A:1)left:3)root;"]
+    )
+
+    assert trees.to_newick(0) == "((A:1,B:2)left:3,C:4)root;"
+    assert trees.to_newick(1) == "(C:4,(B:2,A:1)left:3)root;"
+    with pytest.raises(RuntimeError, match="out of range"):
+        trees.to_newick(2)
+
+
+@pytest.mark.parametrize(
+    ("newicks", "message"),
+    [
+        (["(A:1,B:1);", "(A:1,C:1);"], "missing"),
+        (["(A:1,A:1);"], "more than once"),
+        (["(:1,B:1);"], "must have a name"),
+        (["(A:1,B:1,C:1);"], "not binary"),
+        (["(A,B:1);"], "no edge length"),
+    ],
+)
+def test_tree_collection_rejects_incompatible_trees(newicks, message):
+    with pytest.raises(RuntimeError, match=message):
+        TreeCollection.from_newick(newicks)
+
+
+def test_tree_collection_matrix_for_many_trees():
+    sources = [
+        "((A:1,B:1):1,(C:1,D:1):1);",
+        "((A:1,C:1):1,(B:1,D:1):1);",
+        "((A:1,D:1):1,(B:1,C:1):1);",
+    ]
+    trees = TreeCollection.from_newick([sources[index % 3] for index in range(256)])
+    distances = robinson_foulds_matrix(trees)
+
+    assert distances.shape == (256, 256)
+    assert (distances.diagonal() == 0).all()
+    assert (distances == distances.T).all()
+    for first in range(256):
+        for second in range(256):
+            expected = 0 if first % 3 == second % 3 else 4
+            assert distances[first, second] == expected

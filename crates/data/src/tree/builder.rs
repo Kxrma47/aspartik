@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow, ensure};
 use picoarrow::array::{ArrayUtf8, Nullable};
 use smallvec::SmallVec;
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use super::{BinaryTree, Node, ROOT_PARENT};
 
@@ -486,6 +486,53 @@ impl TreeBuilder {
 		BinaryTree::try_from(self)
 	}
 
+	pub(crate) fn into_binary_with_leaf_names(
+		self,
+		names: &[String],
+	) -> Result<BinaryTree> {
+		self.validate()?;
+		ensure!(self.is_binary(), "The tree is not binary");
+		let leaves = self
+			.nodes()
+			.filter(|&node| self.is_leaf(node))
+			.collect::<Vec<_>>();
+		ensure!(
+			leaves.len() == names.len(),
+			"Expected {} leaves, got {}",
+			names.len(),
+			leaves.len()
+		);
+
+		let mut by_name = HashMap::with_capacity(leaves.len());
+		for leaf in leaves {
+			let name = &self.node(leaf).unwrap().name;
+			ensure!(
+				!name.is_empty(),
+				"Every leaf must have a name"
+			);
+			ensure!(
+				by_name.insert(name.as_str(), leaf).is_none(),
+				"Leaf name '{name}' appears more than once"
+			);
+		}
+		let mut ordered = Vec::with_capacity(names.len());
+		for name in names {
+			ordered.push(*by_name.get(name.as_str()).ok_or_else(
+				|| {
+					anyhow!(
+						"Leaf '{name}' is missing from a tree"
+					)
+				},
+			)?);
+		}
+		ensure!(
+			by_name.len() == ordered.len(),
+			"A tree contains an unexpected leaf name"
+		);
+		drop(by_name);
+		binary_from_builder(self, ordered)
+	}
+
 	fn ensure_nodes(&self, first: Node, second: Node) -> Result<()> {
 		ensure!(
 			self.contains(first),
@@ -528,78 +575,80 @@ impl TryFrom<TreeBuilder> for BinaryTree {
 			.nodes()
 			.filter(|&node| builder.is_leaf(node))
 			.collect::<Vec<_>>();
-		ensure!(
-			leaves.len() >= 2,
-			"Expected at least two leaves, got {}",
-			leaves.len()
-		);
-		let internals = builder
-			.nodes()
-			.filter(|&node| !builder.is_leaf(node))
-			.collect::<Vec<_>>();
-		let num_leaves = u32::try_from(leaves.len())?;
-		let mut order = leaves;
-		order.extend(internals);
-		let mut mapping = vec![0_u32; builder.nodes.len()];
-		for (new, old) in order.iter().copied().enumerate() {
-			mapping[old.i()] = u32::try_from(new)?;
-		}
+		binary_from_builder(builder, leaves)
+	}
+}
 
-		let mut children = Vec::with_capacity(builder.nodes.len() - 1);
-		for &old in &order[num_leaves as usize..] {
-			children.extend(builder.children[old.i()]
-				.iter()
-				.map(|child| mapping[child.i()]));
+fn binary_from_builder(
+	builder: TreeBuilder,
+	leaves: Vec<Node>,
+) -> Result<BinaryTree> {
+	ensure!(
+		leaves.len() >= 2,
+		"Expected at least two leaves, got {}",
+		leaves.len()
+	);
+	let internals = builder
+		.nodes()
+		.filter(|&node| !builder.is_leaf(node))
+		.collect::<Vec<_>>();
+	let num_leaves = u32::try_from(leaves.len())?;
+	let mut order = leaves;
+	order.extend(internals);
+	let mut mapping = vec![0_u32; builder.nodes.len()];
+	for (new, old) in order.iter().copied().enumerate() {
+		mapping[old.i()] = u32::try_from(new)?;
+	}
+
+	let mut children = Vec::with_capacity(builder.nodes.len() - 1);
+	for &old in &order[num_leaves as usize..] {
+		children.extend(builder.children[old.i()]
+			.iter()
+			.map(|child| mapping[child.i()]));
+	}
+	let root = mapping[builder.root.i()];
+	let mut edge_lengths = vec![0.0; builder.nodes.len() - 1];
+	let mut edge_attributes = vec![None; builder.nodes.len() - 1];
+	for &old in &order {
+		let new = mapping[old.i()];
+		if new == root {
+			continue;
 		}
-		let root = mapping[builder.root.i()];
-		let mut edge_lengths = vec![0.0; builder.nodes.len() - 1];
-		let mut edge_attributes = vec![None; builder.nodes.len() - 1];
-		for &old in &order {
-			let new = mapping[old.i()];
-			if new == root {
-				continue;
-			}
-			let index = (new - u32::from(new > root)) as usize;
-			let edge = builder.edges[old.i()].as_ref().ok_or_else(
-				|| {
-					anyhow!(
-						"Node {} has no canonical edge data",
-						old.index()
-					)
-				},
-			)?;
-			edge_lengths[index] = edge.length.ok_or_else(|| {
+		let index = (new - u32::from(new > root)) as usize;
+		let edge =
+			builder.edges[old.i()].as_ref().ok_or_else(|| {
 				anyhow!(
-					"Node {} has no edge length",
+					"Node {} has no canonical edge data",
 					old.index()
 				)
 			})?;
-			edge_attributes[index] = nonempty(&edge.attributes);
-		}
-
-		let mut names = ArrayUtf8::<Nullable>::new();
-		let mut node_attributes = ArrayUtf8::<Nullable>::new();
-		for &old in &order {
-			names.push(nonempty(&builder.nodes[old.i()].name))?;
-			node_attributes.push(nonempty(
-				&builder.nodes[old.i()].attributes,
-			))?;
-		}
-		let mut edge_metadata = ArrayUtf8::<Nullable>::new();
-		for attributes in edge_attributes {
-			edge_metadata.push(attributes)?;
-		}
-
-		Self::new(
-			num_leaves,
-			root,
-			&children,
-			&edge_lengths,
-			names,
-			node_attributes,
-			edge_metadata,
-		)
+		edge_lengths[index] = edge.length.ok_or_else(|| {
+			anyhow!("Node {} has no edge length", old.index())
+		})?;
+		edge_attributes[index] = nonempty(&edge.attributes);
 	}
+
+	let mut names = ArrayUtf8::<Nullable>::new();
+	let mut node_attributes = ArrayUtf8::<Nullable>::new();
+	for &old in &order {
+		names.push(nonempty(&builder.nodes[old.i()].name))?;
+		node_attributes
+			.push(nonempty(&builder.nodes[old.i()].attributes))?;
+	}
+	let mut edge_metadata = ArrayUtf8::<Nullable>::new();
+	for attributes in edge_attributes {
+		edge_metadata.push(attributes)?;
+	}
+
+	BinaryTree::new(
+		num_leaves,
+		root,
+		&children,
+		&edge_lengths,
+		names,
+		node_attributes,
+		edge_metadata,
+	)
 }
 
 fn nonempty(value: &str) -> Option<&str> {

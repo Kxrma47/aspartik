@@ -1,10 +1,14 @@
 use anyhow::{Result, anyhow, ensure};
 use parking_lot::{Mutex, MutexGuard};
-use pyo3::{prelude::*, types::PyType};
+use pyo3::{
+	prelude::*,
+	types::{PyBytes, PyType},
+};
 
 use crate::tree::{
 	BinaryTree, Node,
 	builder::{EdgeData, NodeData, TreeBuilder},
+	robinson_foulds_matrix,
 };
 
 #[derive(Debug)]
@@ -440,6 +444,95 @@ impl PyBinaryTree {
 
 	fn __str__(&self) -> Result<String> {
 		self.to_newick()
+	}
+}
+
+#[derive(Debug)]
+#[pyclass(name = "TreeCollection", module = "aspartik.data.tree", frozen)]
+pub struct PyTreeCollection {
+	inner: Vec<BinaryTree>,
+	leaf_names: Vec<String>,
+}
+
+#[pymethods]
+impl PyTreeCollection {
+	#[classmethod]
+	fn from_newick(
+		_class: &Bound<'_, PyType>,
+		py: Python<'_>,
+		newicks: Vec<String>,
+	) -> Result<Self> {
+		py.detach(move || Self::parse(newicks))
+	}
+
+	#[getter]
+	fn num_trees(&self) -> usize {
+		self.inner.len()
+	}
+
+	#[getter]
+	fn num_leaves(&self) -> usize {
+		self.leaf_names.len()
+	}
+
+	#[getter]
+	fn leaf_names(&self) -> &[String] {
+		&self.leaf_names
+	}
+
+	fn to_newick(&self, index: usize) -> Result<String> {
+		self.inner
+			.get(index)
+			.ok_or_else(|| anyhow!("Tree {index} is out of range"))?
+			.to_newick()
+	}
+
+	fn _robinson_foulds_matrix<'py>(
+		&self,
+		py: Python<'py>,
+	) -> Result<Bound<'py, PyBytes>> {
+		let matrix =
+			py.detach(|| robinson_foulds_matrix(&self.inner))?;
+		let mut bytes = Vec::with_capacity(
+			self.inner.len() * self.inner.len() * size_of::<u32>(),
+		);
+		for row in matrix {
+			for value in row {
+				bytes.extend_from_slice(&value.to_ne_bytes());
+			}
+		}
+		Ok(PyBytes::new(py, &bytes))
+	}
+
+	fn __len__(&self) -> usize {
+		self.inner.len()
+	}
+}
+
+impl PyTreeCollection {
+	fn parse(newicks: Vec<String>) -> Result<Self> {
+		let mut builders = newicks
+			.into_iter()
+			.map(|newick| TreeBuilder::parse_newick(&newick))
+			.collect::<Result<Vec<_>>>()?;
+		let Some(first) = builders.first() else {
+			return Ok(Self {
+				inner: Vec::new(),
+				leaf_names: Vec::new(),
+			});
+		};
+		let leaf_names = first
+			.nodes()
+			.filter(|&node| first.is_leaf(node))
+			.map(|node| first.node(node).unwrap().name.clone())
+			.collect::<Vec<_>>();
+		let inner = builders
+			.drain(..)
+			.map(|builder| {
+				builder.into_binary_with_leaf_names(&leaf_names)
+			})
+			.collect::<Result<Vec<_>>>()?;
+		Ok(Self { inner, leaf_names })
 	}
 }
 
