@@ -5,8 +5,10 @@ use pyo3::{
 	types::{PyBytes, PyType},
 };
 
+use std::collections::BTreeMap;
+
 use crate::tree::{
-	BinaryTree, Node,
+	BinaryTree, Node, branch_score, branch_score_matrix,
 	builder::{EdgeData, NodeData, TreeBuilder},
 	robinson_foulds_matrix,
 };
@@ -438,6 +440,10 @@ impl PyBinaryTree {
 		self.inner.to_newick()
 	}
 
+	fn branch_score(&self, other: &PyBinaryTree) -> Result<f64> {
+		branch_score(&self.inner, &other.inner)
+	}
+
 	fn __len__(&self) -> usize {
 		self.num_nodes() as usize
 	}
@@ -504,6 +510,29 @@ impl PyTreeCollection {
 		Ok(PyBytes::new(py, &bytes))
 	}
 
+	fn _branch_score_matrix<'py>(
+		&self,
+		py: Python<'py>,
+	) -> Result<Bound<'py, PyBytes>> {
+		let matrix = py.detach(|| branch_score_matrix(&self.inner))?;
+		let mut bytes = Vec::with_capacity(
+			self.inner.len() * self.inner.len() * size_of::<f64>(),
+		);
+		for row in matrix {
+			for value in row {
+				bytes.extend_from_slice(&value.to_ne_bytes());
+			}
+		}
+		Ok(PyBytes::new(py, &bytes))
+	}
+
+	fn _clade_frequencies(
+		&self,
+		py: Python<'_>,
+	) -> Vec<(Vec<String>, f64)> {
+		py.detach(|| self.clade_frequencies())
+	}
+
 	fn __len__(&self) -> usize {
 		self.inner.len()
 	}
@@ -533,6 +562,57 @@ impl PyTreeCollection {
 			})
 			.collect::<Result<Vec<_>>>()?;
 		Ok(Self { inner, leaf_names })
+	}
+
+	fn clade_frequencies(&self) -> Vec<(Vec<String>, f64)> {
+		let mut counts = BTreeMap::<Vec<u32>, usize>::new();
+		for tree in &self.inner {
+			let mut descendants =
+				vec![Vec::new(); tree.num_nodes() as usize];
+			for node in tree.postorder() {
+				let leaves = if let Some(leaf) =
+					tree.as_leaf(node)
+				{
+					vec![leaf.index()]
+				} else {
+					let internal =
+						tree.as_internal(node).unwrap();
+					let (left, right) =
+						tree.children_of(internal);
+					let mut leaves = descendants
+						[left.index() as usize]
+						.clone();
+					leaves.extend_from_slice(
+						&descendants[right.index()
+							as usize],
+					);
+					leaves.sort_unstable();
+					leaves
+				};
+				if tree.is_internal(node)
+					&& node != tree.root().into()
+				{
+					*counts.entry(leaves.clone())
+						.or_default() += 1;
+				}
+				descendants[node.index() as usize] = leaves;
+			}
+		}
+		let denominator = self.inner.len() as f64;
+		counts.into_iter()
+			.map(|(clade, count)| {
+				(
+					clade.into_iter()
+						.map(|leaf| {
+							self.leaf_names
+								[leaf as usize]
+								.clone()
+						})
+						.collect(),
+					count as f64 / denominator,
+				)
+			})
+			.collect()
 	}
 }
 
