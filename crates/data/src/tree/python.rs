@@ -8,7 +8,8 @@ use pyo3::{
 use std::collections::BTreeMap;
 
 use crate::tree::{
-	BinaryTree, Node, branch_score, branch_score_matrix,
+	BinaryTree, Node, SvgOptions as TreeSvgOptions, TreeLayout,
+	branch_score, branch_score_matrix,
 	builder::{EdgeData, NodeData, TreeBuilder},
 	robinson_foulds_matrix,
 };
@@ -317,6 +318,46 @@ impl PyTree {
 	}
 }
 
+#[derive(Debug, Clone, Copy)]
+#[pyclass(
+	name = "SvgOptions",
+	module = "aspartik.data.tree",
+	frozen,
+	skip_from_py_object
+)]
+pub struct PySvgOptions {
+	inner: TreeSvgOptions,
+}
+
+#[pymethods]
+impl PySvgOptions {
+	#[new]
+	#[pyo3(signature = (
+		x_scale = 100.0,
+		y_scale = 30.0,
+		margin = 20.0,
+		node_radius = 3.0,
+		font_size = 12.0
+	))]
+	fn new(
+		x_scale: f64,
+		y_scale: f64,
+		margin: f64,
+		node_radius: f64,
+		font_size: f64,
+	) -> Self {
+		Self {
+			inner: TreeSvgOptions {
+				x_scale,
+				y_scale,
+				margin,
+				node_radius,
+				font_size,
+			},
+		}
+	}
+}
+
 #[derive(Debug)]
 #[pyclass(name = "BinaryTree", module = "aspartik.data.tree", frozen)]
 pub struct PyBinaryTree {
@@ -442,6 +483,45 @@ impl PyBinaryTree {
 
 	fn branch_score(&self, other: &PyBinaryTree) -> Result<f64> {
 		branch_score(&self.inner, &other.inner)
+	}
+
+	#[pyo3(signature = (kind = "rectangular", separation = 1.0))]
+	fn layout(
+		&self,
+		kind: &str,
+		separation: f64,
+	) -> Result<Vec<(f64, f64)>> {
+		Ok(self.create_layout(kind, separation)?
+			.points()
+			.iter()
+			.map(|point| (point.x, point.y))
+			.collect())
+	}
+
+	#[pyo3(signature = (
+		kind = "rectangular",
+		separation = 1.0,
+		options = None,
+		node_color = "#222222",
+		edge_color = "#222222"
+	))]
+	fn to_svg(
+		&self,
+		kind: &str,
+		separation: f64,
+		options: Option<&PySvgOptions>,
+		node_color: &str,
+		edge_color: &str,
+	) -> Result<String> {
+		let layout = self.create_layout(kind, separation)?;
+		self.inner.to_svg(
+			&layout,
+			options.map_or_else(TreeSvgOptions::default, |value| {
+				value.inner
+			}),
+			|_| node_color,
+			|_| edge_color,
+		)
 	}
 
 	fn __len__(&self) -> usize {
@@ -619,6 +699,20 @@ impl PyTreeCollection {
 impl PyBinaryTree {
 	fn node(&self, index: u32) -> Result<Node> {
 		checked_node(index, self.inner.num_nodes())
+	}
+
+	fn create_layout(
+		&self,
+		kind: &str,
+		separation: f64,
+	) -> Result<TreeLayout> {
+		match kind {
+			"rectangular" => {
+				self.inner.rectangular_layout(separation)
+			}
+			"tidy" => self.inner.tidy_layout(separation),
+			_ => Err(anyhow!("Unknown tree layout '{kind}'")),
+		}
 	}
 }
 

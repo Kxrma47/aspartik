@@ -5,11 +5,13 @@ mod newick;
 mod parse_newick;
 #[cfg(feature = "python")]
 pub mod python;
+mod render;
 mod serialize_newick;
 
 pub use binary::BinaryTree;
 pub use distance::{branch_score, branch_score_matrix, robinson_foulds_matrix};
 pub use parse_newick::parse as parse_newick;
+pub use render::{LayoutKind, Point, SvgOptions, TreeLayout};
 
 const ROOT_PARENT: u32 = u32::MAX;
 
