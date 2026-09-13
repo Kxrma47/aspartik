@@ -1,6 +1,7 @@
 use anyhow::{Result, ensure};
 use arbitrary::Unstructured;
 use arbtest::arbtest;
+use computare_core::assert_almost_eq;
 use picoarrow::array::{ArrayUtf8, Nullable};
 use rand::SeedableRng;
 use rand_pcg::Pcg64;
@@ -970,12 +971,43 @@ fn branch_score_distances() -> Result<()> {
 		(&first, &zero),
 	] {
 		let expected = branch_score_slow(left, right);
-		assert!((branch_score(left, right)? - expected).abs() < 1e-12);
-		assert!((branch_score(right, left)? - expected).abs() < 1e-12);
+		assert_almost_eq!(branch_score(left, right)?, expected);
+		assert_almost_eq!(branch_score(right, left)?, expected);
 	}
-	assert_eq!(branch_score(&first, &first)?, 0.0);
-	assert_eq!(branch_score(&zero, &zero)?, 0.0);
+	assert_almost_eq!(branch_score(&first, &first)?, 0.0);
+	assert_almost_eq!(branch_score(&zero, &zero)?, 0.0);
 	assert!(branch_score(&first, &indexed_tree("(0:1,1:1);")?).is_err());
+
+	Ok(())
+}
+
+#[test]
+fn branch_score_reference_distances() -> Result<()> {
+	// Expected values were generated with ape 5.8.1: dist.topo(first, second, method = "score").
+	let cases = [
+		(
+			"((((0:1,1:1):0.4,(2:1,3:1):0.5):0.6,((4:1,5:1):0.7,(6:1,7:1):0.8):0.9):1,8:0);",
+			"(((0:1,(1:1,2:1):0.45):0.65,(3:1,((4:1,5:1):0.75,(6:1,7:1):0.85):0.95):0.55):1,8:0);",
+			1.3057564857200596,
+		),
+		(
+			"(((((0:1,1:1.1):0.2,(2:1.2,3:1.3):0.3):0.4,((4:1.4,5:1.5):0.5,(6:1.6,7:1.7):0.6):0.7):0.8,(8:1.8,9:1.9):0.9):1,10:0);",
+			"((((0:1,(1:1.1,2:1.2):0.25):0.35,(3:1.3,(4:1.4,5:1.5):0.55):0.45):0.65,((6:1.6,7:1.7):0.75,(8:1.8,9:1.9):0.85):0.95):1,10:0);",
+			1.7776388834631178,
+		),
+		(
+			"(((((0:1,1:1):0.2,(2:1,3:1):0.3):0.4,((4:1,5:1):0.5,(6:1,7:1):0.6):0.7):0.8,((8:1,9:1):0.9,(10:1,11:1):1):1.1):1,12:0);",
+			"((((0:1,(1:1,2:1):0.25):0.35,(3:1,(4:1,5:1):0.45):0.55):0.65,((6:1,7:1):0.75,(8:1,(9:1,(10:1,11:1):0.85):0.95):1.05):1.15):1,12:0);",
+			2.327_015_255_644_019,
+		),
+	];
+
+	for (first, second, expected) in cases {
+		let first = indexed_tree(first)?;
+		let second = indexed_tree(second)?;
+		assert_almost_eq!(branch_score(&first, &second)?, expected);
+		assert_almost_eq!(branch_score(&second, &first)?, expected);
+	}
 
 	Ok(())
 }

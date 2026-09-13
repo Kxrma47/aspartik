@@ -25,6 +25,7 @@ smallvec = { workspace = true }
 [dev-dependencies]
 arbitrary = { workspace = true }
 arbtest = { workspace = true }
+computare-core = { workspace = true }
 rand_pcg = { workspace = true }
 
 [features]
