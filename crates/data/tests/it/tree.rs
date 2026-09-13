@@ -2,6 +2,8 @@ use anyhow::{Result, ensure};
 use arbitrary::Unstructured;
 use arbtest::arbtest;
 use picoarrow::array::{ArrayUtf8, Nullable};
+use rand::SeedableRng;
+use rand_pcg::Pcg64;
 
 use std::collections::BTreeSet;
 
@@ -74,6 +76,47 @@ fn tree_with_root(
 
 fn node(tree: &BinaryTree, index: u32) -> Node {
 	tree.nodes().nth(index as usize).unwrap()
+}
+
+fn topology(tree: &BinaryTree) -> Vec<[u32; 2]> {
+	tree.internals()
+		.map(|internal| tree.children_of(internal).map(Node::index))
+		.collect()
+}
+
+fn assert_random_tree(tree: &BinaryTree, num_leaves: u32) {
+	assert_eq!(tree.num_leaves(), num_leaves);
+	assert_eq!(tree.num_nodes(), num_leaves * 2 - 1);
+	assert_eq!(tree.num_edges(), num_leaves * 2 - 2);
+	assert_eq!(tree.root().index(), num_leaves * 2 - 2);
+	assert_eq!(tree.preorder().count(), tree.num_nodes() as usize);
+	assert_eq!(tree.postorder().count(), tree.num_nodes() as usize);
+
+	let mut seen = vec![false; tree.num_nodes() as usize];
+	for node in tree.preorder() {
+		assert!(!seen[node.index() as usize]);
+		seen[node.index() as usize] = true;
+		assert_eq!(tree.name(node), None);
+		assert_eq!(tree.node_metadata(node), None);
+
+		if let Some(internal) = tree.as_internal(node) {
+			for child in tree.children_of(internal) {
+				assert_eq!(
+					tree.parent_of(child),
+					Some(internal)
+				);
+			}
+		}
+
+		if node == tree.root().into() {
+			assert_eq!(tree.parent_of(node), None);
+			assert_eq!(tree.edge_length(node), None);
+		} else {
+			assert_eq!(tree.edge_length(node), Some(0.0));
+		}
+		assert_eq!(tree.edge_metadata(node), None);
+	}
+	assert!(seen.into_iter().all(|value| value));
 }
 
 fn internal(tree: &BinaryTree, index: u32) -> Internal {
@@ -653,6 +696,55 @@ fn deep_ladder_uses_iterative_traversal() -> Result<()> {
 		tree.mrca(node(&tree, 0), node(&tree, 1)),
 		node(&tree, NUM_LEAVES)
 	);
+
+	Ok(())
+}
+
+#[test]
+fn random_binary_tree() -> Result<()> {
+	let mut rng = Pcg64::seed_from_u64(0);
+	for num_leaves in [2, 3, 10, 100, 1_000] {
+		let tree = BinaryTree::random(num_leaves, &mut rng)?;
+		assert_random_tree(&tree, num_leaves);
+	}
+
+	Ok(())
+}
+
+#[test]
+fn random_binary_tree_is_deterministic() -> Result<()> {
+	let mut first_rng = Pcg64::seed_from_u64(0);
+	let mut second_rng = Pcg64::seed_from_u64(0);
+	let first = BinaryTree::random(100, &mut first_rng)?;
+	let second = BinaryTree::random(100, &mut second_rng)?;
+
+	assert_eq!(topology(&first), topology(&second));
+
+	Ok(())
+}
+
+#[test]
+fn random_binary_tree_rejects_invalid_sizes() {
+	let mut rng = Pcg64::seed_from_u64(0);
+	assert!(BinaryTree::random(0, &mut rng).is_err());
+	assert!(BinaryTree::random(1, &mut rng).is_err());
+	assert!(BinaryTree::random(u32::MAX, &mut rng).is_err());
+}
+
+#[test]
+fn random_binary_tree_many_seeds_and_large() -> Result<()> {
+	let mut topologies = BTreeSet::new();
+	for seed in 0..128 {
+		let mut rng = Pcg64::seed_from_u64(seed);
+		let tree = BinaryTree::random(64, &mut rng)?;
+		assert_random_tree(&tree, 64);
+		topologies.insert(topology(&tree));
+	}
+	assert!(topologies.len() > 120);
+
+	let mut rng = Pcg64::seed_from_u64(0);
+	let tree = BinaryTree::random(20_000, &mut rng)?;
+	assert_random_tree(&tree, 20_000);
 
 	Ok(())
 }

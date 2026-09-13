@@ -1,8 +1,12 @@
 use anyhow::{Result, anyhow, ensure};
 use picoarrow::array::{Array, ArrayUtf8, Nullable};
+use rand::{Rng, seq::SliceRandom};
 use rustc_hash::{FxBuildHasher, FxHashSet};
 
-use std::cmp::{max, min};
+use std::{
+	cmp::{Reverse, max, min},
+	collections::BinaryHeap,
+};
 
 use super::{Internal, Leaf, Node, ROOT_PARENT};
 use buffer::Buffer;
@@ -20,6 +24,78 @@ pub struct BinaryTree {
 }
 
 impl BinaryTree {
+	pub fn random<R: Rng>(num_leaves: u32, rng: &mut R) -> Result<Self> {
+		ensure!(
+			num_leaves >= 2,
+			"Expected at least two leaves, got {num_leaves}"
+		);
+
+		let num_nodes = num_leaves
+			.checked_mul(2)
+			.and_then(|value| value.checked_sub(1))
+			.ok_or_else(|| {
+				anyhow!(
+					"The number of nodes does not fit in u32"
+				)
+			})?;
+		let num_internals = num_leaves - 1;
+		let num_nodes_usize = usize::try_from(num_nodes)?;
+		let num_edges_usize = num_nodes_usize - 1;
+
+		let internals = num_leaves..num_nodes;
+		let mut prufer =
+			Vec::from_iter(internals.clone().chain(internals));
+		let root = prufer.pop().unwrap();
+		prufer.shuffle(rng);
+
+		let mut children = vec![ROOT_PARENT; num_edges_usize];
+		let mut remaining = vec![2; num_internals as usize];
+		*remaining.last_mut().unwrap() = 1;
+		let mut unused =
+			BinaryHeap::from_iter((0..num_leaves).map(Reverse));
+
+		for parent in prufer {
+			let child = unused.pop().unwrap().0;
+			let offset = ((parent - num_leaves) * 2) as usize;
+			if children[offset] == ROOT_PARENT {
+				children[offset] = child;
+			} else {
+				children[offset + 1] = child;
+			}
+
+			let index = (parent - num_leaves) as usize;
+			remaining[index] -= 1;
+			if remaining[index] == 0 {
+				unused.push(Reverse(parent));
+			}
+		}
+
+		let child = unused.pop().unwrap().0;
+		children[(root - num_leaves) as usize * 2 + 1] = child;
+
+		let mut node_names = ArrayUtf8::<Nullable>::new();
+		let mut node_metadata = ArrayUtf8::<Nullable>::new();
+		for _ in 0..num_nodes_usize {
+			node_names.push(None)?;
+			node_metadata.push(None)?;
+		}
+		let mut edge_metadata = ArrayUtf8::<Nullable>::new();
+		for _ in 0..num_edges_usize {
+			edge_metadata.push(None)?;
+		}
+		let edge_lengths = vec![0.0; num_edges_usize];
+
+		Self::new(
+			num_leaves,
+			root,
+			&children,
+			&edge_lengths,
+			node_names,
+			node_metadata,
+			edge_metadata,
+		)
+	}
+
 	pub fn new(
 		num_leaves: u32,
 		root: u32,

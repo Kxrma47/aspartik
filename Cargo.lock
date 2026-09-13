@@ -216,6 +216,7 @@ dependencies = [
  "picoarrow",
  "pyo3",
  "rand",
+ "rand_pcg",
  "rng",
  "rustc-hash",
  "smallvec",
