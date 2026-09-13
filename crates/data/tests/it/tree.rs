@@ -1206,12 +1206,12 @@ fn svg_rendering() -> Result<()> {
 		nullable_values([Some("edge<&\"'"), None]),
 	)?;
 	let layout = tree.rectangular_layout(1.0)?;
-	let svg = tree.to_svg(
-		&layout,
-		SvgOptions::default(),
-		|_| "#123\"456",
-		|_| "#abcdef",
-	)?;
+	let options = SvgOptions {
+		x_scale: 100.0 / 3.0,
+		..SvgOptions::default()
+	};
+	let svg =
+		tree.to_svg(&layout, options, |_| "#123\"456", |_| "#abcdef")?;
 
 	assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
 	assert!(svg.ends_with("</svg>"));
@@ -1221,6 +1221,13 @@ fn svg_rendering() -> Result<()> {
 	assert!(svg.contains("node&lt;&amp;&quot;&apos;"));
 	assert!(svg.contains("edge&lt;&amp;&quot;&apos;"));
 	assert!(svg.contains("fill=\"#123&quot;456\""));
+	assert!(svg.contains("width=\"122.87\""));
+	assert!(svg.contains("H 53.33\""));
+	assert!(svg.contains("cx=\"86.67\""));
+	assert!(svg
+		.contains("<g font-size=\"12\" dominant-baseline=\"middle\">"));
+	assert_eq!(svg.matches("dominant-baseline").count(), 1);
+	assert_eq!(svg.matches("font-size").count(), 1);
 	for layout in [tree.slanted_layout(1.0)?, tree.tidy_layout(1.0)?] {
 		let svg = tree.to_svg(
 			&layout,

@@ -249,10 +249,13 @@ impl BinaryTree {
 		let height =
 			layout.height * options.y_scale + options.margin * 2.0;
 		let mut output = String::new();
-		write!(
-			output,
-			"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height}\" viewBox=\"0 0 {width} {height}\">"
-		)?;
+		output.push_str(
+			"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"",
+		);
+		write_horizontal(&mut output, width)?;
+		write!(output, "\" height=\"{height}\" viewBox=\"0 0 ")?;
+		write_horizontal(&mut output, width)?;
+		write!(output, " {height}\">")?;
 
 		for child in self.edges() {
 			let parent = self.parent_of(child).unwrap();
@@ -264,23 +267,45 @@ impl BinaryTree {
 					[child.index() as usize]);
 			let color = edge_color(child);
 			match layout.kind {
-				LayoutKind::Rectangular => write!(
-					output,
-					"<path d=\"M {} {} V {} H {}\" fill=\"none\" stroke=\"",
-					parent_point.x,
-					parent_point.y,
-					child_point.y,
-					child_point.x
-				)?,
-				LayoutKind::Slanted | LayoutKind::Tidy => {
+				LayoutKind::Rectangular => {
+					output.push_str("<path d=\"M ");
+					write_horizontal(
+						&mut output,
+						parent_point.x,
+					)?;
 					write!(
 						output,
-						"<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"",
-						parent_point.x,
-						parent_point.y,
+						" {} V {} H ",
+						parent_point.y, child_point.y
+					)?;
+					write_horizontal(
+						&mut output,
 						child_point.x,
+					)?;
+					output.push_str(
+						"\" fill=\"none\" stroke=\"",
+					);
+				}
+				LayoutKind::Slanted | LayoutKind::Tidy => {
+					output.push_str("<line x1=\"");
+					write_horizontal(
+						&mut output,
+						parent_point.x,
+					)?;
+					write!(
+						output,
+						"\" y1=\"{}\" x2=\"",
+						parent_point.y
+					)?;
+					write_horizontal(
+						&mut output,
+						child_point.x,
+					)?;
+					write!(
+						output,
+						"\" y2=\"{}\" stroke=\"",
 						child_point.y
-					)?
+					)?;
 				}
 			}
 			write_escaped(&mut output, color.as_ref())?;
@@ -305,10 +330,12 @@ impl BinaryTree {
 				scaled(layout.coordinates
 					[node.index() as usize]);
 			let color = node_color(node);
+			output.push_str("<circle cx=\"");
+			write_horizontal(&mut output, point.x)?;
 			write!(
 				output,
-				"<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"",
-				point.x, point.y, options.node_radius
+				"\" cy=\"{}\" r=\"{}\" fill=\"",
+				point.y, options.node_radius
 			)?;
 			write_escaped(&mut output, color.as_ref())?;
 			output.push_str("\">");
@@ -331,23 +358,31 @@ impl BinaryTree {
 			output.push_str("</circle>");
 		}
 
-		for leaf in self.leaves() {
-			let node = Node::from(leaf);
-			let Some(name) = self.name(node) else {
-				continue;
-			};
-			let point =
-				scaled(layout.coordinates
-					[node.index() as usize]);
+		if self.leaves()
+			.any(|leaf| self.name(Node::from(leaf)).is_some())
+		{
 			write!(
 				output,
-				"<text x=\"{}\" y=\"{}\" dominant-baseline=\"middle\" font-size=\"{}\">",
-				point.x + label_gap,
-				point.y,
-				options.font_size
+				"<g font-size=\"{}\" dominant-baseline=\"middle\">",
+				options.font_size,
 			)?;
-			write_escaped(&mut output, name)?;
-			output.push_str("</text>");
+			for leaf in self.leaves() {
+				let node = Node::from(leaf);
+				let Some(name) = self.name(node) else {
+					continue;
+				};
+				let point = scaled(layout.coordinates
+					[node.index() as usize]);
+				output.push_str("<text x=\"");
+				write_horizontal(
+					&mut output,
+					point.x + label_gap,
+				)?;
+				write!(output, "\" y=\"{}\">", point.y)?;
+				write_escaped(&mut output, name)?;
+				output.push_str("</text>");
+			}
+			output.push_str("</g>");
 		}
 		output.push_str("</svg>");
 		Ok(output)
@@ -519,6 +554,18 @@ fn write_escaped(writer: &mut impl fmt::Write, value: &str) -> fmt::Result {
 			'\'' => writer.write_str("&apos;")?,
 			_ => writer.write_char(character)?,
 		}
+	}
+	Ok(())
+}
+
+fn write_horizontal(output: &mut String, value: f64) -> fmt::Result {
+	let start = output.len();
+	write!(output, "{value:.2}")?;
+	while output.len() > start && output.ends_with('0') {
+		output.pop();
+	}
+	if output.len() > start && output.ends_with('.') {
+		output.pop();
 	}
 	Ok(())
 }

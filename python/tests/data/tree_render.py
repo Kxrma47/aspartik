@@ -49,7 +49,20 @@ def test_svg_is_valid_and_complete(kind):
     assert len(root.findall("svg:circle", namespace)) == tree.num_nodes
     edge_tag = "svg:path" if kind == "rectangular" else "svg:line"
     assert len(root.findall(edge_tag, namespace)) == tree.num_edges
-    assert len(root.findall("svg:text", namespace)) == tree.num_leaves
+    groups = root.findall("svg:g", namespace)
+    assert len(groups) == 1
+    assert groups[0].attrib == {
+        "font-size": "11",
+        "dominant-baseline": "middle",
+    }
+    texts = root.findall("svg:g/svg:text", namespace)
+    assert len(texts) == tree.num_leaves
+    assert all("font-size" not in text.attrib for text in texts)
+    assert all("dominant-baseline" not in text.attrib for text in texts)
+    for element in root.iter():
+        for attribute in ("x", "x1", "x2", "cx"):
+            if attribute in element.attrib:
+                assert len(element.attrib[attribute].partition(".")[2]) <= 2
     assert "A<&" in "".join(root.itertext())
     assert {
         circle.attrib["fill"] for circle in root.findall("svg:circle", namespace)
