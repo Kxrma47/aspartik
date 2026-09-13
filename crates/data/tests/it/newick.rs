@@ -1,6 +1,12 @@
 use anyhow::Result;
-use arbitrary::{Arbitrary, Unstructured};
+use arbitrary::Unstructured;
 use arbtest::arbtest;
+
+use std::{
+	fs,
+	io::{BufRead, BufReader},
+	path::PathBuf,
+};
 
 use data::tree::{
 	BinaryTree, Node,
@@ -211,9 +217,9 @@ fn arbitrary_builder(
 }
 
 #[test]
-fn random_parse_serialize_parse() {
+fn arbitrary_roundtrip() {
 	arbtest(|u: &mut Unstructured<'_>| {
-		let num_leaves = u.int_in_range(2_u32..=128)?;
+		let num_leaves = u.int_in_range(2_u32..=10_000)?;
 		let tree = arbitrary_builder(u, num_leaves)?;
 		let first = tree.to_newick().unwrap();
 		let reparsed = parse_newick(&first).unwrap();
@@ -222,14 +228,32 @@ fn random_parse_serialize_parse() {
 		let binary: BinaryTree = reparsed.into_binary().unwrap();
 		assert_eq!(binary.num_leaves(), num_leaves);
 		Ok(())
-	});
+	})
+	.size_min(2u32.pow(20));
 }
 
 #[test]
-fn arbitrary_input_does_not_panic() {
-	arbtest(|u: &mut Unstructured<'_>| {
-		let input = String::arbitrary(u)?;
-		let _ = parse_newick(&input);
-		Ok(())
-	});
+fn parse_runs() {
+	let mut runs_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+	runs_dir.push("../../data/runs");
+
+	for run_entry in fs::read_dir(runs_dir).unwrap() {
+		let run_path = run_entry.unwrap().path();
+
+		for file_entry in fs::read_dir(run_path).unwrap() {
+			let file_path = file_entry.unwrap().path();
+
+			if file_path.extension().unwrap().to_string_lossy()
+				== "trees"
+			{
+				let file = fs::File::open(&file_path).unwrap();
+				let reader = BufReader::new(file);
+
+				for line in reader.lines() {
+					let line = line.unwrap();
+					parse_newick(&line).unwrap();
+				}
+			}
+		}
+	}
 }
