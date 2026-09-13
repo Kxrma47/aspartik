@@ -66,7 +66,7 @@ pub fn robinson_foulds_matrix(trees: &[BinaryTree]) -> Result<Vec<Vec<u32>>> {
 				CladeHash::leaf(leaf.index())
 			} else {
 				let internal = tree.as_internal(node).unwrap();
-				let (left, right) = tree.children_of(internal);
+				let [left, right] = tree.children_of(internal);
 				hashes[left.index() as usize]
 					.combine(hashes[right.index() as usize])
 			};

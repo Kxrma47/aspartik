@@ -120,7 +120,7 @@ fn indexed_tree(source: &str) -> Result<BinaryTree> {
 	for internal in source.internals() {
 		let mapped = mapping[internal.index() as usize];
 		let offset = (mapped - num_leaves) as usize * 2;
-		let (left, right) = source.children_of(internal);
+		let [left, right] = source.children_of(internal);
 		children[offset] = mapping[left.index() as usize];
 		children[offset + 1] = mapping[right.index() as usize];
 	}
@@ -153,7 +153,7 @@ fn clades(tree: &BinaryTree) -> BTreeSet<Vec<u32>> {
 		}
 
 		let internal = tree.as_internal(node).unwrap();
-		let (left, right) = tree.children_of(internal);
+		let [left, right] = tree.children_of(internal);
 		let mut leaves = descendants[left.index() as usize].clone();
 		leaves.extend_from_slice(&descendants[right.index() as usize]);
 		leaves.sort_unstable();
@@ -188,7 +188,7 @@ fn lca_depths(tree: &BinaryTree) -> Vec<u32> {
 	let mut depths = vec![0; tree.num_nodes() as usize];
 	for node in tree.preorder() {
 		if let Some(internal) = tree.as_internal(node) {
-			let (left, right) = tree.children_of(internal);
+			let [left, right] = tree.children_of(internal);
 			depths[left.index() as usize] =
 				depths[node.index() as usize] + 1;
 			depths[right.index() as usize] =
@@ -367,7 +367,7 @@ fn two_leaf_tree() -> Result<()> {
 	assert_eq!(tree.as_internal(node(&tree, 0)), None);
 	assert_eq!(
 		tree.children_of(tree.root()),
-		(node(&tree, 0), node(&tree, 1))
+		[node(&tree, 0), node(&tree, 1)]
 	);
 	assert_eq!(tree.parent_of(node(&tree, 0)), Some(tree.root()));
 	assert_eq!(tree.parent_of(node(&tree, 1)), Some(tree.root()));
@@ -430,7 +430,7 @@ fn explicit_nonterminal_root() -> Result<()> {
 	assert_eq!(tree.root().index(), 4);
 	assert_eq!(
 		tree.children_of(tree.root()),
-		(node(&tree, 5), node(&tree, 6))
+		[node(&tree, 5), node(&tree, 6)]
 	);
 	assert_eq!(tree.parent_of(node(&tree, 5)), Some(tree.root()));
 	assert_eq!(indices(tree.edges()), vec![0, 1, 2, 3, 5, 6]);
@@ -695,7 +695,7 @@ fn random_binary_trees_roundtrip() {
 			.unwrap();
 
 		for internal in tree.internals() {
-			let (left, right) = tree.children_of(internal);
+			let [left, right] = tree.children_of(internal);
 			assert_eq!(tree.parent_of(left), Some(internal));
 			assert_eq!(tree.parent_of(right), Some(internal));
 		}

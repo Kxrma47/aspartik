@@ -370,7 +370,9 @@ impl PyBinaryTree {
 			self.inner.as_internal(node).ok_or_else(|| {
 				anyhow!("Node {} is a leaf", node.index())
 			})?;
-		let (left, right) = self.inner.children_of(internal);
+		let [left, right] = self.inner.children_of(internal);
+		// We return a tuple instead of an array in Python because the
+		// former is more compact
 		Ok((left.index(), right.index()))
 	}
 

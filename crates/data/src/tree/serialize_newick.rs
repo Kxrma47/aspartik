@@ -84,7 +84,7 @@ impl Source for BinaryTree {
 	fn children(&self, node: Node) -> Result<SmallVec<[Child<'_>; 2]>> {
 		let mut children = SmallVec::new();
 		if let Some(internal) = self.as_internal(node) {
-			let (left, right) = self.children_of(internal);
+			let [left, right] = self.children_of(internal);
 			for child in [left, right] {
 				children.push(Child {
 					node: child,

@@ -308,7 +308,7 @@ impl Tree {
 		for internal in tree.internals() {
 			let parent = mapping[internal.index() as usize];
 			let offset = (parent - self.num_leaves()) as usize * 2;
-			let (left, right) = tree.children_of(internal);
+			let [left, right] = tree.children_of(internal);
 			for (slot, child) in
 				[left, right].into_iter().enumerate()
 			{

@@ -199,9 +199,9 @@ impl BinaryTree {
 		self.is_internal(node).then_some(Internal(node.0))
 	}
 
-	pub fn children_of(&self, node: Internal) -> (Node, Node) {
+	pub fn children_of(&self, node: Internal) -> [Node; 2] {
 		let offset = (node.0 - self.num_leaves()) as usize * 2;
-		(Node(self.children[offset]), Node(self.children[offset + 1]))
+		[Node(self.children[offset]), Node(self.children[offset + 1])]
 	}
 
 	pub fn parent_of(&self, node: Node) -> Option<Internal> {
@@ -271,7 +271,7 @@ impl BinaryTree {
 			if let Some(leaf) = self.as_leaf(node) {
 				clade_founder[leaf.i()] = leaf.0
 			} else if let Some(internal) = self.as_internal(node) {
-				let (left, right) = self.children_of(internal);
+				let [left, right] = self.children_of(internal);
 				clade_founder[internal.i()] = min(
 					clade_founder[left.i()],
 					clade_founder[right.i()],
@@ -288,7 +288,7 @@ impl BinaryTree {
 				continue;
 			};
 
-			let (left, right) = self.children_of(internal);
+			let [left, right] = self.children_of(internal);
 
 			let splitter = max(
 				clade_founder[left.i()],
@@ -305,7 +305,7 @@ impl BinaryTree {
 		for label in (1..num_leaves).rev() {
 			let splitter_node =
 				Internal(splitter_to_node[label as usize]);
-			let (left, right) = self.children_of(splitter_node);
+			let [left, right] = self.children_of(splitter_node);
 
 			let sibling = if clade_founder[left.i()] == label {
 				right
@@ -348,7 +348,7 @@ impl BinaryTree {
 				return (label, label, 1);
 			};
 
-			let (left, right) = tree.children_of(internal);
+			let [left, right] = tree.children_of(internal);
 			let (left_min, _left_max, left_size) =
 				process(left, tree, counter, labels, clades);
 			let (_right_min, right_max, right_size) =
@@ -382,7 +382,7 @@ impl BinaryTree {
 				return (label, label, 1);
 			};
 
-			let (left, right) = tree.children_of(internal);
+			let [left, right] = tree.children_of(internal);
 			let (left_min, left_max, left_size) = process_other(
 				left, tree, labels, clades, num_shared,
 			);
@@ -428,7 +428,7 @@ impl BinaryTree {
 			if self.is_leaf(node) {
 				subtree_sizes[node.i()] = 1;
 			} else {
-				let (left, right) = self.children_of(
+				let [left, right] = self.children_of(
 					self.as_internal(node).unwrap(),
 				);
 				subtree_sizes[node.i()] = subtree_sizes
@@ -455,15 +455,15 @@ impl BinaryTree {
 						continue;
 					};
 
-					let (left, right) =
+					let [left, right] =
 						self.children_of(internal);
-					let (small, large) = if subtree_sizes
+					let [small, large] = if subtree_sizes
 						[left.i()]
 						<= subtree_sizes[right.i()]
 					{
-						(left, right)
+						[left, right]
 					} else {
-						(right, left)
+						[right, left]
 					};
 
 					steps.push(TripletStep::Count(small));
@@ -491,7 +491,7 @@ impl BinaryTree {
 								node.0, color,
 							);
 						} else {
-							let (left, right) = self.children_of(
+							let [left, right] = self.children_of(
 								self.as_internal(node).unwrap(),
 							);
 							leaves.extend([
@@ -814,7 +814,7 @@ impl Iterator for Preorder<'_> {
 		let node = self.stack.pop()?;
 
 		if let Some(internal) = self.tree.as_internal(node) {
-			let (left, right) = self.tree.children_of(internal);
+			let [left, right] = self.tree.children_of(internal);
 			self.stack.push(right);
 			self.stack.push(left);
 		}
@@ -839,7 +839,7 @@ impl Iterator for Postorder<'_> {
 
 			self.stack.push((node, true));
 			if let Some(internal) = self.tree.as_internal(node) {
-				let (left, right) =
+				let [left, right] =
 					self.tree.children_of(internal);
 				self.stack.push((right, false));
 				self.stack.push((left, false));
