@@ -5,10 +5,10 @@ use picoarrow::array::{ArrayUtf8, Nullable};
 use rand::SeedableRng;
 use rand_pcg::Pcg64;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use data::tree::{
-	BinaryTree, Internal, Node, SvgOptions, parse_newick,
+	BinaryTree, Internal, Node, SvgOptions, branch_score, parse_newick,
 	robinson_foulds_matrix,
 };
 
@@ -208,6 +208,46 @@ fn clades(tree: &BinaryTree) -> BTreeSet<Vec<u32>> {
 	}
 
 	clades
+}
+
+fn branch_clades(tree: &BinaryTree) -> BTreeMap<Vec<u32>, f64> {
+	let mut descendants = vec![Vec::new(); tree.num_nodes() as usize];
+	let mut clades = BTreeMap::new();
+	for node in tree.postorder() {
+		let leaves = if let Some(leaf) = tree.as_leaf(node) {
+			vec![leaf.index()]
+		} else {
+			let internal = tree.as_internal(node).unwrap();
+			let [left, right] = tree.children_of(internal);
+			let mut leaves =
+				descendants[left.index() as usize].clone();
+			leaves.extend_from_slice(
+				&descendants[right.index() as usize],
+			);
+			leaves.sort_unstable();
+			leaves
+		};
+		if node != tree.root().into() {
+			clades.insert(
+				leaves.clone(),
+				tree.edge_length(node).unwrap(),
+			);
+		}
+		descendants[node.index() as usize] = leaves;
+	}
+	clades
+}
+
+fn branch_score_slow(first: &BinaryTree, second: &BinaryTree) -> f64 {
+	let mut first = branch_clades(first);
+	let second = branch_clades(second);
+	let mut squared = 0.0;
+	for (clade, length) in second {
+		let other = first.remove(&clade).unwrap_or(0.0);
+		squared += (other - length).powi(2);
+	}
+	squared += first.values().map(|length| length.powi(2)).sum::<f64>();
+	squared.sqrt()
 }
 
 fn mrca_slow(tree: &BinaryTree, first: Node, second: Node) -> Node {
@@ -914,6 +954,30 @@ fn random_robinson_foulds() {
 
 		Ok(())
 	});
+}
+
+#[test]
+fn branch_score_distances() -> Result<()> {
+	let first = indexed_tree("((0:1,1:2):3,(2:4,3:5):6);")?;
+	let changed_lengths = indexed_tree("((0:2,1:4):6,(2:8,3:10):12);")?;
+	let changed_topology = indexed_tree("((0:1,2:4):3,(1:2,3:5):6);")?;
+	let zero = indexed_tree("((0:0,1:0):0,(2:0,3:0):0);")?;
+
+	for (left, right) in [
+		(&first, &first),
+		(&first, &changed_lengths),
+		(&first, &changed_topology),
+		(&first, &zero),
+	] {
+		let expected = branch_score_slow(left, right);
+		assert!((branch_score(left, right)? - expected).abs() < 1e-12);
+		assert!((branch_score(right, left)? - expected).abs() < 1e-12);
+	}
+	assert_eq!(branch_score(&first, &first)?, 0.0);
+	assert_eq!(branch_score(&zero, &zero)?, 0.0);
+	assert!(branch_score(&first, &indexed_tree("(0:1,1:1);")?).is_err());
+
+	Ok(())
 }
 
 #[test]

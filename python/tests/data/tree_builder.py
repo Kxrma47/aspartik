@@ -125,6 +125,15 @@ def test_binary_tree_access():
     assert tree.to_newick() == str(tree)
 
 
+def test_binary_tree_branch_score():
+    first = BinaryTree.from_newick("(A:1,B:2);")
+    second = BinaryTree.from_newick("(A:2,B:4);")
+
+    assert first.branch_score(first) == 0.0
+    assert first.branch_score(second) == pytest.approx(5.0**0.5)
+    assert second.branch_score(first) == pytest.approx(5.0**0.5)
+
+
 def test_nonbinary_and_missing_lengths_do_not_seal():
     assert not Tree.from_newick("(A:1,B:2,C:3);").is_binary()
     with pytest.raises(RuntimeError, match="not binary"):
