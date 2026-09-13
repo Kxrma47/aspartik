@@ -1,8 +1,8 @@
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, anyhow, bail, ensure};
 use picoarrow::array::{ArrayUtf8, Nullable};
 use smallvec::SmallVec;
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, mem};
 
 use super::{BinaryTree, Node, ROOT_PARENT};
 
@@ -26,7 +26,7 @@ impl NodeData {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct EdgeData {
 	pub length: Option<f64>,
 	pub attributes: String,
@@ -50,7 +50,7 @@ impl EdgeData {
 pub struct TreeBuilder {
 	pub(super) children: Vec<SmallVec<[Node; 2]>>,
 	pub(super) parents: Vec<Node>,
-	pub(super) edges: Vec<Option<EdgeData>>,
+	pub(super) edges: Vec<EdgeData>,
 	pub(super) nodes: Vec<NodeData>,
 	pub(super) root: Node,
 }
@@ -70,7 +70,7 @@ impl TreeBuilder {
 		Self {
 			children: vec![SmallVec::new()],
 			parents: vec![Node(ROOT_PARENT)],
-			edges: vec![None],
+			edges: vec![EdgeData::default()],
 			nodes: vec![data],
 			root: Node(0),
 		}
@@ -93,7 +93,7 @@ impl TreeBuilder {
 	}
 
 	pub fn is_leaf(&self, node: Node) -> bool {
-		self.children_of(node).is_some_and(<[Node]>::is_empty)
+		self.children_of(node).is_empty()
 	}
 
 	pub fn is_binary(&self) -> bool {
@@ -102,8 +102,8 @@ impl TreeBuilder {
 			.all(|children| matches!(children.len(), 0 | 2))
 	}
 
-	pub fn children_of(&self, node: Node) -> Option<&[Node]> {
-		self.children.get(node.i()).map(SmallVec::as_slice)
+	pub fn children_of(&self, node: Node) -> &[Node] {
+		self.children[node.i()].as_slice()
 	}
 
 	pub fn parent_of(&self, node: Node) -> Option<Node> {
@@ -113,37 +113,35 @@ impl TreeBuilder {
 			.filter(|parent| parent.index() != ROOT_PARENT)
 	}
 
-	pub fn edge(&self, node: Node) -> Option<&EdgeData> {
-		self.edges.get(node.i()).and_then(Option::as_ref)
+	pub fn edge(&self, node: Node) -> &EdgeData {
+		&self.edges[node.i()]
 	}
 
-	pub fn edge_mut(&mut self, node: Node) -> Option<&mut EdgeData> {
-		self.edges.get_mut(node.i()).and_then(Option::as_mut)
+	pub fn edge_mut(&mut self, node: Node) -> &mut EdgeData {
+		&mut self.edges[node.i()]
 	}
 
-	pub fn node(&self, node: Node) -> Option<&NodeData> {
-		self.nodes.get(node.i())
+	pub fn node(&self, node: Node) -> &NodeData {
+		&self.nodes[node.i()]
 	}
 
-	pub fn node_mut(&mut self, node: Node) -> Option<&mut NodeData> {
-		self.nodes.get_mut(node.i())
+	pub fn node_mut(&mut self, node: Node) -> &mut NodeData {
+		&mut self.nodes[node.i()]
 	}
 
 	pub fn hybrid_edges(
 		&self,
 	) -> impl Iterator<Item = (Node, Node)> + use<'_> {
 		self.children.iter().enumerate().flat_map(
-			move |(parent, children)| {
-				children.iter().copied().filter_map(
-					move |child| {
-						(self.parents[child.i()]
-							!= Node(parent as u32))
-						.then_some((
-							Node(parent as u32),
-							child,
-						))
-					},
-				)
+			move |(i, children)| {
+				let parent = Node(i as u32);
+				children.iter()
+					.copied()
+					.filter(move |&child| {
+						self.parents[child.i()]
+							!= parent
+					})
+					.map(move |child| (parent, child))
 			},
 		)
 	}
@@ -154,7 +152,7 @@ impl TreeBuilder {
 		data: NodeData,
 		edge: EdgeData,
 	) -> Result<Node> {
-		ensure!(self.contains(parent), "Parent node is out of range");
+		self.ensure_valid_node(parent)?;
 		let index = u32::try_from(self.nodes.len()).map_err(|_| {
 			anyhow!("The number of nodes does not fit in u32")
 		})?;
@@ -162,7 +160,7 @@ impl TreeBuilder {
 		self.nodes.push(data);
 		self.children.push(SmallVec::new());
 		self.parents.push(parent);
-		self.edges.push(Some(edge));
+		self.edges.push(edge);
 		self.children[parent.i()].push(node);
 		Ok(node)
 	}
@@ -173,7 +171,8 @@ impl TreeBuilder {
 		child: Node,
 		edge: EdgeData,
 	) -> Result<()> {
-		self.ensure_nodes(parent, child)?;
+		self.ensure_valid_node(parent)?;
+		self.ensure_valid_node(child)?;
 		ensure!(child != self.root, "The root cannot have a parent");
 		ensure!(
 			self.parents[child.i()].index() == ROOT_PARENT,
@@ -186,7 +185,7 @@ impl TreeBuilder {
 		);
 
 		self.parents[child.i()] = parent;
-		self.edges[child.i()] = Some(edge);
+		self.edges[child.i()] = edge;
 		self.children[parent.i()].push(child);
 		Ok(())
 	}
@@ -196,7 +195,8 @@ impl TreeBuilder {
 		parent: Node,
 		child: Node,
 	) -> Result<EdgeData> {
-		self.ensure_nodes(parent, child)?;
+		self.ensure_valid_node(parent)?;
+		self.ensure_valid_node(child)?;
 		ensure!(
 			self.parents[child.i()] == parent,
 			"Node {} is not a canonical child of node {}",
@@ -214,9 +214,7 @@ impl TreeBuilder {
 			})?;
 		self.children[parent.i()].remove(index);
 		self.parents[child.i()] = Node(ROOT_PARENT);
-		self.edges[child.i()].take().ok_or_else(|| {
-			anyhow!("The canonical edge has no data")
-		})
+		Ok(mem::take(&mut self.edges[child.i()]))
 	}
 
 	pub fn replace_parent(
@@ -224,11 +222,12 @@ impl TreeBuilder {
 		child: Node,
 		new_parent: Node,
 	) -> Result<()> {
-		self.ensure_nodes(child, new_parent)?;
+		self.ensure_valid_node(new_parent)?;
+		self.ensure_valid_node(child)?;
 		ensure!(child != self.root, "The root cannot have a parent");
-		let old_parent = self.parent_of(child).ok_or_else(|| {
-			anyhow!("Node {} has no parent", child.index())
-		})?;
+		let Some(old_parent) = self.parent_of(child) else {
+			bail!("Node {} has no parent", child.index())
+		};
 		if old_parent == new_parent {
 			return Ok(());
 		}
@@ -237,22 +236,17 @@ impl TreeBuilder {
 			"Changing the parent would create a cycle"
 		);
 
-		let index = self.children[old_parent.i()]
+		let Some(index) = self.children[old_parent.i()]
 			.iter()
 			.position(|&node| node == child)
-			.ok_or_else(|| {
-				anyhow!(
-					"The parent-child relation is inconsistent"
-				)
-			})?;
+		else {
+			bail!("The parent-child relation is inconsistent")
+		};
+
 		self.children[old_parent.i()].remove(index);
 		self.children[new_parent.i()].push(child);
 		self.parents[child.i()] = new_parent;
 		Ok(())
-	}
-
-	pub fn spr(&mut self, node: Node, new_parent: Node) -> Result<()> {
-		self.replace_parent(node, new_parent)
 	}
 
 	pub fn replace_edge(
@@ -260,13 +254,10 @@ impl TreeBuilder {
 		child: Node,
 		edge: EdgeData,
 	) -> Result<EdgeData> {
-		ensure!(self.contains(child), "Child node is out of range");
+		self.ensure_valid_node(child)?;
 		ensure!(child != self.root, "The root has no incoming edge");
-		let current =
-			self.edges[child.i()].as_mut().ok_or_else(|| {
-				anyhow!("Node {} has no parent", child.index())
-			})?;
-		Ok(std::mem::replace(current, edge))
+		let current = &mut self.edges[child.i()];
+		Ok(mem::replace(current, edge))
 	}
 
 	pub fn add_hybrid_edge(
@@ -274,7 +265,8 @@ impl TreeBuilder {
 		parent: Node,
 		child: Node,
 	) -> Result<()> {
-		self.ensure_nodes(parent, child)?;
+		self.ensure_valid_node(parent)?;
+		self.ensure_valid_node(child)?;
 		ensure!(parent != child, "A node cannot be its own parent");
 		ensure!(
 			self.parents[child.i()] != parent,
@@ -298,7 +290,8 @@ impl TreeBuilder {
 		parent: Node,
 		child: Node,
 	) -> Result<()> {
-		self.ensure_nodes(parent, child)?;
+		self.ensure_valid_node(parent)?;
+		self.ensure_valid_node(child)?;
 		ensure!(
 			self.parents[child.i()] != parent,
 			"The edge is the canonical parent relation"
@@ -314,7 +307,7 @@ impl TreeBuilder {
 	}
 
 	pub fn set_root(&mut self, node: Node) -> Result<()> {
-		ensure!(self.contains(node), "Root node is out of range");
+		self.ensure_valid_node(node)?;
 		if node == self.root {
 			return Ok(());
 		}
@@ -331,9 +324,7 @@ impl TreeBuilder {
 				self.parent_of(current).ok_or_else(|| {
 					anyhow!("The new root is disconnected")
 				})?;
-			let edge = self.edges[current.i()].take().ok_or_else(
-				|| anyhow!("The canonical edge has no data"),
-			)?;
+			let edge = self.edges[current.i()].clone();
 			path.push((current, parent, edge));
 			current = parent;
 		}
@@ -350,11 +341,11 @@ impl TreeBuilder {
 			self.children[parent.i()].remove(index);
 			self.children[child.i()].push(parent);
 			self.parents[parent.i()] = child;
-			self.edges[parent.i()] = Some(edge);
+			self.edges[parent.i()] = edge;
 		}
 
 		self.parents[node.i()] = Node(ROOT_PARENT);
-		self.edges[node.i()] = None;
+		self.edges[node.i()] = EdgeData::default();
 		self.root = node;
 		self.validate()
 	}
@@ -408,10 +399,6 @@ impl TreeBuilder {
 						== ROOT_PARENT,
 					"The root has a parent"
 				);
-				ensure!(
-					self.edges[node.i()].is_none(),
-					"The root has edge data"
-				);
 			} else {
 				ensure!(
 					seen[node.i()],
@@ -422,11 +409,6 @@ impl TreeBuilder {
 					self.parents[node.i()].index()
 						!= ROOT_PARENT,
 					"Node {} has no canonical parent",
-					node.index()
-				);
-				ensure!(
-					self.edges[node.i()].is_some(),
-					"Node {} has no canonical edge data",
 					node.index()
 				);
 			}
@@ -486,17 +468,8 @@ impl TreeBuilder {
 		BinaryTree::try_from(self)
 	}
 
-	fn ensure_nodes(&self, first: Node, second: Node) -> Result<()> {
-		ensure!(
-			self.contains(first),
-			"Node {} is out of range",
-			first.index()
-		);
-		ensure!(
-			self.contains(second),
-			"Node {} is out of range",
-			second.index()
-		);
+	fn ensure_valid_node(&self, node: Node) -> Result<()> {
+		ensure!(self.contains(node), "Node {} is out of range", node.0);
 		Ok(())
 	}
 
@@ -560,14 +533,7 @@ impl TryFrom<TreeBuilder> for BinaryTree {
 				continue;
 			}
 			let index = (new - u32::from(new > root)) as usize;
-			let edge = builder.edges[old.i()].as_ref().ok_or_else(
-				|| {
-					anyhow!(
-						"Node {} has no canonical edge data",
-						old.index()
-					)
-				},
-			)?;
+			let edge = &builder.edges[old.i()];
 			edge_lengths[index] = edge.length.ok_or_else(|| {
 				anyhow!(
 					"Node {} has no edge length",

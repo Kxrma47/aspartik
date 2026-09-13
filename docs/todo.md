@@ -9,11 +9,14 @@
 
 - [ ] Tree builder
 
-  - [ ] Rerooting
-  - [ ] Conversion from Newick (see the Newick parser item)
-  - [ ] Inline children lists via `smallvec` for better performance
-  - [ ] `is_binary` method
-  - [ ] Conversion to the binary tree
+  - [x] Rerooting
+  - [x] Conversion from Newick (see the Newick parser item)
+  - [x] Inline children lists via `smallvec` for better performance
+  - [x] `is_binary` method
+  - [x] Conversion to the binary tree
+  - [ ] NNI
+  - [ ] Edge-to-edge SPR
+  - [ ] TBR
 
 - [ ] Binary tree
 
@@ -28,7 +31,7 @@
   - [ ] New Hampshire X format getter for node label metadata.  Should parse inside the method and return the value as an `&str` slice.
   - [ ] Compact and easy to parse binary format
 
-- [ ] Python API for the builder and the binary tree
+- [x] Python API for the builder and the binary tree
 
 - [ ] New non-recursive Newick parser which parses straight to the tree builder
 

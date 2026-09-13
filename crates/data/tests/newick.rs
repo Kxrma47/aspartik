@@ -10,7 +10,7 @@ use data::tree::{
 
 fn node_named(tree: &TreeBuilder, name: &str) -> Node {
 	tree.nodes()
-		.find(|&node| tree.node(node).unwrap().name == name)
+		.find(|&node| tree.node(node).name == name)
 		.unwrap()
 }
 
@@ -29,7 +29,7 @@ fn labels_lengths_and_empty_fields() -> Result<()> {
 	}
 
 	let tree = parse_newick("(A,B:1);")?;
-	assert_eq!(tree.edge(node_named(&tree, "A")).unwrap().length, None);
+	assert_eq!(tree.edge(node_named(&tree, "A")).length, None);
 	assert!(tree.into_binary().is_err());
 
 	Ok(())
@@ -44,10 +44,7 @@ fn quoted_labels() -> Result<()> {
 		tree.to_newick()?,
 		"('with spaces':0.1,'O''Brien':0.2,'comma,name':0.3);"
 	);
-	assert_eq!(
-		tree.node(node_named(&tree, "O'Brien")).unwrap().name,
-		"O'Brien"
-	);
+	assert_eq!(tree.node(node_named(&tree, "O'Brien")).name, "O'Brien");
 
 	let double_quoted =
 		parse_newick("(\"with quotes!\":0.1,\"another one\":0.2);")?;
@@ -65,8 +62,8 @@ fn beast_metadata_and_nhx() -> Result<()> {
 	let expected = "(A[&date=2020]:0.01[&rate=0.5],B:0.02)ROOT[&R][&&NHX:S=human:broken:D=N][&posterior=0.99];";
 	let builder = parse_newick(source)?;
 	let a = node_named(&builder, "A");
-	assert_eq!(builder.node(a).unwrap().attributes, "[&date=2020]");
-	assert_eq!(builder.edge(a).unwrap().attributes, "[&rate=0.5]");
+	assert_eq!(builder.node(a).attributes, "[&date=2020]");
+	assert_eq!(builder.edge(a).attributes, "[&rate=0.5]");
 	assert_eq!(builder.to_newick()?, expected);
 
 	let tree = builder.into_binary()?;
@@ -85,7 +82,7 @@ fn multifurcating_roundtrip() -> Result<()> {
 	let builder = parse_newick(source)?;
 	assert!(!builder.is_binary());
 	assert!(builder.clone().into_binary().is_err());
-	assert_eq!(builder.children_of(builder.root()).unwrap().len(), 4);
+	assert_eq!(builder.children_of(builder.root()).len(), 4);
 	assert_eq!(builder.to_newick()?, source);
 
 	Ok(())

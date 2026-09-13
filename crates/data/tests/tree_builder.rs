@@ -31,7 +31,7 @@ fn add(
 	)
 }
 
-fn balanced_builder() -> Result<TreeBuilder> {
+fn balanced_builder_4_leaves() -> Result<TreeBuilder> {
 	let mut tree = TreeBuilder::with_root(node_data("root", "node_root"));
 	let root = tree.root();
 	let left = add(&mut tree, root, "left", 1.0)?;
@@ -48,7 +48,7 @@ fn canonical_edges(tree: &TreeBuilder) -> Vec<(u32, u32, Option<u64>, String)> {
 		.nodes()
 		.filter_map(|child| {
 			let parent = tree.parent_of(child)?;
-			let edge = tree.edge(child).unwrap();
+			let edge = tree.edge(child);
 			Some((
 				parent.index(),
 				child.index(),
@@ -74,7 +74,7 @@ fn deterministic_binary_shapes() -> Result<()> {
 	add(&mut two_tip, root, "a", 1.0)?;
 	add(&mut two_tip, root, "b", 2.0)?;
 
-	let balanced = balanced_builder()?;
+	let balanced = balanced_builder_4_leaves()?;
 
 	let mut ladder = TreeBuilder::with_root(NodeData::named("root"));
 	let root = ladder.root();
@@ -108,15 +108,15 @@ fn node_and_edge_mutations() -> Result<()> {
 	let right = add(&mut tree, root, "right", 2.0)?;
 	let child = add(&mut tree, left, "child", 3.0)?;
 
-	tree.node_mut(child).unwrap().attributes = "changed_node".into();
-	tree.edge_mut(child).unwrap().attributes = "changed_edge".into();
-	assert_eq!(tree.node(child).unwrap().attributes, "changed_node");
-	assert_eq!(tree.edge(child).unwrap().attributes, "changed_edge");
+	tree.node_mut(child).attributes = "changed_node".into();
+	tree.edge_mut(child).attributes = "changed_edge".into();
+	assert_eq!(tree.node(child).attributes, "changed_node");
+	assert_eq!(tree.edge(child).attributes, "changed_edge");
 
 	tree.replace_parent(child, right)?;
 	assert_eq!(tree.parent_of(child), Some(right));
-	assert!(!tree.children_of(left).unwrap().contains(&child));
-	assert!(tree.children_of(right).unwrap().contains(&child));
+	assert!(!tree.children_of(left).contains(&child));
+	assert!(tree.children_of(right).contains(&child));
 
 	let old = tree.replace_edge(child, edge_data(4.0, "replacement"))?;
 	assert_eq!(old.length, Some(3.0));
@@ -124,10 +124,10 @@ fn node_and_edge_mutations() -> Result<()> {
 
 	let removed = tree.remove_edge(right, child)?;
 	assert_eq!(removed.length, Some(4.0));
-	assert!(tree
-		.replace_edge(child, edge_data(5.0, "detached"))
-		.is_err());
-	assert_eq!(tree.edge(child), None);
+	assert_eq!(tree.edge(child), &EdgeData::default());
+	tree.replace_edge(child, edge_data(5.0, "detached"))
+		.unwrap();
+	assert_eq!(tree.edge(child), &edge_data(5.0, "detached"));
 	assert!(tree.validate().is_err());
 	tree.add_edge(left, child, removed)?;
 	tree.validate()?;
@@ -142,19 +142,19 @@ fn node_and_edge_mutations() -> Result<()> {
 
 #[test]
 fn rerooting_preserves_topology_and_data() -> Result<()> {
-	let mut tree = balanced_builder()?;
+	let mut tree = balanced_builder_4_leaves()?;
 	let original_root = tree.root();
 	let new_root = tree
 		.nodes()
-		.find(|&node| tree.node(node).unwrap().name == "left")
+		.find(|&node| tree.node(node).name == "left")
 		.unwrap();
 	let original_edges = canonical_edges(&tree);
-	let connection = tree.edge(new_root).unwrap().clone();
+	let connection = tree.edge(new_root).clone();
 
 	tree.set_root(new_root)?;
 	assert_eq!(tree.root(), new_root);
 	assert_eq!(tree.parent_of(original_root), Some(new_root));
-	assert_eq!(tree.edge(original_root), Some(&connection));
+	assert_eq!(tree.edge(original_root), &connection);
 	tree.validate()?;
 
 	tree.set_root(original_root)?;
@@ -168,46 +168,35 @@ fn rerooting_preserves_topology_and_data() -> Result<()> {
 
 #[test]
 fn binary_sealing_preserves_node_and_edge_data() -> Result<()> {
-	let tree = balanced_builder()?;
-	let expected_root_name = tree.node(tree.root()).unwrap().name.clone();
+	let tree = balanced_builder_4_leaves()?;
+	let expected_root_name = tree.node(tree.root()).name.clone();
 	let expected = tree
 		.nodes()
 		.map(|node| {
 			(
-				tree.node(node).unwrap().name.clone(),
-				tree.node(node).unwrap().attributes.clone(),
-				tree.edge(node).cloned(),
+				tree.node(node).name.clone(),
+				tree.node(node).attributes.clone(),
+				tree.edge(node).clone(),
 			)
 		})
 		.collect::<Vec<_>>();
-	let sealed = tree.into_binary()?;
+	let binary = tree.into_binary()?;
 
 	assert_eq!(
-		sealed.name(sealed.root().into()),
+		binary.name(binary.root().into()),
 		Some(expected_root_name.as_str())
 	);
 	for (name, node_attributes, edge) in expected {
-		let node = binary_node_by_name(&sealed, &name);
+		let node = binary_node_by_name(&binary, &name);
 		assert_eq!(
-			sealed.node_metadata(node),
+			binary.node_metadata(node),
 			Some(node_attributes.as_str())
 		);
-		match edge {
-			Some(edge) => {
-				assert_eq!(
-					sealed.edge_length(node),
-					edge.length
-				);
-				assert_eq!(
-					sealed.edge_metadata(node),
-					Some(edge.attributes.as_str())
-				);
-			}
-			None => {
-				assert_eq!(sealed.edge_length(node), None);
-				assert_eq!(sealed.edge_metadata(node), None);
-			}
-		}
+		assert_eq!(binary.edge_length(node), edge.length);
+		assert_eq!(
+			binary.edge_metadata(node).unwrap_or(""),
+			edge.attributes.as_str()
+		);
 	}
 
 	Ok(())
@@ -236,17 +225,11 @@ fn multifurcating_and_hybrid_edges() -> Result<()> {
 	assert_eq!(tree.num_nodes(), 6);
 	assert_eq!(tree.parent_of(right_leaf), Some(right));
 	assert_eq!(tree.parent_of(left_leaf), Some(left));
-	assert_eq!(tree.node(right_leaf).unwrap().name, "right_leaf");
-	assert_eq!(
-		tree.node(right_leaf).unwrap().attributes,
-		"node_right_leaf"
-	);
-	assert_eq!(
-		tree.edge(right_leaf).unwrap(),
-		&edge_data(5.0, "edge_right_leaf")
-	);
-	assert_eq!(tree.children_of(root).unwrap().len(), 3);
-	assert!(tree.children_of(extra).unwrap().is_empty());
+	assert_eq!(tree.node(right_leaf).name, "right_leaf");
+	assert_eq!(tree.node(right_leaf).attributes, "node_right_leaf");
+	assert_eq!(tree.edge(right_leaf), &edge_data(5.0, "edge_right_leaf"));
+	assert_eq!(tree.children_of(root).len(), 3);
+	assert!(tree.children_of(extra).is_empty());
 	assert_eq!(
 		tree.hybrid_edges().collect::<Vec<_>>(),
 		vec![(left, right_leaf)]
@@ -257,15 +240,15 @@ fn multifurcating_and_hybrid_edges() -> Result<()> {
 
 #[test]
 fn rejected_and_disconnected_edits() -> Result<()> {
-	let mut tree = balanced_builder()?;
+	let mut tree = balanced_builder_4_leaves()?;
 	let root = tree.root();
 	let left = tree
 		.nodes()
-		.find(|&node| tree.node(node).unwrap().name == "left")
+		.find(|&node| tree.node(node).name == "left")
 		.unwrap();
 	let leaf = tree
 		.nodes()
-		.find(|&node| tree.node(node).unwrap().name == "a")
+		.find(|&node| tree.node(node).name == "a")
 		.unwrap();
 
 	assert!(tree.replace_parent(left, leaf).is_err());
@@ -331,60 +314,40 @@ fn random_binary_builder_roundtrips() {
 		builder.set_root(original_root).unwrap();
 		assert_eq!(canonical_edges(&builder), original_edges);
 
-		let sealed = builder.clone().into_binary().unwrap();
-		assert_eq!(sealed.num_leaves(), num_leaves);
-		assert_eq!(sealed.num_nodes(), builder.num_nodes());
+		let binary = builder.clone().into_binary().unwrap();
+		assert_eq!(binary.num_leaves(), num_leaves);
+		assert_eq!(binary.num_nodes(), builder.num_nodes());
 		assert_eq!(
-			sealed.preorder().count(),
+			binary.preorder().count(),
 			builder.num_nodes() as usize
 		);
 		assert_eq!(
-			sealed.postorder().count(),
+			binary.postorder().count(),
 			builder.num_nodes() as usize
 		);
 
 		for source in builder.nodes() {
-			let name = builder.node(source).unwrap().name.as_str();
-			let target = binary_node_by_name(&sealed, name);
+			let name = &builder.node(source).name;
+			let target = binary_node_by_name(&binary, name);
 			assert_eq!(
-				sealed.node_metadata(target),
-				Some(builder
-					.node(source)
-					.unwrap()
-					.attributes
-					.as_str())
+				binary.node_metadata(target),
+				Some(builder.node(source).attributes.as_str())
 			);
-			match builder.edge(source) {
-				Some(edge) => {
-					assert_eq!(
-						sealed.edge_length(target),
-						edge.length
-					);
-					assert_eq!(
-						sealed.edge_metadata(target),
-						Some(edge.attributes.as_str())
-					);
-					let source_parent = builder
-						.parent_of(source)
-						.unwrap();
-					let target_parent = sealed
-						.parent_of(target)
-						.unwrap();
-					assert_eq!(
-						sealed.name(
-							target_parent.into()
-						),
-						Some(builder
-							.node(source_parent)
-							.unwrap()
-							.name
-							.as_str())
-					);
-				}
-				None => {
-					assert_eq!(target, sealed.root().into())
-				}
+			let edge = builder.edge(source);
+			assert_eq!(binary.edge_length(target), edge.length);
+			assert_eq!(
+				binary.edge_metadata(target).unwrap_or(""),
+				edge.attributes.as_str()
+			);
+			if source == builder.root() {
+				continue;
 			}
+			let source_parent = builder.parent_of(source).unwrap();
+			let target_parent = binary.parent_of(target).unwrap();
+			assert_eq!(
+				binary.name(target_parent.into()),
+				Some(builder.node(source_parent).name.as_str())
+			);
 		}
 
 		Ok(())

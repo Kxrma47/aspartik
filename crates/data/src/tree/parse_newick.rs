@@ -492,8 +492,7 @@ fn set_node(
 		);
 		hybrids.insert(identifier.clone(), node);
 	}
-	*tree.node_mut(node).context("Parsed node is out of range")? =
-		parsed.data;
+	*tree.node_mut(node) = parsed.data;
 	if !is_root {
 		tree.replace_edge(node, parsed.edge)?;
 	}

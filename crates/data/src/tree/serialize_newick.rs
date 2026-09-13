@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use smallvec::SmallVec;
 
 use std::{
@@ -25,8 +25,8 @@ trait Source {
 	fn validate(&self) -> Result<()>;
 	fn root(&self) -> Node;
 	fn children(&self, node: Node) -> Result<SmallVec<[Child<'_>; 2]>>;
-	fn name(&self, node: Node) -> Option<&str>;
-	fn node_attributes(&self, node: Node) -> Option<&str>;
+	fn name(&self, node: Node) -> &str;
+	fn node_attributes(&self, node: Node) -> &str;
 }
 
 impl Source for TreeBuilder {
@@ -40,10 +40,7 @@ impl Source for TreeBuilder {
 
 	fn children(&self, node: Node) -> Result<SmallVec<[Child<'_>; 2]>> {
 		let mut children = SmallVec::new();
-		for &child in self
-			.children_of(node)
-			.context("Node is out of range")?
-		{
+		for &child in self.children_of(node) {
 			let hybrid = self.parent_of(child) != Some(node);
 			let edge = if hybrid {
 				Edge {
@@ -51,9 +48,7 @@ impl Source for TreeBuilder {
 					attributes: "",
 				}
 			} else {
-				let edge = self.edge(child).context(
-					"A canonical child has no edge data",
-				)?;
+				let edge = self.edge(child);
 				Edge {
 					length: edge.length,
 					attributes: &edge.attributes,
@@ -68,12 +63,12 @@ impl Source for TreeBuilder {
 		Ok(children)
 	}
 
-	fn name(&self, node: Node) -> Option<&str> {
-		self.node(node).map(|data| data.name.as_str())
+	fn name(&self, node: Node) -> &str {
+		&self.node(node).name
 	}
 
-	fn node_attributes(&self, node: Node) -> Option<&str> {
-		self.node(node).map(|data| data.attributes.as_str())
+	fn node_attributes(&self, node: Node) -> &str {
+		&self.node(node).attributes
 	}
 }
 
@@ -106,12 +101,12 @@ impl Source for BinaryTree {
 		Ok(children)
 	}
 
-	fn name(&self, node: Node) -> Option<&str> {
-		BinaryTree::name(self, node)
+	fn name(&self, node: Node) -> &str {
+		BinaryTree::name(self, node).unwrap_or("")
 	}
 
-	fn node_attributes(&self, node: Node) -> Option<&str> {
-		self.node_metadata(node)
+	fn node_attributes(&self, node: Node) -> &str {
+		self.node_metadata(node).unwrap_or("")
 	}
 }
 
@@ -168,9 +163,7 @@ fn write_newick<W: Write>(source: &impl Source, writer: &mut W) -> Result<()> {
 				write_node(source, node, edge, writer)?;
 			}
 			Event::Subtree(child) => {
-				let name = source
-					.name(child.node)
-					.unwrap_or_default();
+				let name = source.name(child.node);
 				let hybrid = hybrid_identifier(name);
 				if child.hybrid {
 					ensure!(
@@ -237,9 +230,9 @@ fn write_node<W: Write>(
 	edge: Option<Edge<'_>>,
 	writer: &mut W,
 ) -> Result<()> {
-	let name = source.name(node).unwrap_or_default();
+	let name = source.name(node);
 	write_label(name, writer)?;
-	writer.write_str(source.node_attributes(node).unwrap_or_default())?;
+	writer.write_str(source.node_attributes(node))?;
 	if let Some(edge) = edge {
 		write_edge(edge, writer)?;
 	}
@@ -256,19 +249,15 @@ fn write_edge<W: Write>(edge: Edge<'_>, writer: &mut W) -> fmt::Result {
 	writer.write_str(edge.attributes)
 }
 
+const ILLEGAL_CHARS: [char; 12] = [
+	' ', '\n', '\t', '(', ')', '[', ']', ',', ':', ';', '\'', '"',
+];
+
 fn write_label<W: Write>(label: &str, writer: &mut W) -> fmt::Result {
 	if label.is_empty() {
 		return Ok(());
 	}
-	if !label.chars().any(|character| {
-		character.is_whitespace()
-			|| matches!(
-				character,
-				'(' | ')'
-					| '[' | ']' | ',' | ':' | ';' | '\''
-					| '"'
-			)
-	}) {
+	if !label.contains(ILLEGAL_CHARS) {
 		return writer.write_str(label);
 	}
 

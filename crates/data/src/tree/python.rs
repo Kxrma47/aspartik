@@ -66,7 +66,6 @@ impl PyTree {
 		let tree = self.inner();
 		let node = checked_node(node, tree.num_nodes())?;
 		Ok(tree.children_of(node)
-			.unwrap()
 			.iter()
 			.map(|child| child.index())
 			.collect())
@@ -81,25 +80,25 @@ impl PyTree {
 	fn name(&self, node: u32) -> Result<Option<String>> {
 		let tree = self.inner();
 		let node = checked_node(node, tree.num_nodes())?;
-		Ok(nonempty(&tree.node(node).unwrap().name))
+		Ok(nonempty(&tree.node(node).name))
 	}
 
 	fn node_metadata(&self, node: u32) -> Result<Option<String>> {
 		let tree = self.inner();
 		let node = checked_node(node, tree.num_nodes())?;
-		Ok(nonempty(&tree.node(node).unwrap().attributes))
+		Ok(nonempty(&tree.node(node).attributes))
 	}
 
 	fn edge_length(&self, child: u32) -> Result<Option<f64>> {
 		let tree = self.inner();
 		let child = checked_node(child, tree.num_nodes())?;
-		Ok(tree.edge(child).and_then(|edge| edge.length))
+		Ok(tree.edge(child).length)
 	}
 
 	fn edge_metadata(&self, child: u32) -> Result<Option<String>> {
 		let tree = self.inner();
 		let child = checked_node(child, tree.num_nodes())?;
-		Ok(tree.edge(child).and_then(|edge| nonempty(&edge.attributes)))
+		Ok(nonempty(&tree.edge(child).attributes))
 	}
 
 	fn preorder(&self) -> Result<Vec<u32>> {
@@ -111,7 +110,6 @@ impl PyTree {
 			output.push(node.index());
 			stack.extend(tree
 				.children_of(node)
-				.unwrap()
 				.iter()
 				.rev()
 				.filter(|&&child| {
@@ -134,7 +132,6 @@ impl PyTree {
 			stack.push((node, true));
 			stack.extend(tree
 				.children_of(node)
-				.unwrap()
 				.iter()
 				.rev()
 				.filter(|&&child| {
@@ -222,7 +219,7 @@ impl PyTree {
 	fn set_name(&self, node: u32, name: Option<String>) -> Result<()> {
 		let mut tree = self.inner.lock();
 		let node = checked_node(node, tree.num_nodes())?;
-		tree.node_mut(node).unwrap().name = name.unwrap_or_default();
+		tree.node_mut(node).name = name.unwrap_or_default();
 		Ok(())
 	}
 
@@ -233,8 +230,7 @@ impl PyTree {
 	) -> Result<()> {
 		let mut tree = self.inner.lock();
 		let node = checked_node(node, tree.num_nodes())?;
-		tree.node_mut(node).unwrap().attributes =
-			metadata.unwrap_or_default();
+		tree.node_mut(node).attributes = metadata.unwrap_or_default();
 		Ok(())
 	}
 
@@ -245,14 +241,7 @@ impl PyTree {
 	) -> Result<()> {
 		let mut tree = self.inner.lock();
 		let child = checked_node(child, tree.num_nodes())?;
-		tree.edge_mut(child)
-			.ok_or_else(|| {
-				anyhow!(
-					"Node {} has no incoming edge",
-					child.index()
-				)
-			})?
-			.length = length;
+		tree.edge_mut(child).length = length;
 		Ok(())
 	}
 
@@ -263,14 +252,7 @@ impl PyTree {
 	) -> Result<()> {
 		let mut tree = self.inner.lock();
 		let child = checked_node(child, tree.num_nodes())?;
-		tree.edge_mut(child)
-			.ok_or_else(|| {
-				anyhow!(
-					"Node {} has no incoming edge",
-					child.index()
-				)
-			})?
-			.attributes = metadata.unwrap_or_default();
+		tree.edge_mut(child).attributes = metadata.unwrap_or_default();
 		Ok(())
 	}
 
