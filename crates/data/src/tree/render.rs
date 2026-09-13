@@ -267,7 +267,7 @@ impl BinaryTree {
 					[child.index() as usize]);
 			let color = edge_color(child);
 			match layout.kind {
-				LayoutKind::Rectangular => {
+				LayoutKind::Rectangular | LayoutKind::Tidy => {
 					output.push_str("<path d=\"M ");
 					write_horizontal(
 						&mut output,
@@ -286,7 +286,7 @@ impl BinaryTree {
 						"\" fill=\"none\" stroke=\"",
 					);
 				}
-				LayoutKind::Slanted | LayoutKind::Tidy => {
+				LayoutKind::Slanted => {
 					output.push_str("<line x1=\"");
 					write_horizontal(
 						&mut output,
@@ -316,10 +316,10 @@ impl BinaryTree {
 				output.push_str("</title>");
 			}
 			match layout.kind {
-				LayoutKind::Rectangular => {
+				LayoutKind::Rectangular | LayoutKind::Tidy => {
 					output.push_str("</path>")
 				}
-				LayoutKind::Slanted | LayoutKind::Tidy => {
+				LayoutKind::Slanted => {
 					output.push_str("</line>")
 				}
 			}

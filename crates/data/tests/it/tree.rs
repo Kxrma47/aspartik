@@ -1228,19 +1228,26 @@ fn svg_rendering() -> Result<()> {
 		.contains("<g font-size=\"12\" dominant-baseline=\"middle\">"));
 	assert_eq!(svg.matches("dominant-baseline").count(), 1);
 	assert_eq!(svg.matches("font-size").count(), 1);
-	for layout in [tree.slanted_layout(1.0)?, tree.tidy_layout(1.0)?] {
-		let svg = tree.to_svg(
-			&layout,
-			SvgOptions::default(),
-			|_| "black",
-			|_| "black",
-		)?;
-		assert_eq!(
-			svg.matches("<line ").count(),
-			tree.num_edges() as usize
-		);
-		assert_eq!(svg.matches("<path ").count(), 0);
-	}
+	let slanted = tree.to_svg(
+		&tree.slanted_layout(1.0)?,
+		SvgOptions::default(),
+		|_| "black",
+		|_| "black",
+	)?;
+	assert_eq!(
+		slanted.matches("<line ").count(),
+		tree.num_edges() as usize
+	);
+	assert_eq!(slanted.matches("<path ").count(), 0);
+
+	let tidy = tree.to_svg(
+		&tree.tidy_layout(1.0)?,
+		SvgOptions::default(),
+		|_| "black",
+		|_| "black",
+	)?;
+	assert_eq!(tidy.matches("<path ").count(), tree.num_edges() as usize);
+	assert_eq!(tidy.matches("<line ").count(), 0);
 
 	let invalid = SvgOptions {
 		x_scale: 0.0,

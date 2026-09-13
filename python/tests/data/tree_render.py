@@ -1,5 +1,6 @@
 import pytest
 
+from pathlib import Path
 from xml.etree import ElementTree
 
 from aspartik.data.tree import BinaryTree, SvgOptions
@@ -47,7 +48,7 @@ def test_svg_is_valid_and_complete(kind):
 
     assert root.tag == "{http://www.w3.org/2000/svg}svg"
     assert len(root.findall("svg:circle", namespace)) == tree.num_nodes
-    edge_tag = "svg:path" if kind == "rectangular" else "svg:line"
+    edge_tag = "svg:line" if kind == "slanted" else "svg:path"
     assert len(root.findall(edge_tag, namespace)) == tree.num_edges
     groups = root.findall("svg:g", namespace)
     assert len(groups) == 1
@@ -67,6 +68,25 @@ def test_svg_is_valid_and_complete(kind):
     assert {
         circle.attrib["fill"] for circle in root.findall("svg:circle", namespace)
     } == {"#336699"}
+
+
+def test_tidy_paper_fixture():
+    tree = BinaryTree.from_newick(
+        Path("data/trees/penel-devienne-tidy.nwk").read_text()
+    )
+    rectangular = tree.layout("rectangular")
+    tidy = tree.layout("tidy")
+
+    assert tree.num_leaves == 162
+    assert tree.num_nodes == 323
+    assert max(y for _, y in tidy) < max(y for _, y in rectangular) * 0.4
+
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    for kind in ("rectangular", "tidy"):
+        root = ElementTree.fromstring(tree.to_svg(kind))
+        assert len(root.findall("svg:path", namespace)) == tree.num_edges
+        assert len(root.findall("svg:circle", namespace)) == tree.num_nodes
+        assert len(root.findall("svg:g/svg:text", namespace)) == tree.num_leaves
 
 
 def test_rendering_rejects_invalid_options():
