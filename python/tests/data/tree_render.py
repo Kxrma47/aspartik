@@ -5,12 +5,14 @@ from xml.etree import ElementTree
 from aspartik.data.tree import BinaryTree, SvgOptions
 
 
-def test_rectangular_and_tidy_coordinates():
+def test_rectangular_slanted_and_tidy_coordinates():
     tree = BinaryTree.from_newick("((A:1,B:3):2,(C:2,D:4):1);")
     rectangular = tree.layout("rectangular", separation=2.0)
+    slanted = tree.layout("slanted", separation=2.0)
     tidy = tree.layout("tidy", separation=2.0)
 
     assert len(rectangular) == tree.num_nodes
+    assert slanted == rectangular
     assert len(tidy) == tree.num_nodes
     assert rectangular[tree.root][0] == 0.0
     assert tidy[tree.root][0] == 0.0
@@ -22,7 +24,7 @@ def test_rectangular_and_tidy_coordinates():
         assert tidy[child][0] >= tidy[parent][0]
 
 
-@pytest.mark.parametrize("kind", ["rectangular", "tidy"])
+@pytest.mark.parametrize("kind", ["rectangular", "slanted", "tidy"])
 def test_svg_is_valid_and_complete(kind):
     tree = BinaryTree.from_newick(
         "(('A<&':1[&rate='x&y'],B:2)'inner<&':3,C:4)'root<&';"

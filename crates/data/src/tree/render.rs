@@ -13,6 +13,7 @@ pub struct Point {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayoutKind {
 	Rectangular,
+	Slanted,
 	Tidy,
 }
 
@@ -84,6 +85,18 @@ impl BinaryTree {
 		&self,
 		separation: f64,
 	) -> Result<TreeLayout> {
+		self.phylogram_layout(separation, LayoutKind::Rectangular)
+	}
+
+	pub fn slanted_layout(&self, separation: f64) -> Result<TreeLayout> {
+		self.phylogram_layout(separation, LayoutKind::Slanted)
+	}
+
+	fn phylogram_layout(
+		&self,
+		separation: f64,
+		kind: LayoutKind,
+	) -> Result<TreeLayout> {
 		let distances = self.layout_distances(separation)?;
 		let mut coordinates = vec![
 			Point { x: 0.0, y: 0.0 };
@@ -114,7 +127,7 @@ impl BinaryTree {
 			height: f64::from(next_leaf.saturating_sub(1))
 				* separation,
 			coordinates: coordinates.into_boxed_slice(),
-			kind: LayoutKind::Rectangular,
+			kind,
 		})
 	}
 
@@ -259,14 +272,16 @@ impl BinaryTree {
 					child_point.y,
 					child_point.x
 				)?,
-				LayoutKind::Tidy => write!(
-					output,
-					"<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"",
-					parent_point.x,
-					parent_point.y,
-					child_point.x,
-					child_point.y
-				)?,
+				LayoutKind::Slanted | LayoutKind::Tidy => {
+					write!(
+						output,
+						"<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"",
+						parent_point.x,
+						parent_point.y,
+						child_point.x,
+						child_point.y
+					)?
+				}
 			}
 			write_escaped(&mut output, color.as_ref())?;
 			output.push_str("\">");
@@ -279,7 +294,9 @@ impl BinaryTree {
 				LayoutKind::Rectangular => {
 					output.push_str("</path>")
 				}
-				LayoutKind::Tidy => output.push_str("</line>"),
+				LayoutKind::Slanted | LayoutKind::Tidy => {
+					output.push_str("</line>")
+				}
 			}
 		}
 

@@ -519,6 +519,7 @@ impl PyBinaryTree {
 			"rectangular" => {
 				self.inner.rectangular_layout(separation)
 			}
+			"slanted" => self.inner.slanted_layout(separation),
 			"tidy" => self.inner.tidy_layout(separation),
 			_ => Err(anyhow!("Unknown tree layout '{kind}'")),
 		}

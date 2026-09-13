@@ -1113,16 +1113,20 @@ fn random_large_triplet_distance_properties() {
 }
 
 #[test]
-fn rectangular_and_tidy_layouts() -> Result<()> {
+fn rectangular_slanted_and_tidy_layouts() -> Result<()> {
 	let tree = indexed_tree("((0:1,1:3):2,(2:2,3:4):1);")?;
 	let rectangular = tree.rectangular_layout(1.0)?;
+	let slanted = tree.slanted_layout(1.0)?;
 	let tidy = tree.tidy_layout(1.0)?;
 
 	assert_eq!(rectangular.width(), 5.0);
 	assert_eq!(rectangular.height(), 3.0);
+	assert_eq!(slanted.points(), rectangular.points());
+	assert_eq!(slanted.width(), rectangular.width());
+	assert_eq!(slanted.height(), rectangular.height());
 	assert!(tidy.width() == rectangular.width());
 	assert!(tidy.height() <= rectangular.height());
-	for layout in [&rectangular, &tidy] {
+	for layout in [&rectangular, &slanted, &tidy] {
 		assert_eq!(layout.points().len(), tree.num_nodes() as usize);
 		assert!(layout
 			.points()
@@ -1145,6 +1149,10 @@ fn rectangular_and_tidy_layouts() -> Result<()> {
 				< 1e-12);
 		}
 	}
+	let nonlayered =
+		indexed_tree("(((0:2,1:1):1,2:1):1,(3:1,(4:1,5:2):1):1);")?;
+	assert!(nonlayered.tidy_layout(1.0)?.height()
+		< nonlayered.rectangular_layout(1.0)?.height());
 
 	let two = indexed_tree("(0:1,1:2);")?;
 	let layout = two.rectangular_layout(2.0)?;
@@ -1168,6 +1176,7 @@ fn rectangular_and_tidy_layouts() -> Result<()> {
 fn layout_rejects_invalid_values() -> Result<()> {
 	let valid = indexed_tree("(0:1,1:2);")?;
 	assert!(valid.rectangular_layout(0.0).is_err());
+	assert!(valid.slanted_layout(f64::INFINITY).is_err());
 	assert!(valid.tidy_layout(f64::NAN).is_err());
 
 	for length in [f64::NAN, f64::INFINITY, -1.0] {
@@ -1178,6 +1187,7 @@ fn layout_rejects_invalid_values() -> Result<()> {
 			str_names(&["0", "1", ""]),
 		)?;
 		assert!(invalid.rectangular_layout(1.0).is_err());
+		assert!(invalid.slanted_layout(1.0).is_err());
 		assert!(invalid.tidy_layout(1.0).is_err());
 	}
 
@@ -1211,6 +1221,19 @@ fn svg_rendering() -> Result<()> {
 	assert!(svg.contains("node&lt;&amp;&quot;&apos;"));
 	assert!(svg.contains("edge&lt;&amp;&quot;&apos;"));
 	assert!(svg.contains("fill=\"#123&quot;456\""));
+	for layout in [tree.slanted_layout(1.0)?, tree.tidy_layout(1.0)?] {
+		let svg = tree.to_svg(
+			&layout,
+			SvgOptions::default(),
+			|_| "black",
+			|_| "black",
+		)?;
+		assert_eq!(
+			svg.matches("<line ").count(),
+			tree.num_edges() as usize
+		);
+		assert_eq!(svg.matches("<path ").count(), 0);
+	}
 
 	let invalid = SvgOptions {
 		x_scale: 0.0,
@@ -1230,6 +1253,7 @@ fn random_layouts_are_finite() {
 		let tree = arbitrary_tree(u, num_leaves)?;
 		for layout in [
 			tree.rectangular_layout(1.0).unwrap(),
+			tree.slanted_layout(1.0).unwrap(),
 			tree.tidy_layout(1.0).unwrap(),
 		] {
 			assert!(layout.width().is_finite());
@@ -1271,6 +1295,10 @@ fn large_ladder_layout() -> Result<()> {
 
 	assert_eq!(
 		tree.rectangular_layout(1.0)?.points().len(),
+		num_nodes as usize
+	);
+	assert_eq!(
+		tree.slanted_layout(1.0)?.points().len(),
 		num_nodes as usize
 	);
 	assert_eq!(tree.tidy_layout(1.0)?.points().len(), num_nodes as usize);
