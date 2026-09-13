@@ -79,7 +79,16 @@ def test_tidy_paper_fixture():
 
     assert tree.num_leaves == 162
     assert tree.num_nodes == 323
+    assert max(y for _, y in tidy) == pytest.approx(49.9482421875)
     assert max(y for _, y in tidy) < max(y for _, y in rectangular) * 0.4
+    for name, expected in {
+        "t161": (3.55446086882468, 9.3543701171875),
+        "t120": (30.5912664971238, 22.5418701171875),
+        "t1": (75.0, 5.0),
+    }.items():
+        leaf = tree.leaf_by_name(name)
+        assert leaf is not None
+        assert tidy[leaf] == pytest.approx(expected)
 
     namespace = {"svg": "http://www.w3.org/2000/svg"}
     for kind in ("rectangular", "tidy"):
