@@ -8,6 +8,7 @@ use super::{Command, CommandReader};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockCommand {
 	block: String,
+	block_index: u64,
 	name: String,
 	command: Command,
 }
@@ -19,6 +20,10 @@ impl BlockCommand {
 
 	pub fn name(&self) -> &str {
 		&self.name
+	}
+
+	pub fn block_index(&self) -> u64 {
+		self.block_index
 	}
 
 	pub fn source(&self) -> &str {
@@ -38,6 +43,7 @@ impl BlockCommand {
 pub struct BlockReader<R> {
 	commands: CommandReader<R>,
 	block: Option<String>,
+	block_index: u64,
 	finished: bool,
 }
 
@@ -46,6 +52,7 @@ impl<R: BufRead> BlockReader<R> {
 		Ok(Self {
 			commands: CommandReader::new(reader)?,
 			block: None,
+			block_index: 0,
 			finished: false,
 		})
 	}
@@ -99,6 +106,7 @@ impl<R: BufRead> BlockReader<R> {
 				.context("Expected a block name")?;
 			expect_end(&mut tokens)?;
 			self.block = Some(block);
+			self.block_index += 1;
 			return Ok(None);
 		}
 
@@ -119,6 +127,7 @@ impl<R: BufRead> BlockReader<R> {
 			.context("A command appears outside a NEXUS block")?;
 		Ok(Some(BlockCommand {
 			block,
+			block_index: self.block_index,
 			name,
 			command,
 		}))
