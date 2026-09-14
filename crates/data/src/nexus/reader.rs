@@ -1,6 +1,10 @@
 use anyhow::{Context, Result, ensure};
 
-use std::io::{BufRead, Cursor};
+use std::{
+	fs::File,
+	io::{BufRead, BufReader, Cursor},
+	path::Path,
+};
 
 use super::{BlockReader, TranslationTable, TreeCommand};
 use crate::tree::{builder::TreeBuilder, parse_newick};
@@ -133,6 +137,19 @@ impl<R: BufRead> NexusTreeReader<R> {
 				column: tree_command.column(),
 			}));
 		}
+	}
+}
+
+impl NexusTreeReader<BufReader<File>> {
+	pub fn from_path(path: impl AsRef<Path>) -> Result<Self> {
+		let path = path.as_ref();
+		let file = File::open(path).with_context(|| {
+			format!(
+				"Could not open NEXUS file '{}'",
+				path.display()
+			)
+		})?;
+		Self::new(BufReader::new(file))
 	}
 }
 
