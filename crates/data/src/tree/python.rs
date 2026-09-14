@@ -4,6 +4,7 @@ use pyo3::{prelude::*, types::PyType};
 
 use crate::tree::{
 	BinaryTree, Node, SvgOptions as TreeSvgOptions, TreeLayout,
+	branch_score,
 	builder::{EdgeData, NodeData, TreeBuilder},
 };
 
@@ -495,6 +496,10 @@ impl PyBinaryTree {
 			|_| node_color,
 			|_| edge_color,
 		)
+	}
+
+	fn branch_score(&self, other: &PyBinaryTree) -> Result<f64> {
+		branch_score(&self.inner, &other.inner)
 	}
 	fn __len__(&self) -> usize {
 		self.num_nodes() as usize

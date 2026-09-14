@@ -1,14 +1,15 @@
 use anyhow::{Result, ensure};
 use arbitrary::Unstructured;
 use arbtest::arbtest;
+use computare_core::assert_almost_eq;
 use picoarrow::array::{ArrayUtf8, Nullable};
 use rand::SeedableRng;
 use rand_pcg::Pcg64;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use data::tree::{
-	BinaryTree, Internal, Node, SvgOptions, parse_newick,
+	BinaryTree, Internal, Node, SvgOptions, branch_score, parse_newick,
 	robinson_foulds_matrix,
 };
 
@@ -208,6 +209,46 @@ fn clades(tree: &BinaryTree) -> BTreeSet<Vec<u32>> {
 	}
 
 	clades
+}
+
+fn branch_clades(tree: &BinaryTree) -> BTreeMap<Vec<u32>, f64> {
+	let mut descendants = vec![Vec::new(); tree.num_nodes() as usize];
+	let mut clades = BTreeMap::new();
+	for node in tree.postorder() {
+		let leaves = if let Some(leaf) = tree.as_leaf(node) {
+			vec![leaf.index()]
+		} else {
+			let internal = tree.as_internal(node).unwrap();
+			let [left, right] = tree.children_of(internal);
+			let mut leaves =
+				descendants[left.index() as usize].clone();
+			leaves.extend_from_slice(
+				&descendants[right.index() as usize],
+			);
+			leaves.sort_unstable();
+			leaves
+		};
+		if node != tree.root().into() {
+			clades.insert(
+				leaves.clone(),
+				tree.edge_length(node).unwrap(),
+			);
+		}
+		descendants[node.index() as usize] = leaves;
+	}
+	clades
+}
+
+fn branch_score_slow(first: &BinaryTree, second: &BinaryTree) -> f64 {
+	let mut first = branch_clades(first);
+	let second = branch_clades(second);
+	let mut squared = 0.0;
+	for (clade, length) in second {
+		let other = first.remove(&clade).unwrap_or(0.0);
+		squared += (other - length).powi(2);
+	}
+	squared += first.values().map(|length| length.powi(2)).sum::<f64>();
+	squared.sqrt()
 }
 
 fn mrca_slow(tree: &BinaryTree, first: Node, second: Node) -> Node {
@@ -914,6 +955,61 @@ fn random_robinson_foulds() {
 
 		Ok(())
 	});
+}
+
+#[test]
+fn branch_score_distances() -> Result<()> {
+	let first = indexed_tree("((0:1,1:2):3,(2:4,3:5):6);")?;
+	let changed_lengths = indexed_tree("((0:2,1:4):6,(2:8,3:10):12);")?;
+	let changed_topology = indexed_tree("((0:1,2:4):3,(1:2,3:5):6);")?;
+	let zero = indexed_tree("((0:0,1:0):0,(2:0,3:0):0);")?;
+
+	for (left, right) in [
+		(&first, &first),
+		(&first, &changed_lengths),
+		(&first, &changed_topology),
+		(&first, &zero),
+	] {
+		let expected = branch_score_slow(left, right);
+		assert_almost_eq!(branch_score(left, right)?, expected);
+		assert_almost_eq!(branch_score(right, left)?, expected);
+	}
+	assert_almost_eq!(branch_score(&first, &first)?, 0.0);
+	assert_almost_eq!(branch_score(&zero, &zero)?, 0.0);
+	assert!(branch_score(&first, &indexed_tree("(0:1,1:1);")?).is_err());
+
+	Ok(())
+}
+
+#[test]
+fn branch_score_reference_distances() -> Result<()> {
+	// Expected values were generated with ape 5.8.1: dist.topo(first, second, method = "score").
+	let cases = [
+		(
+			"((((0:1,1:1):0.4,(2:1,3:1):0.5):0.6,((4:1,5:1):0.7,(6:1,7:1):0.8):0.9):1,8:0);",
+			"(((0:1,(1:1,2:1):0.45):0.65,(3:1,((4:1,5:1):0.75,(6:1,7:1):0.85):0.95):0.55):1,8:0);",
+			1.3057564857200596,
+		),
+		(
+			"(((((0:1,1:1.1):0.2,(2:1.2,3:1.3):0.3):0.4,((4:1.4,5:1.5):0.5,(6:1.6,7:1.7):0.6):0.7):0.8,(8:1.8,9:1.9):0.9):1,10:0);",
+			"((((0:1,(1:1.1,2:1.2):0.25):0.35,(3:1.3,(4:1.4,5:1.5):0.55):0.45):0.65,((6:1.6,7:1.7):0.75,(8:1.8,9:1.9):0.85):0.95):1,10:0);",
+			1.7776388834631178,
+		),
+		(
+			"(((((0:1,1:1):0.2,(2:1,3:1):0.3):0.4,((4:1,5:1):0.5,(6:1,7:1):0.6):0.7):0.8,((8:1,9:1):0.9,(10:1,11:1):1):1.1):1,12:0);",
+			"((((0:1,(1:1,2:1):0.25):0.35,(3:1,(4:1,5:1):0.45):0.55):0.65,((6:1,7:1):0.75,(8:1,(9:1,(10:1,11:1):0.85):0.95):1.05):1.15):1,12:0);",
+			2.327_015_255_644_019,
+		),
+	];
+
+	for (first, second, expected) in cases {
+		let first = indexed_tree(first)?;
+		let second = indexed_tree(second)?;
+		assert_almost_eq!(branch_score(&first, &second)?, expected);
+		assert_almost_eq!(branch_score(&second, &first)?, expected);
+	}
+
+	Ok(())
 }
 
 #[test]
