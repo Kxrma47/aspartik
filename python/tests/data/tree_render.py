@@ -98,6 +98,20 @@ def test_tidy_paper_fixture():
         assert len(root.findall("svg:g/svg:text", namespace)) == tree.num_leaves
 
 
+def test_svg_can_hide_names():
+    tree = BinaryTree.from_newick("(A:1[&value=one],LongName:2);")
+    named = ElementTree.fromstring(tree.to_svg())
+    unnamed = ElementTree.fromstring(tree.to_svg(options=SvgOptions(show_names=False)))
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+
+    assert len(named.findall("svg:g/svg:text", namespace)) == 2
+    assert unnamed.findall("svg:g/svg:text", namespace) == []
+    assert "A" not in "".join(unnamed.itertext())
+    assert "LongName" not in "".join(unnamed.itertext())
+    assert "value=one" in "".join(unnamed.itertext())
+    assert float(unnamed.attrib["width"]) < float(named.attrib["width"])
+
+
 def test_rendering_rejects_invalid_options():
     tree = BinaryTree.from_newick("(A:1,B:2);")
     with pytest.raises(Exception, match="Unknown tree layout"):
