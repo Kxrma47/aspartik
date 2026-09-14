@@ -7,6 +7,7 @@ use crate::tree::{
 	branch_score,
 	builder::{EdgeData, NodeData, TreeBuilder},
 };
+use rng::PyRng;
 
 #[derive(Debug)]
 #[pyclass(name = "Tree", module = "aspartik.data.tree", frozen)]
@@ -342,6 +343,20 @@ pub struct PyBinaryTree {
 
 #[pymethods]
 impl PyBinaryTree {
+	#[classmethod]
+	fn random(
+		_class: &Bound<'_, PyType>,
+		num_leaves: u32,
+		rng: Py<PyRng>,
+	) -> Result<Self> {
+		Ok(Self {
+			inner: BinaryTree::random(
+				num_leaves,
+				&mut rng.get().inner(),
+			)?,
+		})
+	}
+
 	#[classmethod]
 	fn from_newick(
 		_class: &Bound<'_, PyType>,
