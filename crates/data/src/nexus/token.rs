@@ -9,7 +9,6 @@ pub(super) enum TokenKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Token {
 	pub kind: TokenKind,
-	pub start: usize,
 	pub end: usize,
 }
 
@@ -36,7 +35,6 @@ impl<'a> Tokens<'a> {
 			self.offset += character.len_utf8();
 			return Ok(Some(Token {
 				kind: TokenKind::Punctuation(character),
-				start,
 				end: self.offset,
 			}));
 		}
@@ -66,7 +64,6 @@ impl<'a> Tokens<'a> {
 
 		Ok(Some(Token {
 			kind: TokenKind::Word(value),
-			start,
 			end: self.offset,
 		}))
 	}
@@ -119,7 +116,6 @@ impl<'a> Tokens<'a> {
 			}
 			return Ok(Token {
 				kind: TokenKind::Word(value),
-				start,
 				end: self.offset,
 			});
 		}
