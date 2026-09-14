@@ -8,7 +8,8 @@ use rand_pcg::Pcg64;
 use std::collections::BTreeSet;
 
 use data::tree::{
-	BinaryTree, Internal, Node, parse_newick, robinson_foulds_matrix,
+	BinaryTree, Internal, Node, SvgOptions, parse_newick,
+	robinson_foulds_matrix,
 };
 
 fn nullable_values<'a>(
@@ -1109,6 +1110,214 @@ fn random_large_triplet_distance_properties() {
 
 		Ok(())
 	});
+}
+
+#[test]
+fn rectangular_slanted_and_tidy_layouts() -> Result<()> {
+	let tree = indexed_tree("((0:1,1:3):2,(2:2,3:4):1);")?;
+	let rectangular = tree.rectangular_layout(1.0)?;
+	let slanted = tree.slanted_layout(1.0)?;
+	let tidy = tree.tidy_layout(1.0)?;
+
+	assert_eq!(rectangular.width(), 5.0);
+	assert_eq!(rectangular.height(), 3.0);
+	assert_eq!(slanted.points(), rectangular.points());
+	assert_eq!(slanted.width(), rectangular.width());
+	assert_eq!(slanted.height(), rectangular.height());
+	assert!(tidy.width() == rectangular.width());
+	assert!(tidy.height() <= rectangular.height());
+	for layout in [&rectangular, &slanted, &tidy] {
+		assert_eq!(layout.points().len(), tree.num_nodes() as usize);
+		assert!(layout
+			.points()
+			.iter()
+			.all(|point| point.x.is_finite()
+				&& point.y.is_finite()));
+		assert_eq!(layout.point(tree.root().into()).unwrap().x, 0.0);
+		for child in tree.edges() {
+			let parent = tree.parent_of(child).unwrap();
+			let child_point = layout.point(child).unwrap();
+			let parent_point = layout.point(parent.into()).unwrap();
+			assert!(child_point.x >= parent_point.x);
+		}
+		for internal in tree.internals() {
+			let parent = layout.point(internal.into()).unwrap();
+			let [left, right] = tree.children_of(internal);
+			let left = layout.point(left).unwrap();
+			let right = layout.point(right).unwrap();
+			assert!((parent.y - (left.y + right.y) / 2.0).abs()
+				< 1e-12);
+		}
+	}
+	let nonlayered =
+		indexed_tree("(((0:2,1:1):1,2:1):1,(3:1,(4:1,5:2):1):1);")?;
+	assert!(nonlayered.tidy_layout(1.0)?.height()
+		< nonlayered.rectangular_layout(1.0)?.height());
+
+	let two = indexed_tree("(0:1,1:2);")?;
+	let layout = two.rectangular_layout(2.0)?;
+	assert_eq!(
+		layout.point(node(&two, 0)).unwrap(),
+		data::tree::Point { x: 1.0, y: 0.0 }
+	);
+	assert_eq!(
+		layout.point(node(&two, 1)).unwrap(),
+		data::tree::Point { x: 2.0, y: 2.0 }
+	);
+	assert_eq!(
+		layout.point(two.root().into()).unwrap(),
+		data::tree::Point { x: 0.0, y: 1.0 }
+	);
+
+	Ok(())
+}
+
+#[test]
+fn layout_rejects_invalid_values() -> Result<()> {
+	let valid = indexed_tree("(0:1,1:2);")?;
+	assert!(valid.rectangular_layout(0.0).is_err());
+	assert!(valid.slanted_layout(f64::INFINITY).is_err());
+	assert!(valid.tidy_layout(f64::NAN).is_err());
+
+	for length in [f64::NAN, f64::INFINITY, -1.0] {
+		let invalid = tree(
+			2,
+			vec![0, 1],
+			vec![length, 1.0],
+			str_names(&["0", "1", ""]),
+		)?;
+		assert!(invalid.rectangular_layout(1.0).is_err());
+		assert!(invalid.slanted_layout(1.0).is_err());
+		assert!(invalid.tidy_layout(1.0).is_err());
+	}
+
+	Ok(())
+}
+
+#[test]
+fn svg_rendering() -> Result<()> {
+	let tree = BinaryTree::new(
+		2,
+		2,
+		&[0, 1],
+		&[1.0, 2.0],
+		str_names(&["A<&\"'", "B", "root"]),
+		nullable_values([Some("node<&\"'"), None, Some("root data")]),
+		nullable_values([Some("edge<&\"'"), None]),
+	)?;
+	let layout = tree.rectangular_layout(1.0)?;
+	let options = SvgOptions {
+		x_scale: 100.0 / 3.0,
+		..SvgOptions::default()
+	};
+	let svg =
+		tree.to_svg(&layout, options, |_| "#123\"456", |_| "#abcdef")?;
+
+	assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
+	assert!(svg.ends_with("</svg>"));
+	assert_eq!(svg.matches("<path ").count(), tree.num_edges() as usize);
+	assert_eq!(svg.matches("<circle ").count(), tree.num_nodes() as usize);
+	assert!(svg.contains("A&lt;&amp;&quot;&apos;"));
+	assert!(svg.contains("node&lt;&amp;&quot;&apos;"));
+	assert!(svg.contains("edge&lt;&amp;&quot;&apos;"));
+	assert!(svg.contains("fill=\"#123&quot;456\""));
+	assert!(svg.contains("width=\"122.87\""));
+	assert!(svg.contains("H 53.33\""));
+	assert!(svg.contains("cx=\"86.67\""));
+	assert!(svg
+		.contains("<g font-size=\"12\" dominant-baseline=\"middle\">"));
+	assert_eq!(svg.matches("dominant-baseline").count(), 1);
+	assert_eq!(svg.matches("font-size").count(), 1);
+	let slanted = tree.to_svg(
+		&tree.slanted_layout(1.0)?,
+		SvgOptions::default(),
+		|_| "black",
+		|_| "black",
+	)?;
+	assert_eq!(
+		slanted.matches("<line ").count(),
+		tree.num_edges() as usize
+	);
+	assert_eq!(slanted.matches("<path ").count(), 0);
+
+	let tidy = tree.to_svg(
+		&tree.tidy_layout(1.0)?,
+		SvgOptions::default(),
+		|_| "black",
+		|_| "black",
+	)?;
+	assert_eq!(tidy.matches("<path ").count(), tree.num_edges() as usize);
+	assert_eq!(tidy.matches("<line ").count(), 0);
+
+	let invalid = SvgOptions {
+		x_scale: 0.0,
+		..SvgOptions::default()
+	};
+	assert!(tree
+		.to_svg(&layout, invalid, |_| "black", |_| "black")
+		.is_err());
+
+	Ok(())
+}
+
+#[test]
+fn random_layouts_are_finite() {
+	arbtest(|u: &mut Unstructured<'_>| {
+		let num_leaves = u.int_in_range(2_u32..=1_000)?;
+		let tree = arbitrary_tree(u, num_leaves)?;
+		for layout in [
+			tree.rectangular_layout(1.0).unwrap(),
+			tree.slanted_layout(1.0).unwrap(),
+			tree.tidy_layout(1.0).unwrap(),
+		] {
+			assert!(layout.width().is_finite());
+			assert!(layout.height().is_finite());
+			assert!(layout
+				.points()
+				.iter()
+				.all(|point| point.x.is_finite()
+					&& point.y.is_finite()));
+		}
+		Ok(())
+	});
+}
+
+#[test]
+fn large_ladder_layout() -> Result<()> {
+	let num_leaves = 20_000_u32;
+	let num_nodes = num_leaves * 2 - 1;
+	let mut children = Vec::with_capacity((num_nodes - 1) as usize);
+	children.extend([0, 1]);
+	for offset in 1..num_leaves - 1 {
+		children.extend([num_leaves + offset - 1, offset + 1]);
+	}
+	let labels = (0..num_nodes)
+		.map(|node| {
+			if node < num_leaves {
+				node.to_string()
+			} else {
+				String::new()
+			}
+		})
+		.collect::<Vec<_>>();
+	let tree = tree(
+		num_leaves,
+		children,
+		vec![1.0; (num_nodes - 1) as usize],
+		names(&labels),
+	)?;
+
+	assert_eq!(
+		tree.rectangular_layout(1.0)?.points().len(),
+		num_nodes as usize
+	);
+	assert_eq!(
+		tree.slanted_layout(1.0)?.points().len(),
+		num_nodes as usize
+	);
+	assert_eq!(tree.tidy_layout(1.0)?.points().len(), num_nodes as usize);
+
+	Ok(())
 }
 
 fn choose3_for_test(value: u32) -> u128 {
