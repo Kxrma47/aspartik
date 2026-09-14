@@ -35,6 +35,10 @@ pub mod pymodule {
 	#[pymodule_init]
 	fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
 		::util::py_patch_module!(m);
+		m.add_function(wrap_pyfunction!(
+			crate::tree::python::py_robinson_foulds_matrix,
+			m
+		)?)?;
 
 		Ok(())
 	}

@@ -6,6 +6,7 @@ use crate::tree::{
 	BinaryTree, Node, SvgOptions as TreeSvgOptions, TreeLayout,
 	branch_score,
 	builder::{EdgeData, NodeData, TreeBuilder},
+	distance::robinson_foulds_matrix_borrowed,
 };
 use rng::PyRng;
 
@@ -544,6 +545,38 @@ impl PyBinaryTree {
 			_ => Err(anyhow!("Unknown tree layout '{kind}'")),
 		}
 	}
+}
+
+#[pyfunction(name = "robinson_foulds_matrix")]
+pub fn py_robinson_foulds_matrix(
+	py: Python<'_>,
+	trees: Vec<Py<PyBinaryTree>>,
+) -> Result<Vec<Vec<u32>>> {
+	py.detach(move || {
+		let trees = trees
+			.iter()
+			.map(|tree| &tree.get().inner)
+			.collect::<Vec<_>>();
+		if let Some(first) = trees.first() {
+			for tree in &trees[1..] {
+				ensure!(
+					tree.num_leaves() == first.num_leaves(),
+					"Expected every tree to have {} leaves, got {}",
+					first.num_leaves(),
+					tree.num_leaves()
+				);
+				for leaf in 0..first.num_leaves() {
+					let leaf = Node(leaf);
+					ensure!(
+						tree.name(leaf)
+							== first.name(leaf),
+						"Expected every tree to use the same leaf IDs"
+					);
+				}
+			}
+		}
+		robinson_foulds_matrix_borrowed(&trees)
+	})
 }
 
 fn checked_node(index: u32, num_nodes: u32) -> Result<Node> {

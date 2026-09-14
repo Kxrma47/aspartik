@@ -1,6 +1,8 @@
 use anyhow::{Result, ensure};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
+use std::borrow::Borrow;
+
 use super::BinaryTree;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
@@ -53,12 +55,21 @@ fn clade_hashes(tree: &BinaryTree) -> Vec<CladeHash> {
 }
 
 pub fn robinson_foulds_matrix(trees: &[BinaryTree]) -> Result<Vec<Vec<u32>>> {
-	let Some(first_tree) = trees.first() else {
+	robinson_foulds_matrix_borrowed(trees)
+}
+
+pub(super) fn robinson_foulds_matrix_borrowed<T>(
+	trees: &[T],
+) -> Result<Vec<Vec<u32>>>
+where
+	T: Borrow<BinaryTree>,
+{
+	let Some(first_tree) = trees.first().map(Borrow::borrow) else {
 		return Ok(Vec::new());
 	};
 
 	let num_leaves = first_tree.num_leaves();
-	for tree in &trees[1..] {
+	for tree in trees[1..].iter().map(Borrow::borrow) {
 		ensure!(
 			tree.num_leaves() == num_leaves,
 			"Expected every tree to have {num_leaves} leaves, got {}",
@@ -74,7 +85,7 @@ pub fn robinson_foulds_matrix(trees: &[BinaryTree]) -> Result<Vec<Vec<u32>>> {
 			FxBuildHasher,
 		);
 
-	for (tree_index, tree) in trees.iter().enumerate() {
+	for (tree_index, tree) in trees.iter().map(Borrow::borrow).enumerate() {
 		let hashes = clade_hashes(tree);
 		for node in tree.postorder() {
 			if node != tree.root().into() && tree.is_internal(node)
