@@ -1228,6 +1228,19 @@ fn svg_rendering() -> Result<()> {
 		.contains("<g font-size=\"12\" dominant-baseline=\"middle\">"));
 	assert_eq!(svg.matches("dominant-baseline").count(), 1);
 	assert_eq!(svg.matches("font-size").count(), 1);
+	let unnamed = tree.to_svg(
+		&layout,
+		SvgOptions {
+			show_names: false,
+			..options
+		},
+		|_| "black",
+		|_| "black",
+	)?;
+	assert!(!unnamed.contains("<text"));
+	assert!(!unnamed.contains("A&lt;&amp;&quot;&apos;"));
+	assert!(unnamed.contains("node&lt;&amp;&quot;&apos;"));
+	assert!(unnamed.contains("width=\"106.67\""));
 	let slanted = tree.to_svg(
 		&tree.slanted_layout(1.0)?,
 		SvgOptions::default(),

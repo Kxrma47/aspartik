@@ -312,7 +312,8 @@ impl PySvgOptions {
 		y_scale = 30.0,
 		margin = 20.0,
 		node_radius = 3.0,
-		font_size = 12.0
+		font_size = 12.0,
+		show_names = true
 	))]
 	fn new(
 		x_scale: f64,
@@ -320,6 +321,7 @@ impl PySvgOptions {
 		margin: f64,
 		node_radius: f64,
 		font_size: f64,
+		show_names: bool,
 	) -> Self {
 		Self {
 			inner: TreeSvgOptions {
@@ -328,6 +330,7 @@ impl PySvgOptions {
 				margin,
 				node_radius,
 				font_size,
+				show_names,
 			},
 		}
 	}
