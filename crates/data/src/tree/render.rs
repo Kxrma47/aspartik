@@ -54,6 +54,7 @@ pub struct SvgOptions {
 	pub margin: f64,
 	pub node_radius: f64,
 	pub font_size: f64,
+	pub show_names: bool,
 }
 
 impl Default for SvgOptions {
@@ -64,6 +65,7 @@ impl Default for SvgOptions {
 			margin: 20.0,
 			node_radius: 3.0,
 			font_size: 12.0,
+			show_names: true,
 		}
 	}
 }
@@ -232,18 +234,20 @@ impl BinaryTree {
 		};
 		let label_gap = options.node_radius + options.font_size * 0.5;
 		let mut content_width = layout.width * options.x_scale;
-		for leaf in self.leaves() {
-			let node = Node::from(leaf);
-			let Some(name) = self.name(node) else {
-				continue;
-			};
-			let x = layout.coordinates[node.index() as usize].x
-				* options.x_scale;
-			content_width = content_width.max(x
-				+ label_gap + options
-				.font_size
-				* 0.6
-				* name.chars().count() as f64);
+		if options.show_names {
+			for leaf in self.leaves() {
+				let node = Node::from(leaf);
+				let Some(name) = self.name(node) else {
+					continue;
+				};
+				let x = layout.coordinates
+					[node.index() as usize]
+					.x * options.x_scale;
+				content_width = content_width.max(x
+					+ label_gap
+					+ options.font_size
+						* 0.6 * name.chars().count() as f64);
+			}
 		}
 		let width = content_width + options.margin * 2.0;
 		let height =
@@ -339,16 +343,20 @@ impl BinaryTree {
 			)?;
 			write_escaped(&mut output, color.as_ref())?;
 			output.push_str("\">");
-			if self.name(node).is_some()
+			if (options.show_names && self.name(node).is_some())
 				|| self.node_metadata(node).is_some()
 			{
 				output.push_str("<title>");
-				if let Some(name) = self.name(node) {
+				if options.show_names
+					&& let Some(name) = self.name(node)
+				{
 					write_escaped(&mut output, name)?;
 				}
 				if let Some(metadata) = self.node_metadata(node)
 				{
-					if self.name(node).is_some() {
+					if options.show_names
+						&& self.name(node).is_some()
+					{
 						output.push(' ');
 					}
 					write_escaped(&mut output, metadata)?;
@@ -358,9 +366,10 @@ impl BinaryTree {
 			output.push_str("</circle>");
 		}
 
-		if self.leaves()
-			.any(|leaf| self.name(Node::from(leaf)).is_some())
-		{
+		if options.show_names
+			&& self.leaves().any(|leaf| {
+				self.name(Node::from(leaf)).is_some()
+			}) {
 			write!(
 				output,
 				"<g font-size=\"{}\" dominant-baseline=\"middle\">",

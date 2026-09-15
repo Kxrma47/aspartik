@@ -6,6 +6,7 @@ use crate::tree::{
 	BinaryTree, Node, SvgOptions as TreeSvgOptions, TreeLayout,
 	branch_score,
 	builder::{EdgeData, NodeData, TreeBuilder},
+	distance::robinson_foulds_matrix,
 };
 use rng::PyRng;
 
@@ -314,7 +315,8 @@ impl PySvgOptions {
 		y_scale = 30.0,
 		margin = 20.0,
 		node_radius = 3.0,
-		font_size = 12.0
+		font_size = 12.0,
+		show_names = true
 	))]
 	fn new(
 		x_scale: f64,
@@ -322,6 +324,7 @@ impl PySvgOptions {
 		margin: f64,
 		node_radius: f64,
 		font_size: f64,
+		show_names: bool,
 	) -> Self {
 		Self {
 			inner: TreeSvgOptions {
@@ -330,6 +333,7 @@ impl PySvgOptions {
 				margin,
 				node_radius,
 				font_size,
+				show_names,
 			},
 		}
 	}
@@ -544,6 +548,20 @@ impl PyBinaryTree {
 			_ => Err(anyhow!("Unknown tree layout '{kind}'")),
 		}
 	}
+}
+
+#[pyfunction(name = "robinson_foulds_matrix")]
+pub fn py_robinson_foulds_matrix(
+	py: Python<'_>,
+	trees: Vec<Py<PyBinaryTree>>,
+) -> Result<Vec<Vec<u32>>> {
+	py.detach(move || {
+		let trees = trees
+			.iter()
+			.map(|tree| &tree.get().inner)
+			.collect::<Vec<_>>();
+		robinson_foulds_matrix(&trees[..])
+	})
 }
 
 fn checked_node(index: u32, num_nodes: u32) -> Result<Node> {
