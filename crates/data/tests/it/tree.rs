@@ -1017,10 +1017,10 @@ fn multi_tree_robinson_foulds() -> Result<()> {
 	assert!(robinson_foulds_matrix(&[])?.is_empty());
 
 	let trees = [
-		indexed_tree("((0:0,1:0):0,(2:0,3:0):0);")?,
-		indexed_tree("(((0:0,1:0):0,2:0):0,3:0);")?,
-		indexed_tree("((0:0,2:0):0,(1:0,3:0):0);")?,
-		indexed_tree("((1:0,0:0):0,(3:0,2:0):0);")?,
+		&indexed_tree("((0:0,1:0):0,(2:0,3:0):0);")?,
+		&indexed_tree("(((0:0,1:0):0,2:0):0,3:0);")?,
+		&indexed_tree("((0:0,2:0):0,(1:0,3:0):0);")?,
+		&indexed_tree("((1:0,0:0):0,(3:0,2:0):0);")?,
 	];
 	let distances = robinson_foulds_matrix(&trees)?;
 	assert_eq!(
@@ -1028,12 +1028,12 @@ fn multi_tree_robinson_foulds() -> Result<()> {
 		[[0, 2, 4, 0], [2, 0, 4, 2], [4, 4, 0, 4], [0, 2, 4, 0],]
 	);
 
-	let single = [indexed_tree("(0:0,1:0);")?];
+	let single = [&indexed_tree("(0:0,1:0);")?];
 	assert_eq!(robinson_foulds_matrix(&single)?, [[0]]);
 
 	let mismatched = [
-		indexed_tree("(0:0,1:0);")?,
-		indexed_tree("((0:0,1:0):0,2:0);")?,
+		&indexed_tree("(0:0,1:0);")?,
+		&indexed_tree("((0:0,1:0):0,2:0);")?,
 	];
 	assert!(robinson_foulds_matrix(&mismatched).is_err());
 
@@ -1048,6 +1048,7 @@ fn random_multi_tree_robinson_foulds() {
 		let trees = (0..num_trees)
 			.map(|_| arbitrary_tree(u, num_leaves))
 			.collect::<arbitrary::Result<Vec<_>>>()?;
+		let trees = trees.iter().collect::<Vec<_>>();
 		let distances = robinson_foulds_matrix(&trees).unwrap();
 
 		assert_eq!(distances.len(), num_trees);
@@ -1075,6 +1076,7 @@ fn many_tree_robinson_foulds() -> Result<()> {
 	let trees = (0..256)
 		.map(|index| indexed_tree(sources[index % sources.len()]))
 		.collect::<Result<Vec<_>>>()?;
+	let trees = trees.iter().collect::<Vec<_>>();
 	let distances = robinson_foulds_matrix(&trees)?;
 
 	for (first_index, first) in trees.iter().enumerate() {
