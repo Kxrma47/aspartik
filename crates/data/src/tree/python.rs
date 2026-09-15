@@ -6,7 +6,7 @@ use crate::tree::{
 	BinaryTree, Node, SvgOptions as TreeSvgOptions, TreeLayout,
 	branch_score,
 	builder::{EdgeData, NodeData, TreeBuilder},
-	distance::robinson_foulds_matrix_borrowed,
+	distance::robinson_foulds_matrix,
 };
 use rng::PyRng;
 
@@ -315,7 +315,8 @@ impl PySvgOptions {
 		y_scale = 30.0,
 		margin = 20.0,
 		node_radius = 3.0,
-		font_size = 12.0
+		font_size = 12.0,
+		show_names = true
 	))]
 	fn new(
 		x_scale: f64,
@@ -323,6 +324,7 @@ impl PySvgOptions {
 		margin: f64,
 		node_radius: f64,
 		font_size: f64,
+		show_names: bool,
 	) -> Self {
 		Self {
 			inner: TreeSvgOptions {
@@ -331,6 +333,7 @@ impl PySvgOptions {
 				margin,
 				node_radius,
 				font_size,
+				show_names,
 			},
 		}
 	}
@@ -557,25 +560,7 @@ pub fn py_robinson_foulds_matrix(
 			.iter()
 			.map(|tree| &tree.get().inner)
 			.collect::<Vec<_>>();
-		if let Some(first) = trees.first() {
-			for tree in &trees[1..] {
-				ensure!(
-					tree.num_leaves() == first.num_leaves(),
-					"Expected every tree to have {} leaves, got {}",
-					first.num_leaves(),
-					tree.num_leaves()
-				);
-				for leaf in 0..first.num_leaves() {
-					let leaf = Node(leaf);
-					ensure!(
-						tree.name(leaf)
-							== first.name(leaf),
-						"Expected every tree to use the same leaf IDs"
-					);
-				}
-			}
-		}
-		robinson_foulds_matrix_borrowed(&trees)
+		robinson_foulds_matrix(&trees[..])
 	})
 }
 

@@ -54,26 +54,21 @@ fn clade_hashes(tree: &BinaryTree) -> Vec<CladeHash> {
 	hashes
 }
 
-pub fn robinson_foulds_matrix(trees: &[BinaryTree]) -> Result<Vec<Vec<u32>>> {
-	robinson_foulds_matrix_borrowed(trees)
-}
-
-pub(super) fn robinson_foulds_matrix_borrowed<T>(
-	trees: &[T],
-) -> Result<Vec<Vec<u32>>>
-where
-	T: Borrow<BinaryTree>,
-{
-	let Some(first_tree) = trees.first().map(Borrow::borrow) else {
+pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
+	let Some(first_tree) = trees.first() else {
 		return Ok(Vec::new());
 	};
 
 	let num_leaves = first_tree.num_leaves();
-	for tree in trees[1..].iter().map(Borrow::borrow) {
+	for tree in trees[1..].iter() {
 		ensure!(
 			tree.num_leaves() == num_leaves,
 			"Expected every tree to have {num_leaves} leaves, got {}",
 			tree.num_leaves()
+		);
+		ensure!(
+			first_tree.identical_children(tree),
+			"Expected every tree to use the same leaf IDs"
 		);
 	}
 
