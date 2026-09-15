@@ -5,4 +5,4 @@ mod tree_command;
 
 pub use block::{BlockCommand, BlockReader};
 pub use command::{Command, CommandReader};
-pub use tree_command::TreeCommand;
+pub use tree_command::{TreeCommand, TreeCommandRef};

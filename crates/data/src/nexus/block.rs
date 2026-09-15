@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail, ensure};
 
-use std::io::BufRead;
+use std::{borrow::Cow, io::BufRead};
 
 use super::token::{TokenKind, Tokens};
 use super::{Command, CommandReader};
@@ -100,20 +100,24 @@ impl<R: BufRead> BlockReader<R> {
 			let result = self.commands.next_command_with(
 				|source, line, column| {
 					let mut tokens = Tokens::new(source);
-					let name = word(&mut tokens)?.context(
-						"Expected a command name",
-					)?;
+					let name = word_ref(&mut tokens)?
+						.context(
+							"Expected a command name",
+						)?;
 					if name.eq_ignore_ascii_case("begin") {
 						ensure!(
 							block.is_none(),
 							"NEXUS blocks cannot be nested"
 						);
-						let value = word(&mut tokens)?
-							.context(
-								"Expected a block name",
-							)?;
+						let value =
+							word_ref(&mut tokens)?
+								.context(
+									"Expected a block name",
+								)?;
 						expect_end(&mut tokens)?;
-						*block = Some(value);
+						*block =
+							Some(value
+								.into_owned());
 						return Ok(None);
 					}
 					if name.eq_ignore_ascii_case("end")
@@ -215,6 +219,10 @@ impl<R: BufRead> Iterator for BlockReader<R> {
 }
 
 fn word(tokens: &mut Tokens<'_>) -> Result<Option<String>> {
+	word_ref(tokens).map(|value| value.map(Cow::into_owned))
+}
+
+fn word_ref<'a>(tokens: &mut Tokens<'a>) -> Result<Option<Cow<'a, str>>> {
 	let Some(token) = tokens.next().transpose()? else {
 		return Ok(None);
 	};

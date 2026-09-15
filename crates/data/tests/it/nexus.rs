@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use std::io::{BufReader, Cursor};
 
-use data::nexus::{BlockReader, CommandReader};
+use data::nexus::{BlockReader, CommandReader, TreeCommandRef};
 
 fn commands(input: &str) -> Result<Vec<(String, usize, usize)>> {
 	CommandReader::new(Cursor::new(input))?
@@ -126,6 +126,33 @@ fn passes_borrowed_tree_block_commands() -> Result<()> {
 		.is_some()
 	{}
 	assert_eq!(seen, ["TREE a=(A,B);", "TREE b=(C,D);"]);
+	Ok(())
+}
+
+#[test]
+fn borrows_tree_names_and_newick_text() -> Result<()> {
+	let mut reader = BlockReader::new(Cursor::new(
+		"#NEXUS\nBEGIN TREES; TREE sample = (A,'B; C'); END;",
+	))?;
+	let observed = reader.next_command_with(
+		|block, name, source, line, column| {
+			let tree = TreeCommandRef::parse(
+				block, name, source, line, column,
+			)?;
+			assert_eq!(tree.name(), "sample");
+			assert_eq!(tree.newick(), "(A,'B; C');");
+			assert!(source
+				.as_bytes()
+				.as_ptr_range()
+				.contains(&tree.name().as_ptr()));
+			assert!(source
+				.as_bytes()
+				.as_ptr_range()
+				.contains(&tree.newick().as_ptr()));
+			Ok(())
+		},
+	)?;
+	assert!(observed.is_some());
 	Ok(())
 }
 

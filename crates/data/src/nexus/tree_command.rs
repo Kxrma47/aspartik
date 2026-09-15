@@ -1,5 +1,7 @@
 use anyhow::{Context, Result, bail, ensure};
 
+use std::borrow::Cow;
+
 use super::BlockCommand;
 use super::token::{Token, TokenKind, Tokens};
 
@@ -13,67 +15,32 @@ pub struct TreeCommand {
 	column: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TreeCommandRef<'a> {
+	name: Cow<'a, str>,
+	is_default: bool,
+	is_rooted: Option<bool>,
+	newick: &'a str,
+	line: usize,
+	column: usize,
+}
+
 impl TreeCommand {
 	pub fn parse(command: &BlockCommand) -> Result<Self> {
-		ensure!(
-			command.block().eq_ignore_ascii_case("trees"),
-			"Expected a command from a TREES block"
-		);
-		let legacy_unrooted =
-			if command.name().eq_ignore_ascii_case("tree") {
-				false
-			} else if command.name().eq_ignore_ascii_case("utree") {
-				true
-			} else {
-				bail!("Expected a TREE or UTREE command")
-			};
-
-		let mut tokens = Tokens::new(command.source());
-		word(&mut tokens)?.context("Expected a TREE command")?;
-		let mut token = tokens
-			.next()
-			.transpose()?
-			.context("Expected a tree name")?;
-		let is_default = token.kind == TokenKind::Punctuation('*');
-		if is_default {
-			token = tokens
-				.next()
-				.transpose()?
-				.context("Expected a tree name")?;
-		}
-		let name = match token.kind {
-			TokenKind::Word(value) => value,
-			TokenKind::Punctuation(character) => {
-				bail!("Expected a tree name, got '{character}'")
-			}
-		};
-		let equals =
-			tokens.next().transpose()?.context("Expected '='")?;
-		ensure!(
-			equals.kind == TokenKind::Punctuation('='),
-			"Expected '=' after the tree name"
-		);
-
-		let newick =
-			command.source()[equals.end..].trim_start().to_owned();
-		ensure!(newick != ";", "Expected a Newick tree after '='");
-		let marker = rooting_marker(&newick)?;
-		ensure!(
-			!(legacy_unrooted && marker == Some(true)),
-			"UTREE conflicts with the rooted marker"
-		);
-
+		let view = TreeCommandRef::parse(
+			command.block(),
+			command.name(),
+			command.source(),
+			command.line(),
+			command.column(),
+		)?;
 		Ok(Self {
-			name,
-			is_default,
-			is_rooted: if legacy_unrooted {
-				Some(false)
-			} else {
-				marker
-			},
-			newick,
-			line: command.line(),
-			column: command.column(),
+			name: view.name.into_owned(),
+			is_default: view.is_default,
+			is_rooted: view.is_rooted,
+			newick: view.newick.to_owned(),
+			line: view.line,
+			column: view.column,
 		})
 	}
 
@@ -102,7 +69,100 @@ impl TreeCommand {
 	}
 }
 
-fn word(tokens: &mut Tokens<'_>) -> Result<Option<String>> {
+impl<'a> TreeCommandRef<'a> {
+	pub fn parse(
+		block: &str,
+		command_name: &str,
+		source: &'a str,
+		line: usize,
+		column: usize,
+	) -> Result<Self> {
+		ensure!(
+			block.eq_ignore_ascii_case("trees"),
+			"Expected a command from a TREES block"
+		);
+		let legacy_unrooted =
+			if command_name.eq_ignore_ascii_case("tree") {
+				false
+			} else if command_name.eq_ignore_ascii_case("utree") {
+				true
+			} else {
+				bail!("Expected a TREE or UTREE command")
+			};
+
+		let mut tokens = Tokens::new(source);
+		word(&mut tokens)?.context("Expected a TREE command")?;
+		let mut token = tokens
+			.next()
+			.transpose()?
+			.context("Expected a tree name")?;
+		let is_default = token.kind == TokenKind::Punctuation('*');
+		if is_default {
+			token = tokens
+				.next()
+				.transpose()?
+				.context("Expected a tree name")?;
+		}
+		let name = match token.kind {
+			TokenKind::Word(value) => value,
+			TokenKind::Punctuation(character) => {
+				bail!("Expected a tree name, got '{character}'")
+			}
+		};
+		let equals =
+			tokens.next().transpose()?.context("Expected '='")?;
+		ensure!(
+			equals.kind == TokenKind::Punctuation('='),
+			"Expected '=' after the tree name"
+		);
+
+		let newick = source[equals.end..].trim_start();
+		ensure!(newick != ";", "Expected a Newick tree after '='");
+		let marker = rooting_marker(newick)?;
+		ensure!(
+			!(legacy_unrooted && marker == Some(true)),
+			"UTREE conflicts with the rooted marker"
+		);
+		Ok(Self {
+			name,
+			is_default,
+			is_rooted: if legacy_unrooted {
+				Some(false)
+			} else {
+				marker
+			},
+			newick,
+			line,
+			column,
+		})
+	}
+
+	pub fn name(&self) -> &str {
+		&self.name
+	}
+
+	pub fn is_default(&self) -> bool {
+		self.is_default
+	}
+
+	pub fn is_rooted(&self) -> Option<bool> {
+		self.is_rooted
+	}
+
+	pub fn newick(&self) -> &str {
+		self.newick
+	}
+
+	pub fn line(&self) -> usize {
+		self.line
+	}
+
+	pub fn column(&self) -> usize {
+		self.column
+	}
+}
+
+fn word<'a>(tokens: &mut Tokens<'a>) -> Result<Option<Cow<'a, str>>> {
 	let Some(Token { kind, .. }) = tokens.next().transpose()? else {
 		return Ok(None);
 	};
