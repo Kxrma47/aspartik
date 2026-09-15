@@ -162,6 +162,28 @@ fn malformed_and_truncated_input() {
 	}
 }
 
+fn nested_tree(depth: usize) -> String {
+	let mut source = String::with_capacity(depth * 2 + 2);
+	for _ in 0..depth {
+		source.push('(');
+	}
+	source.push('A');
+	for _ in 0..depth {
+		source.push(')');
+	}
+	source.push(';');
+	source
+}
+
+#[test]
+fn eight_million_nested_tree_does_not_exhaust_the_stack() -> Result<()> {
+	const DEPTH: usize = 8_000_000;
+	let tree = parse_newick(&nested_tree(DEPTH))?;
+	assert_eq!(tree.num_nodes(), u32::try_from(DEPTH + 1)?);
+
+	Ok(())
+}
+
 #[test]
 fn deep_ladder_parse_and_write() -> Result<()> {
 	const NUM_LEAVES: usize = 20_000;
