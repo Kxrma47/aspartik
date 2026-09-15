@@ -95,6 +95,7 @@ impl<R: BufRead> BlockReader<R> {
 			&str,
 			&str,
 			&str,
+			u64,
 			usize,
 			usize,
 		) -> Result<T>,
@@ -104,6 +105,7 @@ impl<R: BufRead> BlockReader<R> {
 		}
 		loop {
 			let block = &mut self.block;
+			let block_index = &mut self.block_index;
 			let result = self.commands.next_command_with(
 				|source, line, column| {
 					let mut tokens = Tokens::new(source);
@@ -122,6 +124,7 @@ impl<R: BufRead> BlockReader<R> {
 									"Expected a block name",
 								)?;
 						expect_end(&mut tokens)?;
+						*block_index += 1;
 						*block =
 							Some(value
 								.into_owned());
@@ -143,13 +146,17 @@ impl<R: BufRead> BlockReader<R> {
 							"A command appears outside a NEXUS block",
 						)?;
 					callback(
-						current, &name, source, line,
+						current,
+						&name,
+						source,
+						*block_index,
+						line,
 						column,
 					)
 					.map(Some)
 				},
 			);
-			match result.context("Invalid NEXUS command")? {
+			match result? {
 				Some(Some(value)) => return Ok(Some(value)),
 				Some(None) => continue,
 				None => {

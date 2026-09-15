@@ -2,7 +2,7 @@ use anyhow::{Context, Result, ensure};
 
 use std::io::{BufRead, Cursor};
 
-use super::{BlockReader, TranslationTable, TreeCommand};
+use super::{BlockReader, TranslationTable, TreeCommandRef};
 use crate::tree::{builder::TreeBuilder, parse_newick};
 
 #[derive(Debug, Clone)]
@@ -66,73 +66,108 @@ impl<R: BufRead> NexusTreeReader<R> {
 	}
 
 	pub fn next_tree(&mut self) -> Result<Option<NexusTree>> {
-		if self.finished {
-			return Ok(None);
-		}
-
-		loop {
-			let Some(command) = self.blocks.next_command()? else {
-				self.finished = true;
-				return Ok(None);
-			};
-			if !command.block().eq_ignore_ascii_case("trees") {
-				continue;
-			}
-			if self.block_index != Some(command.block_index()) {
-				self.block_index = Some(command.block_index());
-				self.translation = None;
-				self.saw_tree = false;
-			}
-
-			if command.name().eq_ignore_ascii_case("translate") {
-				ensure!(
-					!self.saw_tree,
-					"TRANSLATE must appear before TREE commands at line {}, column {}",
-					command.line(),
-					command.column()
-				);
-				ensure!(
-					self.translation.is_none(),
-					"A TREES block contains more than one TRANSLATE command at line {}, column {}",
-					command.line(),
-					command.column()
-				);
-				self.translation = Some(
-					TranslationTable::parse(&command)?,
-				);
-				continue;
-			}
-
-			if !command.name().eq_ignore_ascii_case("tree")
-				&& !command.name().eq_ignore_ascii_case("utree")
-			{
-				continue;
-			}
-
-			self.saw_tree = true;
-			let tree_command = TreeCommand::parse(&command)?;
-			let mut tree = parse_newick(tree_command.newick())
+		self.next_tree_with(|command, translation| {
+			let mut tree = parse_newick(command.newick())
 				.with_context(|| {
 					format!(
 						"Could not parse NEXUS tree '{}' at line {}, column {}",
-						tree_command.name(),
-						tree_command.line(),
-						tree_command.column()
+						command.name(),
+						command.line(),
+						command.column()
 					)
 				})?;
-			if let Some(translation) = &self.translation {
+			if let Some(translation) = translation {
 				translation.apply(&mut tree);
 			}
-
-			return Ok(Some(NexusTree {
-				name: tree_command.name().to_owned(),
-				is_default: tree_command.is_default(),
-				is_rooted: tree_command.is_rooted(),
+			Ok(NexusTree {
+				name: command.name().to_owned(),
+				is_default: command.is_default(),
+				is_rooted: command.is_rooted(),
 				tree,
-				line: tree_command.line(),
-				column: tree_command.column(),
-			}));
+				line: command.line(),
+				column: command.column(),
+			})
+		})
+	}
+
+	pub fn next_tree_with<T>(
+		&mut self,
+		mut callback: impl FnMut(
+			&TreeCommandRef<'_>,
+			Option<&TranslationTable>,
+		) -> Result<T>,
+	) -> Result<Option<T>> {
+		if self.finished {
+			return Ok(None);
 		}
+		loop {
+			let block_index = &mut self.block_index;
+			let translation = &mut self.translation;
+			let saw_tree = &mut self.saw_tree;
+			let result = self.blocks.next_command_with(
+				|block, name, source, index, line, column| {
+					if !block.eq_ignore_ascii_case("trees") {
+						return Ok(None);
+					}
+					if *block_index != Some(index) {
+						*block_index = Some(index);
+						*translation = None;
+						*saw_tree = false;
+					}
+					if name.eq_ignore_ascii_case("translate") {
+						ensure!(
+							!*saw_tree,
+							"TRANSLATE must appear before TREE commands at line {}, column {}",
+							line, column
+						);
+						ensure!(
+							translation.is_none(),
+							"A TREES block contains more than one TRANSLATE command at line {}, column {}",
+							line, column
+						);
+						*translation = Some(TranslationTable::parse_source(block, name, source)?);
+						return Ok(None);
+					}
+					if !name.eq_ignore_ascii_case("tree")
+						&& !name.eq_ignore_ascii_case("utree")
+					{
+						return Ok(None);
+					}
+					*saw_tree = true;
+					let command = TreeCommandRef::parse(block, name, source, line, column)?;
+					callback(&command, translation.as_ref()).map(Some)
+				},
+			)?;
+			match result {
+				Some(Some(value)) => return Ok(Some(value)),
+				Some(None) => continue,
+				None => {
+					self.finished = true;
+					return Ok(None);
+				}
+			}
+		}
+	}
+
+	pub fn for_each_tree(
+		&mut self,
+		mut callback: impl FnMut(
+			&str,
+			&str,
+			Option<&TranslationTable>,
+		) -> Result<()>,
+	) -> Result<()> {
+		while self
+			.next_tree_with(|command, translation| {
+				callback(
+					command.name(),
+					command.newick(),
+					translation,
+				)
+			})?
+			.is_some()
+		{}
+		Ok(())
 	}
 }
 

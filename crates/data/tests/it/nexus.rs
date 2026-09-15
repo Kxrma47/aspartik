@@ -2,7 +2,9 @@ use anyhow::Result;
 
 use std::io::{BufReader, Cursor};
 
-use data::nexus::{BlockReader, CommandReader, TreeCommandRef};
+use data::nexus::{
+	BlockReader, CommandReader, NexusTreeReader, TreeCommandRef,
+};
 
 fn commands(input: &str) -> Result<Vec<(String, usize, usize)>> {
 	CommandReader::new(Cursor::new(input))?
@@ -116,7 +118,7 @@ fn passes_borrowed_tree_block_commands() -> Result<()> {
 	))?;
 	let mut seen = Vec::new();
 	while reader
-		.next_command_with(|block, name, source, _, _| {
+		.next_command_with(|block, name, source, _, _, _| {
 			if block.eq_ignore_ascii_case("trees") {
 				assert_eq!(name, "TREE");
 				seen.push(source.to_owned());
@@ -135,7 +137,7 @@ fn borrows_tree_names_and_newick_text() -> Result<()> {
 		"#NEXUS\nBEGIN TREES; TREE sample = (A,'B; C'); END;",
 	))?;
 	let observed = reader.next_command_with(
-		|block, name, source, line, column| {
+		|block, name, source, _, line, column| {
 			let tree = TreeCommandRef::parse(
 				block, name, source, line, column,
 			)?;
@@ -153,6 +155,79 @@ fn borrows_tree_names_and_newick_text() -> Result<()> {
 		},
 	)?;
 	assert!(observed.is_some());
+	Ok(())
+}
+
+#[test]
+fn visits_tree_slices_with_translation_by_block() -> Result<()> {
+	let input = "#NEXUS\nBEGIN NOTES; TEXT ignored; END; BEGIN TREES; TRANSLATE 1 A, 2 'B B'; TREE first=(1,'x;y'); TREE second=(1,2); END; BEGIN TREES; TREE third=(1,2); END;";
+	let mut reader = NexusTreeReader::new(BufReader::with_capacity(
+		3,
+		Cursor::new(input),
+	))?;
+	let mut seen = Vec::new();
+	reader.for_each_tree(|name, newick, translation| {
+		seen.push((
+			name.to_owned(),
+			newick.to_owned(),
+			translation
+				.and_then(|table| table.get("2"))
+				.map(str::to_owned),
+		));
+		Ok(())
+	})?;
+	assert_eq!(
+		seen,
+		[
+			(
+				"first".to_owned(),
+				"(1,'x;y');".to_owned(),
+				Some("B B".to_owned())
+			),
+			(
+				"second".to_owned(),
+				"(1,2);".to_owned(),
+				Some("B B".to_owned())
+			),
+			("third".to_owned(), "(1,2);".to_owned(), None),
+		]
+	);
+	Ok(())
+}
+
+#[test]
+fn visits_many_trees_without_retaining_commands() -> Result<()> {
+	let mut input = String::from("#NEXUS\nBEGIN TREES;");
+	for _ in 0..10_000 {
+		input.push_str("TREE sample=(A,B);\n");
+	}
+	input.push_str("END;");
+	let mut reader = NexusTreeReader::new(Cursor::new(input))?;
+	let mut count = 0;
+	let mut pointer = None;
+	reader.for_each_tree(|name, newick, translation| {
+		assert_eq!(name, "sample");
+		assert_eq!(newick, "(A,B);");
+		assert!(translation.is_none());
+		if let Some(previous) = pointer {
+			assert_eq!(newick.as_ptr(), previous);
+		} else {
+			pointer = Some(newick.as_ptr());
+		}
+		count += 1;
+		Ok(())
+	})?;
+	assert_eq!(count, 10_000);
+	Ok(())
+}
+
+#[test]
+fn stops_on_callback_error() -> Result<()> {
+	let mut reader = NexusTreeReader::new(Cursor::new(
+		"#NEXUS\nBEGIN TREES; TREE sample=(A,B); END;",
+	))?;
+	let error = reader.for_each_tree(|_, _, _| anyhow::bail!("stop here"));
+	assert_eq!(error.unwrap_err().to_string(), "stop here");
 	Ok(())
 }
 
