@@ -13,16 +13,28 @@ pub struct TranslationTable {
 
 impl TranslationTable {
 	pub fn parse(command: &BlockCommand) -> Result<Self> {
+		Self::parse_source(
+			command.block(),
+			command.name(),
+			command.source(),
+		)
+	}
+
+	pub fn parse_source(
+		block: &str,
+		name: &str,
+		source: &str,
+	) -> Result<Self> {
 		ensure!(
-			command.block().eq_ignore_ascii_case("trees"),
+			block.eq_ignore_ascii_case("trees"),
 			"Expected a command from a TREES block"
 		);
 		ensure!(
-			command.name().eq_ignore_ascii_case("translate"),
+			name.eq_ignore_ascii_case("translate"),
 			"Expected a TRANSLATE command"
 		);
 
-		let mut tokens = Tokens::new(command.source());
+		let mut tokens = Tokens::new(source);
 		required_word(&mut tokens, "a TRANSLATE command")?;
 		let mut entries = HashMap::new();
 		loop {
@@ -88,7 +100,7 @@ fn required_word(tokens: &mut Tokens<'_>, expected: &str) -> Result<String> {
 		bail!("Expected {expected}");
 	};
 	match token.kind {
-		TokenKind::Word(value) => Ok(value),
+		TokenKind::Word(value) => Ok(value.into_owned()),
 		TokenKind::Punctuation(character) => {
 			bail!("Expected {expected}, got '{character}'")
 		}
@@ -122,6 +134,18 @@ mod tests {
 		assert_eq!(table.get("2"), Some("B B"));
 		assert_eq!(table.get("key3"), Some("O'Brien"));
 		assert_eq!(table.get("missing"), None);
+		Ok(())
+	}
+
+	#[test]
+	fn parses_borrowed_translation_source() -> Result<()> {
+		let table = TranslationTable::parse_source(
+			"TREES",
+			"TRANSLATE",
+			"TRANSLATE 1 A, 2 'B B';",
+		)?;
+		assert_eq!(table.get("1"), Some("A"));
+		assert_eq!(table.get("2"), Some("B B"));
 		Ok(())
 	}
 

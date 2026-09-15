@@ -9,4 +9,4 @@ pub use block::{BlockCommand, BlockReader};
 pub use command::{Command, CommandReader};
 pub use reader::{NexusTree, NexusTreeReader, parse_trees};
 pub use translate::TranslationTable;
-pub use tree_command::TreeCommand;
+pub use tree_command::{TreeCommand, TreeCommandRef};
