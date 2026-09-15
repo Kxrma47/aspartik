@@ -179,6 +179,7 @@ class SvgOptions:
         margin: float = 20.0,
         node_radius: float = 3.0,
         font_size: float = 12.0,
+        show_names: bool = True,
     ) -> None: ...
 
 class BinaryTree:
