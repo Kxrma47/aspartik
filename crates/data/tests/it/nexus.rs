@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use std::io::{BufReader, Cursor};
 
-use data::nexus::CommandReader;
+use data::nexus::{BlockReader, CommandReader};
 
 fn commands(input: &str) -> Result<Vec<(String, usize, usize)>> {
 	CommandReader::new(Cursor::new(input))?
@@ -82,6 +82,50 @@ fn reads_across_small_buffers() -> Result<()> {
 			.collect::<Result<Vec<_>>>()?;
 		assert_eq!(observed, expected);
 	}
+	Ok(())
+}
+
+#[test]
+fn passes_borrowed_commands_from_reused_storage() -> Result<()> {
+	let mut reader = CommandReader::new(Cursor::new(
+		"#NEXUS\nTREE one = (A,B);\nTREE two = (C,D);",
+	))?;
+	let first = reader
+		.next_command_with(|source, line, column| {
+			assert_eq!((line, column), (2, 1));
+			assert_eq!(source, "TREE one = (A,B);");
+			Ok(source.as_ptr())
+		})?
+		.unwrap();
+	let second = reader
+		.next_command_with(|source, line, column| {
+			assert_eq!((line, column), (3, 1));
+			assert_eq!(source, "TREE two = (C,D);");
+			Ok(source.as_ptr())
+		})?
+		.unwrap();
+	assert_eq!(first, second);
+	assert!(reader.next_command_with(|_, _, _| Ok(()))?.is_none());
+	Ok(())
+}
+
+#[test]
+fn passes_borrowed_tree_block_commands() -> Result<()> {
+	let mut reader = BlockReader::new(Cursor::new(
+		"#NEXUS\nBEGIN NOTES; TEXT ignored; END; BEGIN TREES; TREE a=(A,B); TREE b=(C,D); END;",
+	))?;
+	let mut seen = Vec::new();
+	while reader
+		.next_command_with(|block, name, source, _, _| {
+			if block.eq_ignore_ascii_case("trees") {
+				assert_eq!(name, "TREE");
+				seen.push(source.to_owned());
+			}
+			Ok(())
+		})?
+		.is_some()
+	{}
+	assert_eq!(seen, ["TREE a=(A,B);", "TREE b=(C,D);"]);
 	Ok(())
 }
 
