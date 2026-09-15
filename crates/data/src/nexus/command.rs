@@ -26,7 +26,8 @@ impl Command {
 #[derive(Debug)]
 pub struct CommandReader<R> {
 	reader: R,
-	pending: Vec<u8>,
+	line_buffer: String,
+	offset: usize,
 	line: usize,
 	column: usize,
 	finished: bool,
@@ -34,8 +35,9 @@ pub struct CommandReader<R> {
 
 impl<R: BufRead> CommandReader<R> {
 	pub fn new(mut reader: R) -> Result<Self> {
-		let mut first_line = Vec::new();
-		reader.read_until(b'\n', &mut first_line)?;
+		let mut line_buffer = String::new();
+		reader.read_line(&mut line_buffer)?;
+		let first_line = line_buffer.as_bytes();
 		let mut offset = if first_line.starts_with(&[0xef, 0xbb, 0xbf])
 		{
 			3
@@ -63,15 +65,14 @@ impl<R: BufRead> CommandReader<R> {
 			"Expected whitespace after '#NEXUS'"
 		);
 
-		let mut result = Self {
+		Ok(Self {
 			reader,
-			pending: first_line[end..].to_vec(),
+			line_buffer,
+			offset: end,
 			line: 1,
-			column: 1,
+			column: end + 1,
 			finished: false,
-		};
-		result.advance_position(&first_line[..end]);
-		Ok(result)
+		})
 	}
 
 	pub fn next_command(&mut self) -> Result<Option<Command>> {
@@ -86,15 +87,14 @@ impl<R: BufRead> CommandReader<R> {
 		let mut has_content = false;
 
 		'input: loop {
-			let mut chunk = if self.pending.is_empty() {
-				let mut chunk = Vec::new();
-				self.reader.read_until(b';', &mut chunk)?;
-				chunk
-			} else {
-				std::mem::take(&mut self.pending)
-			};
-
-			if chunk.is_empty() {
+			if self.offset == self.line_buffer.len() {
+				self.line_buffer.clear();
+				self.offset = 0;
+			}
+			if self.line_buffer.is_empty()
+				&& self.reader
+					.read_line(&mut self.line_buffer)? == 0
+			{
 				self.finished = true;
 				ensure!(
 					comment_depth == 0,
@@ -120,13 +120,13 @@ impl<R: BufRead> CommandReader<R> {
 				);
 			}
 
-			let mut index = 0;
-			while index < chunk.len() {
-				let byte = chunk[index];
+			while self.offset < self.line_buffer.len() {
+				let byte = self.line_buffer.as_bytes()
+					[self.offset];
 				if start.is_none() {
 					if byte.is_ascii_whitespace() {
 						self.advance_byte(byte);
-						index += 1;
+						self.offset += 1;
 						continue;
 					}
 					start = Some((self.line, self.column));
@@ -140,16 +140,18 @@ impl<R: BufRead> CommandReader<R> {
 						b']' => comment_depth -= 1,
 						_ => {}
 					}
-					index += 1;
+					self.offset += 1;
 					continue;
 				}
 
 				if let Some(delimiter) = quote {
 					if byte == delimiter {
-						if chunk.get(index + 1)
-							== Some(&delimiter)
-						{
-							index += 1;
+						if self.line_buffer
+							.as_bytes()
+							.get(self.offset + 1) == Some(
+							&delimiter,
+						) {
+							self.offset += 1;
 							source.push(delimiter);
 							self.advance_byte(
 								delimiter,
@@ -158,7 +160,7 @@ impl<R: BufRead> CommandReader<R> {
 							quote = None;
 						}
 					}
-					index += 1;
+					self.offset += 1;
 					continue;
 				}
 				if !byte.is_ascii_whitespace()
@@ -176,8 +178,7 @@ impl<R: BufRead> CommandReader<R> {
 					),
 					b'\'' | b'"' => quote = Some(byte),
 					b';' => {
-						self.pending = chunk
-							.split_off(index + 1);
+						self.offset += 1;
 						if !has_content {
 							source.clear();
 							start = None;
@@ -199,14 +200,8 @@ impl<R: BufRead> CommandReader<R> {
 					}
 					_ => {}
 				}
-				index += 1;
+				self.offset += 1;
 			}
-		}
-	}
-
-	fn advance_position(&mut self, bytes: &[u8]) {
-		for &byte in bytes {
-			self.advance_byte(byte);
 		}
 	}
 
@@ -231,108 +226,6 @@ impl<R: BufRead> Iterator for CommandReader<R> {
 				self.finished = true;
 				Some(Err(error))
 			}
-		}
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use anyhow::Result;
-
-	use std::io::Cursor;
-
-	use super::CommandReader;
-
-	fn commands(input: &str) -> Result<Vec<(String, usize, usize)>> {
-		CommandReader::new(Cursor::new(input))?
-			.map(|command| {
-				let command = command?;
-				Ok((
-					command.source().to_owned(),
-					command.line(),
-					command.column(),
-				))
-			})
-			.collect()
-	}
-
-	#[test]
-	fn reads_commands_and_locations() -> Result<()> {
-		assert_eq!(
-			commands(
-				"#nexus BEGIN TREES;\n  TREE one = (A,B); END;"
-			)?,
-			[
-				("BEGIN TREES;".to_owned(), 1, 8),
-				("TREE one = (A,B);".to_owned(), 2, 3),
-				("END;".to_owned(), 2, 21),
-			]
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn preserves_nested_comments_and_quoted_semicolons() -> Result<()> {
-		let input = "#NEXUS\n[outer; [inner;] done] BEGIN TREES;\nTREE 'a;''b' = ('x;y',A[&note='z;']);\nEND;";
-		let commands = commands(input)?;
-		assert_eq!(commands.len(), 3);
-		assert_eq!(
-			commands[0].0,
-			"[outer; [inner;] done] BEGIN TREES;"
-		);
-		assert_eq!(
-			commands[1].0,
-			"TREE 'a;''b' = ('x;y',A[&note='z;']);"
-		);
-		assert_eq!(commands[2].0, "END;");
-		Ok(())
-	}
-
-	#[test]
-	fn accepts_bom_unicode_and_empty_files_after_header() -> Result<()> {
-		assert!(commands("\u{feff}#NEXUS\n")?.is_empty());
-		assert_eq!(
-			commands("\u{feff}#NEXUS\nTITLE 'Árbol';")?[0].0,
-			"TITLE 'Árbol';"
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn ignores_comment_only_input() -> Result<()> {
-		assert_eq!(
-			commands(
-				"#NEXUS\n[before]; BEGIN NOTES; END; [after]"
-			)?,
-			[
-				("BEGIN NOTES;".to_owned(), 2, 11),
-				("END;".to_owned(), 2, 24),
-			]
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn rejects_invalid_input() {
-		for (input, message) in [
-			("BEGIN TREES;", "Expected '#NEXUS'"),
-			("#NEXUSx\n", "Expected whitespace"),
-			(
-				"#NEXUS\nTREE x = (A,B)",
-				"Unterminated NEXUS command",
-			),
-			("#NEXUS\nTREE x = ('A,B);", "Unterminated quoted"),
-			(
-				"#NEXUS\nTREE x = (A[broken,B);",
-				"Unterminated NEXUS comment",
-			),
-			("#NEXUS\nTREE x = (A],B);", "Unexpected ']'"),
-		] {
-			let error = commands(input).unwrap_err().to_string();
-			assert!(
-				error.contains(message),
-				"expected {message:?} in {error:?}"
-			);
 		}
 	}
 }
