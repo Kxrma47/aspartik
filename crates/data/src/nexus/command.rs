@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Result, bail, ensure};
 
 use std::io::BufRead;
 
@@ -27,6 +27,7 @@ impl Command {
 pub struct CommandReader<R> {
 	reader: R,
 	line_buffer: String,
+	command_buffer: String,
 	offset: usize,
 	line: usize,
 	column: usize,
@@ -37,37 +38,40 @@ impl<R: BufRead> CommandReader<R> {
 	pub fn new(mut reader: R) -> Result<Self> {
 		let mut line_buffer = String::new();
 		reader.read_line(&mut line_buffer)?;
-		let first_line = line_buffer.as_bytes();
-		let mut offset = if first_line.starts_with(&[0xef, 0xbb, 0xbf])
-		{
-			3
+		let mut offset = if line_buffer.starts_with('\u{feff}') {
+			'\u{feff}'.len_utf8()
 		} else {
 			0
 		};
-		while first_line
-			.get(offset)
-			.is_some_and(u8::is_ascii_whitespace)
+		while let Some(character) = line_buffer[offset..].chars().next()
 		{
-			offset += 1;
+			if !character.is_whitespace() {
+				break;
+			}
+			offset += character.len_utf8();
 		}
-		let end = offset + b"#NEXUS".len();
+		let end = offset + "#NEXUS".len();
 		ensure!(
-			first_line
+			line_buffer
 				.get(offset..end)
 				.is_some_and(|value| value
-					.eq_ignore_ascii_case(b"#NEXUS")),
+					.eq_ignore_ascii_case("#NEXUS")),
 			"Expected '#NEXUS' at the start of the file"
 		);
 		ensure!(
-			first_line.get(end).is_none_or(|byte| {
-				byte.is_ascii_whitespace() || *byte == b'['
-			}),
+			line_buffer[end..]
+				.chars()
+				.next()
+				.is_none_or(|character| character
+					.is_whitespace()
+					|| character == '['),
 			"Expected whitespace after '#NEXUS'"
 		);
 
 		Ok(Self {
 			reader,
 			line_buffer,
+			command_buffer: String::new(),
 			offset: end,
 			line: 1,
 			column: end + 1,
@@ -76,15 +80,29 @@ impl<R: BufRead> CommandReader<R> {
 	}
 
 	pub fn next_command(&mut self) -> Result<Option<Command>> {
+		self.next_command_with(|source, line, column| {
+			Ok(Command {
+				source: source.to_owned(),
+				line,
+				column,
+			})
+		})
+	}
+
+	pub fn next_command_with<T>(
+		&mut self,
+		callback: impl FnOnce(&str, usize, usize) -> Result<T>,
+	) -> Result<Option<T>> {
 		if self.finished {
 			return Ok(None);
 		}
 
-		let mut source = Vec::new();
+		self.command_buffer.clear();
 		let mut start: Option<(usize, usize)> = None;
 		let mut comment_depth = 0_u32;
 		let mut quote = None;
 		let mut has_content = false;
+		let mut callback = Some(callback);
 
 		'input: loop {
 			if self.offset == self.line_buffer.len() {
@@ -121,92 +139,85 @@ impl<R: BufRead> CommandReader<R> {
 			}
 
 			while self.offset < self.line_buffer.len() {
-				let byte = self.line_buffer.as_bytes()
-					[self.offset];
+				let character = self.line_buffer[self.offset..]
+					.chars()
+					.next()
+					.unwrap();
 				if start.is_none() {
-					if byte.is_ascii_whitespace() {
-						self.advance_byte(byte);
-						self.offset += 1;
+					if character.is_whitespace() {
+						self.advance(character);
 						continue;
 					}
 					start = Some((self.line, self.column));
 				}
-				source.push(byte);
-				self.advance_byte(byte);
+				self.command_buffer.push(character);
+				self.advance(character);
 
 				if comment_depth > 0 {
-					match byte {
-						b'[' => comment_depth += 1,
-						b']' => comment_depth -= 1,
+					match character {
+						'[' => comment_depth += 1,
+						']' => comment_depth -= 1,
 						_ => {}
 					}
-					self.offset += 1;
 					continue;
 				}
-
 				if let Some(delimiter) = quote {
-					if byte == delimiter {
+					if character == delimiter {
 						if self.line_buffer
-							.as_bytes()
-							.get(self.offset + 1) == Some(
-							&delimiter,
-						) {
-							self.offset += 1;
-							source.push(delimiter);
-							self.advance_byte(
+							[self.offset..]
+							.starts_with(delimiter)
+						{
+							self.command_buffer
+								.push(
 								delimiter,
 							);
+							self.advance(delimiter);
 						} else {
 							quote = None;
 						}
 					}
-					self.offset += 1;
 					continue;
 				}
-				if !byte.is_ascii_whitespace()
-					&& !matches!(byte, b'[' | b';')
+				if !character.is_whitespace()
+					&& !matches!(character, '[' | ';')
 				{
 					has_content = true;
 				}
-
-				match byte {
-					b'[' => comment_depth = 1,
-					b']' => bail!(
+				match character {
+					'[' => comment_depth = 1,
+					']' => bail!(
 						"Unexpected ']' at line {}, column {}",
 						self.line,
 						self.column.saturating_sub(1)
 					),
-					b'\'' | b'"' => quote = Some(byte),
-					b';' => {
-						self.offset += 1;
+					'\'' | '"' => quote = Some(character),
+					';' => {
 						if !has_content {
-							source.clear();
+							self.command_buffer
+								.clear();
 							start = None;
 							continue 'input;
 						}
 						let (line, column) =
 							start.unwrap();
-						let source = String::from_utf8(
-							source,
-						)
-						.context(
-							"NEXUS input is not valid UTF-8",
-						)?;
-						return Ok(Some(Command {
-							source,
+						return callback
+							.take()
+							.unwrap()(
+							&self.command_buffer,
 							line,
 							column,
-						}));
+						)
+						.map(Some);
 					}
 					_ => {}
 				}
-				self.offset += 1;
 			}
 		}
 	}
 
-	fn advance_byte(&mut self, byte: u8) {
-		if byte == b'\n' {
+	fn advance(&mut self, character: char) {
+		self.offset += character.len_utf8();
+		if character == '\n' {
 			self.line += 1;
 			self.column = 1;
 		} else {

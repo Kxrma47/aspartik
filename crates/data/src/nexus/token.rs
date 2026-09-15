@@ -1,14 +1,16 @@
 use anyhow::{Result, bail};
 
+use std::borrow::Cow;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum TokenKind {
-	Word(String),
+pub(super) enum TokenKind<'a> {
+	Word(Cow<'a, str>),
 	Punctuation(char),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct Token {
-	pub kind: TokenKind,
+pub(super) struct Token<'a> {
+	pub kind: TokenKind<'a>,
 	pub end: usize,
 }
 
@@ -23,7 +25,7 @@ impl<'a> Tokens<'a> {
 		Self { input, offset: 0 }
 	}
 
-	fn next_token(&mut self) -> Result<Option<Token>> {
+	fn next_token(&mut self) -> Result<Option<Token<'a>>> {
 		self.skip_separators()?;
 		if self.offset == self.input.len() {
 			return Ok(None);
@@ -42,10 +44,15 @@ impl<'a> Tokens<'a> {
 			return self.quoted(character, start).map(Some);
 		}
 
-		let mut value = String::new();
+		let mut value: Option<String> = None;
+		let mut segment_start = start;
 		while let Some(character) = self.current() {
 			if character == '[' {
+				value.get_or_insert_with(String::new).push_str(
+					&self.input[segment_start..self.offset],
+				);
 				self.comment()?;
+				segment_start = self.offset;
 				continue;
 			}
 			if character.is_whitespace()
@@ -58,9 +65,14 @@ impl<'a> Tokens<'a> {
 			if character == ']' {
 				bail!("Unexpected ']' at byte {}", self.offset);
 			}
-			value.push(character);
 			self.offset += character.len_utf8();
 		}
+		let value = if let Some(mut value) = value {
+			value.push_str(&self.input[segment_start..self.offset]);
+			Cow::Owned(value)
+		} else {
+			Cow::Borrowed(&self.input[start..self.offset])
+		};
 
 		Ok(Some(Token {
 			kind: TokenKind::Word(value),
@@ -100,20 +112,38 @@ impl<'a> Tokens<'a> {
 		bail!("Unterminated comment starting at byte {start}")
 	}
 
-	fn quoted(&mut self, quote: char, start: usize) -> Result<Token> {
+	fn quoted(&mut self, quote: char, start: usize) -> Result<Token<'a>> {
 		self.offset += quote.len_utf8();
-		let mut value = String::new();
+		let content_start = self.offset;
+		let mut segment_start = content_start;
+		let mut value: Option<String> = None;
 		while let Some(character) = self.current() {
+			let position = self.offset;
 			self.offset += character.len_utf8();
 			if character != quote {
-				value.push(character);
 				continue;
 			}
 			if self.current() == Some(quote) {
+				let value =
+					value.get_or_insert_with(String::new);
+				value.push_str(
+					&self.input[segment_start..position],
+				);
 				value.push(quote);
 				self.offset += quote.len_utf8();
+				segment_start = self.offset;
 				continue;
 			}
+			let value = if let Some(mut value) = value {
+				value.push_str(
+					&self.input[segment_start..position],
+				);
+				Cow::Owned(value)
+			} else {
+				Cow::Borrowed(
+					&self.input[content_start..position],
+				)
+			};
 			return Ok(Token {
 				kind: TokenKind::Word(value),
 				end: self.offset,
@@ -127,8 +157,8 @@ impl<'a> Tokens<'a> {
 	}
 }
 
-impl Iterator for Tokens<'_> {
-	type Item = Result<Token>;
+impl<'a> Iterator for Tokens<'a> {
+	type Item = Result<Token<'a>>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		self.next_token().transpose()
@@ -142,10 +172,11 @@ fn punctuation(character: char) -> bool {
 #[cfg(test)]
 mod tests {
 	use anyhow::Result;
+	use std::borrow::Cow;
 
 	use super::{TokenKind, Tokens};
 
-	fn kinds(input: &str) -> Result<Vec<TokenKind>> {
+	fn kinds(input: &str) -> Result<Vec<TokenKind<'_>>> {
 		Tokens::new(input).map(|token| Ok(token?.kind)).collect()
 	}
 
@@ -154,13 +185,13 @@ mod tests {
 		assert_eq!(
 			kinds(" BE[ignored]GIN 'tree'' name' = (1,2); ")?,
 			[
-				TokenKind::Word("BEGIN".to_owned()),
-				TokenKind::Word("tree' name".to_owned()),
+				TokenKind::Word("BEGIN".into()),
+				TokenKind::Word("tree' name".into()),
 				TokenKind::Punctuation('='),
 				TokenKind::Punctuation('('),
-				TokenKind::Word("1".to_owned()),
+				TokenKind::Word("1".into()),
 				TokenKind::Punctuation(','),
-				TokenKind::Word("2".to_owned()),
+				TokenKind::Word("2".into()),
 				TokenKind::Punctuation(')'),
 				TokenKind::Punctuation(';'),
 			]
@@ -173,5 +204,23 @@ mod tests {
 		for source in ["A[broken", "'broken", "A]"] {
 			assert!(kinds(source).is_err());
 		}
+	}
+
+	#[test]
+	fn borrows_plain_words_and_decodes_modified_words() -> Result<()> {
+		let plain = Tokens::new("TREE sample =;").next().unwrap()?;
+		assert!(matches!(
+			plain.kind,
+			TokenKind::Word(Cow::Borrowed("TREE"))
+		));
+		let commented = Tokens::new("sa[note]mple;").next().unwrap()?;
+		assert!(
+			matches!(commented.kind, TokenKind::Word(Cow::Owned(value)) if value == "sample")
+		);
+		let escaped = Tokens::new("'O''Brien';").next().unwrap()?;
+		assert!(
+			matches!(escaped.kind, TokenKind::Word(Cow::Owned(value)) if value == "O'Brien")
+		);
+		Ok(())
 	}
 }
