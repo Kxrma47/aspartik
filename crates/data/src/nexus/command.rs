@@ -163,7 +163,8 @@ impl<R: BufRead> CommandReader<R> {
 				}
 				if let Some(delimiter) = quote {
 					if character == delimiter {
-						if self.line_buffer[self.offset..]
+						if self.line_buffer
+							[self.offset..]
 							.starts_with(delimiter)
 						{
 							self.command_buffer
