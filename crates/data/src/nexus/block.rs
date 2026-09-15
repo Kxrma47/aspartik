@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail, ensure};
 
-use std::io::BufRead;
+use std::{borrow::Cow, io::BufRead};
 
 use super::token::{TokenKind, Tokens};
 use super::{Command, CommandReader};
@@ -82,6 +82,84 @@ impl<R: BufRead> BlockReader<R> {
 		}
 	}
 
+	pub fn next_command_with<T>(
+		&mut self,
+		mut callback: impl FnMut(
+			&str,
+			&str,
+			&str,
+			usize,
+			usize,
+		) -> Result<T>,
+	) -> Result<Option<T>> {
+		if self.finished {
+			return Ok(None);
+		}
+		loop {
+			let block = &mut self.block;
+			let result = self.commands.next_command_with(
+				|source, line, column| {
+					let mut tokens = Tokens::new(source);
+					let name = word_ref(&mut tokens)?
+						.context(
+							"Expected a command name",
+						)?;
+					if name.eq_ignore_ascii_case("begin") {
+						ensure!(
+							block.is_none(),
+							"NEXUS blocks cannot be nested"
+						);
+						let value =
+							word_ref(&mut tokens)?
+								.context(
+									"Expected a block name",
+								)?;
+						expect_end(&mut tokens)?;
+						*block =
+							Some(value
+								.into_owned());
+						return Ok(None);
+					}
+					if name.eq_ignore_ascii_case("end")
+						|| name.eq_ignore_ascii_case(
+							"endblock",
+						) {
+						expect_end(&mut tokens)?;
+						ensure!(
+							block.take().is_some(),
+							"No NEXUS block is open"
+						);
+						return Ok(None);
+					}
+					let current =
+						block.as_deref().context(
+							"A command appears outside a NEXUS block",
+						)?;
+					callback(
+						current, &name, source, line,
+						column,
+					)
+					.map(Some)
+				},
+			);
+			match result.context("Invalid NEXUS command")? {
+				Some(Some(value)) => return Ok(Some(value)),
+				Some(None) => continue,
+				None => {
+					self.finished = true;
+					ensure!(
+						self.block.is_none(),
+						"NEXUS block '{}' was not closed",
+						self.block
+							.as_deref()
+							.unwrap_or_default()
+					);
+					return Ok(None);
+				}
+			}
+		}
+	}
+
 	fn read_command(
 		&mut self,
 		command: Command,
@@ -141,6 +219,10 @@ impl<R: BufRead> Iterator for BlockReader<R> {
 }
 
 fn word(tokens: &mut Tokens<'_>) -> Result<Option<String>> {
+	word_ref(tokens).map(|value| value.map(Cow::into_owned))
+}
+
+fn word_ref<'a>(tokens: &mut Tokens<'a>) -> Result<Option<Cow<'a, str>>> {
 	let Some(token) = tokens.next().transpose()? else {
 		return Ok(None);
 	};

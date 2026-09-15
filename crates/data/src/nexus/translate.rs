@@ -88,7 +88,7 @@ fn required_word(tokens: &mut Tokens<'_>, expected: &str) -> Result<String> {
 		bail!("Expected {expected}");
 	};
 	match token.kind {
-		TokenKind::Word(value) => Ok(value),
+		TokenKind::Word(value) => Ok(value.into_owned()),
 		TokenKind::Punctuation(character) => {
 			bail!("Expected {expected}, got '{character}'")
 		}
