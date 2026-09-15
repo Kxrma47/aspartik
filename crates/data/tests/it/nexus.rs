@@ -86,6 +86,30 @@ fn reads_across_small_buffers() -> Result<()> {
 }
 
 #[test]
+fn passes_borrowed_commands_from_reused_storage() -> Result<()> {
+	let mut reader = CommandReader::new(Cursor::new(
+		"#NEXUS\nTREE one = (A,B);\nTREE two = (C,D);",
+	))?;
+	let first = reader
+		.next_command_with(|source, line, column| {
+			assert_eq!((line, column), (2, 1));
+			assert_eq!(source, "TREE one = (A,B);");
+			Ok(source.as_ptr())
+		})?
+		.unwrap();
+	let second = reader
+		.next_command_with(|source, line, column| {
+			assert_eq!((line, column), (3, 1));
+			assert_eq!(source, "TREE two = (C,D);");
+			Ok(source.as_ptr())
+		})?
+		.unwrap();
+	assert_eq!(first, second);
+	assert!(reader.next_command_with(|_, _, _| Ok(()))?.is_none());
+	Ok(())
+}
+
+#[test]
 fn rejects_invalid_input() {
 	for (input, message) in [
 		("BEGIN TREES;", "Expected '#NEXUS'"),
