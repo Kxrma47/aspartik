@@ -561,18 +561,26 @@ impl PyBinaryTree {
 	}
 }
 
+/// Returns a flat `array("I")` of length `len(trees)**2`, which represents a
+/// matrix
 #[pyfunction(name = "robinson_foulds_matrix")]
 pub fn py_robinson_foulds_matrix(
 	py: Python<'_>,
 	trees: Vec<Py<PyBinaryTree>>,
-) -> Result<Vec<Vec<u32>>> {
-	py.detach(move || {
+) -> Result<Py<PyAny>> {
+	let m = py.detach(move || {
 		let trees = trees
 			.iter()
 			.map(|tree| &tree.get().inner)
 			.collect::<Vec<_>>();
 		robinson_foulds_matrix(&trees[..])
-	})
+	})?;
+	let flat: Vec<u32> = m.into_iter().flatten().collect();
+	let flat_bytes: &[u8] = bytemuck::cast_slice(&flat);
+	let array_module = py.import("array")?;
+	let py_array = array_module.call_method1("array", ("I",))?;
+	py_array.call_method1("frombytes", (flat_bytes,))?;
+	Ok(py_array.unbind())
 }
 
 fn checked_node(index: u32, num_nodes: u32) -> Result<Node> {

@@ -14,6 +14,7 @@ util = { workspace = true }
 
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true, features = ["derive"] }
+bytemuck = { workspace = true }
 bytes = { workspace = true }
 parking_lot = { workspace = true, optional = true }
 picoarrow = { workspace = true }

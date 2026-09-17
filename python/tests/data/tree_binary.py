@@ -1,5 +1,7 @@
 import pytest
 
+from array import array
+
 from aspartik.data.tree import BinaryTree, Tree, robinson_foulds_matrix
 from aspartik.rng import RNG
 
@@ -92,18 +94,22 @@ def test_robinson_foulds_matrix():
         indexed_tree(((0, 2), (1, 3))),
         indexed_tree(((1, 0), (3, 2))),
     ]
-    assert robinson_foulds_matrix(trees) == [
-        [0, 2, 4, 0],
-        [2, 0, 4, 2],
-        [4, 4, 0, 4],
-        [0, 2, 4, 0],
-    ]
+    # fmt: off
+    assert robinson_foulds_matrix(trees) == array(
+        "I",
+        [
+            0, 2, 4, 0,
+            2, 0, 4, 2,
+            4, 4, 0, 4,
+            0, 2, 4, 0,
+        ],
+    )
 
 
 def test_robinson_foulds_matrix_empty_and_single():
-    assert robinson_foulds_matrix([]) == []
+    assert robinson_foulds_matrix([]) == array("I", [])
     tree = BinaryTree.random(10, RNG(4))
-    assert robinson_foulds_matrix([tree]) == [[0]]
+    assert robinson_foulds_matrix([tree]) == array("I", [0])
 
 
 def test_robinson_foulds_matrix_rejects_leaf_count_mismatch():
