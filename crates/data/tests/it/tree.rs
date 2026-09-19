@@ -1,6 +1,7 @@
 use anyhow::{Result, ensure};
 use arbitrary::Unstructured;
 use arbtest::arbtest;
+use buffer::Buffer;
 use computare_core::assert_almost_eq;
 use picoarrow::array::{ArrayUtf8, Nullable};
 use rand::SeedableRng;
@@ -68,8 +69,8 @@ fn tree_with_root(
 	BinaryTree::new(
 		num_leaves,
 		root,
-		&children,
-		&edge_lengths,
+		Buffer::from_slice(&children),
+		Buffer::from_slice(&edge_lengths),
 		node_names,
 		nulls(num_nodes),
 		nulls(num_nodes - 1),
@@ -505,8 +506,8 @@ fn explicit_nonterminal_root() -> Result<()> {
 	let tree = BinaryTree::new(
 		4,
 		4,
-		&[5, 6, 0, 1, 2, 3],
-		&[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+		Buffer::from_slice(&[5, 6, 0, 1, 2, 3]),
+		Buffer::from_slice(&[0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
 		str_names(&["A", "B", "C", "D", "ROOT", "AB", "CD"]),
 		nulls(7),
 		nulls(6),
@@ -607,8 +608,8 @@ fn constructor_rejects_invalid_layouts() {
 	assert!(BinaryTree::new(
 		1,
 		0,
-		&[],
-		&[],
+		Buffer::from_slice(&[]),
+		Buffer::from_slice(&[]),
 		str_names(&["A"]),
 		nulls(1),
 		nulls(0),
@@ -623,8 +624,8 @@ fn constructor_rejects_invalid_layouts() {
 		assert!(BinaryTree::new(
 			2,
 			2,
-			&children,
-			&lengths,
+			Buffer::from_slice(&children),
+			Buffer::from_slice(&lengths),
 			str_names(&labels),
 			nulls(3),
 			nulls(2),
@@ -635,8 +636,8 @@ fn constructor_rejects_invalid_layouts() {
 	assert!(BinaryTree::new(
 		2,
 		0,
-		&[0, 1],
-		&[1.0, 1.0],
+		Buffer::from_slice(&[0, 1]),
+		Buffer::from_slice(&[1.0, 1.0]),
 		str_names(&["A", "B", ""]),
 		nulls(3),
 		nulls(2),
@@ -645,8 +646,8 @@ fn constructor_rejects_invalid_layouts() {
 	assert!(BinaryTree::new(
 		2,
 		3,
-		&[0, 1],
-		&[1.0, 1.0],
+		Buffer::from_slice(&[0, 1]),
+		Buffer::from_slice(&[1.0, 1.0]),
 		str_names(&["A", "B", ""]),
 		nulls(3),
 		nulls(2),
@@ -655,8 +656,8 @@ fn constructor_rejects_invalid_layouts() {
 	assert!(BinaryTree::new(
 		2,
 		2,
-		&[0, 1],
-		&[1.0, 1.0],
+		Buffer::from_slice(&[0, 1]),
+		Buffer::from_slice(&[1.0, 1.0]),
 		str_names(&["A", "B", ""]),
 		nulls(2),
 		nulls(2),
@@ -665,8 +666,8 @@ fn constructor_rejects_invalid_layouts() {
 	assert!(BinaryTree::new(
 		2,
 		2,
-		&[0, 1],
-		&[1.0, 1.0],
+		Buffer::from_slice(&[0, 1]),
+		Buffer::from_slice(&[1.0, 1.0]),
 		str_names(&["A", "B", ""]),
 		nulls(3),
 		nulls(1),
@@ -679,8 +680,8 @@ fn constructor_rejects_invalid_layouts() {
 		assert!(BinaryTree::new(
 			num_leaves,
 			num_nodes - 1,
-			&children,
-			&vec![1.0; num_nodes as usize - 1],
+			Buffer::from_slice(&children),
+			Buffer::from_slice(&vec![1.0; num_nodes as usize - 1]),
 			str_names(&vec![""; num_nodes as usize]),
 			nulls(num_nodes as usize),
 			nulls(num_nodes as usize - 1),
@@ -1297,8 +1298,8 @@ fn svg_rendering() -> Result<()> {
 	let tree = BinaryTree::new(
 		2,
 		2,
-		&[0, 1],
-		&[1.0, 2.0],
+		Buffer::from_slice(&[0, 1]),
+		Buffer::from_slice(&[1.0, 2.0]),
 		str_names(&["A<&\"'", "B", "root"]),
 		nullable_values([Some("node<&\"'"), None, Some("root data")]),
 		nullable_values([Some("edge<&\"'"), None]),
