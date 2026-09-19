@@ -1,8 +1,8 @@
 use bytemuck::AnyBitPattern;
+use computare_buffer::SliceBuffer;
 
 use std::ops::Index;
 
-use buffer::SliceBuffer;
 use sk::EditBuf;
 
 pub struct SkSliceBuf<T> {

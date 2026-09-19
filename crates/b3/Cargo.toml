@@ -19,6 +19,7 @@ verbatim = { workspace = true }
 anyhow = { workspace = true }
 blake3 = { workspace = true }
 bytemuck = { workspace = true, features = ["derive", "extern_crate_alloc"] }
+computare-buffer = { workspace = true }
 computare-distributions = { workspace = true }
 computare-special = { workspace = true }
 cudarc = { workspace = true, features = ["driver", "nvrtc", "dynamic-loading", "cuda-13000", "std"] }

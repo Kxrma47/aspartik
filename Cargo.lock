@@ -52,6 +52,7 @@ dependencies = [
  "blake3",
  "buffer",
  "bytemuck",
+ "computare-buffer",
  "computare-distributions",
  "computare-special",
  "cudarc",
@@ -147,6 +148,14 @@ name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
+
+[[package]]
+name = "computare-buffer"
+version = "0.1.0-alpha.0"
+source = "git+https://github.com/kaathewisegit/computare#66f035a5c0f536289867490742ffa91a692e2b5f"
+dependencies = [
+ "bytemuck",
+]
 
 [[package]]
 name = "computare-core"
