@@ -45,6 +45,9 @@ class PrintLogger(Callback):
 
         self._last_time = current_time
 
+    def finish(self, mcmc: MCMC) -> None:
+        pass
+
 
 @dataclass(slots=True)
 class TreeValidator(Callback):
@@ -64,6 +67,9 @@ class TreeValidator(Callback):
     def call(self, mcmc: MCMC) -> None:
         for tree in self.trees:
             tree.validate()
+
+    def finish(self, mcmc: MCMC) -> None:
+        pass
 
 
 @dataclass(slots=True)
