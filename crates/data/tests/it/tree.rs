@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use data::tree::{
 	BinaryTree, Internal, Node, SvgOptions, branch_score, parse_newick,
-	robinson_foulds_matrix,
+	robinson_foulds_matrix, triplet_distance_matrix,
 };
 
 fn nullable_values<'a>(
@@ -1190,6 +1190,56 @@ fn random_triplet_distance() {
 		assert_eq!(first.triplet_distance(&second), expected);
 		assert_eq!(second.triplet_distance(&first), expected);
 
+		Ok(())
+	});
+}
+
+#[test]
+fn multi_tree_triplet_distance() -> Result<()> {
+	assert!(triplet_distance_matrix(&[])?.is_empty());
+
+	let trees = [
+		indexed_tree("((0:0,1:0):0,2:0);")?,
+		indexed_tree("((0:0,2:0):0,1:0);")?,
+		indexed_tree("((1:0,2:0):0,0:0);")?,
+	];
+	let references = trees.iter().collect::<Vec<_>>();
+	assert_eq!(
+		triplet_distance_matrix(&references)?,
+		[[0, 1, 1], [1, 0, 1], [1, 1, 0]]
+	);
+	assert_eq!(triplet_distance_matrix(&references[..1])?, [[0]]);
+
+	let mismatch = [
+		&indexed_tree("(0:0,1:0);")?,
+		&indexed_tree("((0:0,1:0):0,2:0);")?,
+	];
+	assert!(triplet_distance_matrix(&mismatch).is_err());
+
+	Ok(())
+}
+
+#[test]
+fn random_multi_tree_triplet_distance() {
+	arbtest(|u: &mut Unstructured<'_>| {
+		let num_leaves = u.int_in_range(2_u32..=32)?;
+		let num_trees = u.int_in_range(0_usize..=8)?;
+		let trees = (0..num_trees)
+			.map(|_| arbitrary_tree(u, num_leaves))
+			.collect::<arbitrary::Result<Vec<_>>>()?;
+		let references = trees.iter().collect::<Vec<_>>();
+		let distances = triplet_distance_matrix(&references).unwrap();
+
+		assert_eq!(distances.len(), num_trees);
+		for (first_index, first) in trees.iter().enumerate() {
+			assert_eq!(distances[first_index].len(), num_trees);
+			for (second_index, second) in trees.iter().enumerate() {
+				assert_eq!(
+					distances[first_index][second_index],
+					first.triplet_distance(second)
+				);
+			}
+		}
 		Ok(())
 	});
 }

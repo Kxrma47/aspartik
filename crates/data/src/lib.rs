@@ -39,6 +39,10 @@ pub mod pymodule {
 			crate::tree::python::py_robinson_foulds_matrix,
 			m
 		)?)?;
+		m.add_function(wrap_pyfunction!(
+			crate::tree::python::py_triplet_distance_matrix,
+			m
+		)?)?;
 
 		Ok(())
 	}

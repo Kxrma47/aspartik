@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from array import array
 from os import PathLike
 
 from ..rng import RNG
@@ -231,3 +232,4 @@ class BinaryTree:
     def __str__(self) -> str: ...
 
 def robinson_foulds_matrix(trees: list[BinaryTree]) -> list[list[int]]: ...
+def triplet_distance_matrix(trees: list[BinaryTree]) -> array: ...

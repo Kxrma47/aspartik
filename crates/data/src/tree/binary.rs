@@ -494,11 +494,16 @@ impl BinaryTree {
 	pub fn triplet_distance(&self, other: &Self) -> u128 {
 		assert_eq!(self.num_leaves(), other.num_leaves());
 
-		let num_leaves = self.num_leaves();
-		if num_leaves < 3 {
+		if self.num_leaves() < 3 {
 			return 0;
 		}
 
+		let subtree_sizes = self.triplet_subtree_sizes();
+		let mut hdt = TripletHdt::new(other);
+		self.triplet_distance_with_hdt(&subtree_sizes, &mut hdt)
+	}
+
+	fn triplet_subtree_sizes(&self) -> Vec<u32> {
 		let mut subtree_sizes = vec![0; self.num_nodes() as usize];
 		for node in self.postorder() {
 			if self.is_leaf(node) {
@@ -512,8 +517,14 @@ impl BinaryTree {
 					+ subtree_sizes[right.i()];
 			}
 		}
+		subtree_sizes
+	}
 
-		let mut hdt = TripletHdt::new(other);
+	fn triplet_distance_with_hdt(
+		&self,
+		subtree_sizes: &[u32],
+		hdt: &mut TripletHdt,
+	) -> u128 {
 		let mut steps = vec![TripletStep::Count(self.root().into())];
 		let mut leaves = Vec::new();
 		let mut shared = 0;
@@ -582,7 +593,7 @@ impl BinaryTree {
 			}
 		}
 
-		choose3(num_leaves) - shared
+		choose3(self.num_leaves()) - shared
 	}
 
 	pub fn preorder(&self) -> impl Iterator<Item = Node> + '_ {
@@ -603,6 +614,49 @@ impl BinaryTree {
 	pub fn identical_children(&self, other: &BinaryTree) -> bool {
 		self.node_names == other.node_names
 	}
+}
+
+pub fn triplet_distance_matrix(
+	trees: &[&BinaryTree],
+) -> Result<Vec<Vec<u128>>> {
+	let Some(first_tree) = trees.first() else {
+		return Ok(Vec::new());
+	};
+
+	let num_leaves = first_tree.num_leaves();
+	for tree in &trees[1..] {
+		ensure!(
+			tree.num_leaves() == num_leaves,
+			"Expected every tree to have {num_leaves} leaves, got {}",
+			tree.num_leaves()
+		);
+		ensure!(
+			first_tree.identical_children(tree),
+			"Expected every tree to use the same leaf IDs"
+		);
+	}
+
+	let subtree_sizes = trees
+		.iter()
+		.map(|tree| tree.triplet_subtree_sizes())
+		.collect::<Vec<_>>();
+	let templates = trees
+		.iter()
+		.map(|tree| TripletHdt::new(tree))
+		.collect::<Vec<_>>();
+	let mut distances = vec![vec![0; trees.len()]; trees.len()];
+	for first in 0..trees.len() {
+		for second in 0..first {
+			let mut hdt = templates[second].clone();
+			let distance = trees[first].triplet_distance_with_hdt(
+				&subtree_sizes[first],
+				&mut hdt,
+			);
+			distances[first][second] = distance;
+			distances[second][first] = distance;
+		}
+	}
+	Ok(distances)
 }
 
 #[derive(Clone, Copy)]
@@ -703,6 +757,7 @@ enum TripletComponentKind {
 	},
 }
 
+#[derive(Clone)]
 struct TripletComponent {
 	kind: TripletComponentKind,
 	parent: usize,
@@ -736,6 +791,7 @@ struct TripletEdge {
 	down: usize,
 }
 
+#[derive(Clone)]
 struct TripletHdt {
 	components: Vec<TripletComponent>,
 	root: usize,
