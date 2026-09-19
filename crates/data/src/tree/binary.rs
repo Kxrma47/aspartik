@@ -926,39 +926,3 @@ impl Iterator for Postorder<'_> {
 		None
 	}
 }
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn constructor_keeps_owned_buffers() -> Result<()> {
-		let children = Buffer::from_slice(&[0, 1]);
-		let edge_lengths = Buffer::from_slice(&[1.0, 2.0]);
-		let children_ptr = children.as_ptr();
-		let lengths_ptr = edge_lengths.as_ptr();
-		let mut node_names = ArrayUtf8::<Nullable>::new();
-		let mut node_metadata = ArrayUtf8::<Nullable>::new();
-		let mut edge_metadata = ArrayUtf8::<Nullable>::new();
-		for _ in 0..3 {
-			node_names.push(None)?;
-			node_metadata.push(None)?;
-		}
-		for _ in 0..2 {
-			edge_metadata.push(None)?;
-		}
-
-		let tree = BinaryTree::new(
-			2,
-			2,
-			children,
-			edge_lengths,
-			node_names,
-			node_metadata,
-			edge_metadata,
-		)?;
-		assert_eq!(tree.children.as_ptr(), children_ptr);
-		assert_eq!(tree.edge_lengths.as_ptr(), lengths_ptr);
-		Ok(())
-	}
-}

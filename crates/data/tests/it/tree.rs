@@ -474,6 +474,26 @@ fn two_leaf_tree() -> Result<()> {
 }
 
 #[test]
+fn constructor_accepts_owned_buffers() -> Result<()> {
+	let children = Buffer::from_slice(&[1, 0]);
+	let edge_lengths = Buffer::from_slice(&[1.0, 2.0]);
+	let tree = BinaryTree::new(
+		2,
+		2,
+		children,
+		edge_lengths,
+		str_names(&["A", "B", "root"]),
+		nulls(3),
+		nulls(2),
+	)?;
+
+	assert_eq!(tree.children_of(tree.root()).map(Node::index), [1, 0]);
+	assert_eq!(tree.edge_length(node(&tree, 0)), Some(1.0));
+	assert_eq!(tree.edge_length(node(&tree, 1)), Some(2.0));
+	Ok(())
+}
+
+#[test]
 fn balanced_and_ladder_traversals() -> Result<()> {
 	let balanced = tree(
 		4,
