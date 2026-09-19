@@ -7,6 +7,7 @@ use crate::tree::{
 	branch_score,
 	builder::{EdgeData, NodeData, TreeBuilder},
 	distance::robinson_foulds_matrix,
+	triplet_distance_matrix,
 };
 use rng::PyRng;
 
@@ -579,6 +580,30 @@ pub fn py_robinson_foulds_matrix(
 	let flat_bytes: &[u8] = bytemuck::cast_slice(&flat);
 	let array_module = py.import("array")?;
 	let py_array = array_module.call_method1("array", ("I",))?;
+	py_array.call_method1("frombytes", (flat_bytes,))?;
+	Ok(py_array.unbind())
+}
+
+#[pyfunction(name = "triplet_distance_matrix")]
+pub fn py_triplet_distance_matrix(
+	py: Python<'_>,
+	trees: Vec<Py<PyBinaryTree>>,
+) -> Result<Py<PyAny>> {
+	let distances = py.detach(move || {
+		let trees = trees
+			.iter()
+			.map(|tree| &tree.get().inner)
+			.collect::<Vec<_>>();
+		triplet_distance_matrix(&trees)
+	})?;
+	let flat = distances
+		.into_iter()
+		.flatten()
+		.map(u64::try_from)
+		.collect::<std::result::Result<Vec<_>, _>>()?;
+	let flat_bytes: &[u8] = bytemuck::cast_slice(&flat);
+	let array_module = py.import("array")?;
+	let py_array = array_module.call_method1("array", ("Q",))?;
 	py_array.call_method1("frombytes", (flat_bytes,))?;
 	Ok(py_array.unbind())
 }

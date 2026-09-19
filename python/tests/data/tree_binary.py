@@ -2,7 +2,12 @@ import pytest
 
 from array import array
 
-from aspartik.data.tree import BinaryTree, Tree, robinson_foulds_matrix
+from aspartik.data.tree import (
+    BinaryTree,
+    Tree,
+    robinson_foulds_matrix,
+    triplet_distance_matrix,
+)
 from aspartik.rng import RNG
 
 
@@ -85,6 +90,36 @@ def test_triplet_distance_rejects_leaf_count_mismatch():
 
     with pytest.raises(RuntimeError, match="Expected both trees"):
         first.triplet_distance(second)
+
+
+def test_triplet_distance_matrix():
+    trees = [
+        indexed_tree(((0, 1), (2, 3))),
+        indexed_tree(((0, 2), (1, 3))),
+        indexed_tree((((0, 1), 2), 3)),
+    ]
+    expected = array(
+        "Q",
+        [first.triplet_distance(second) for first in trees for second in trees],
+    )
+    assert triplet_distance_matrix(trees) == expected
+    assert triplet_distance_matrix([]) == array("Q", [])
+    assert triplet_distance_matrix(trees[:1]) == array("Q", [0])
+
+
+def test_triplet_distance_matrix_rejects_leaf_count_mismatch():
+    trees = [BinaryTree.random(10, RNG(4)), BinaryTree.random(11, RNG(5))]
+    with pytest.raises(RuntimeError, match="Expected every tree to have 10 leaves"):
+        triplet_distance_matrix(trees)
+
+
+def test_triplet_distance_matrix_rejects_leaf_id_mismatch():
+    trees = [
+        BinaryTree.from_newick("((A:0,B:0):0,(C:0,D:0):0);"),
+        BinaryTree.from_newick("((A:0,C:0):0,(B:0,D:0):0);"),
+    ]
+    with pytest.raises(RuntimeError, match="same leaf IDs"):
+        triplet_distance_matrix(trees)
 
 
 def test_robinson_foulds_matrix():

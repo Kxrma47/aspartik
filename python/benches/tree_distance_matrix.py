@@ -2,7 +2,12 @@ import argparse
 from time import perf_counter
 from typing import Literal
 
-from aspartik.data.tree import BinaryTree, Tree, robinson_foulds_matrix
+from aspartik.data.tree import (
+    BinaryTree,
+    Tree,
+    robinson_foulds_matrix,
+    triplet_distance_matrix,
+)
 from aspartik.rng import RNG
 
 Metric = Literal["rf", "branch-score", "triplet"]
@@ -40,7 +45,7 @@ def distance_matrix(metric, trees):
         case "branch-score":
             return pairwise_matrix(trees, BinaryTree.branch_score)
         case "triplet":
-            return pairwise_matrix(trees, BinaryTree.triplet_distance)
+            return triplet_distance_matrix(trees)
         case _:
             raise ValueError(f"unknown distance metric: {metric}")
 
