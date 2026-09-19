@@ -778,6 +778,10 @@ fn random_binary_tree_many_seeds_and_large() -> Result<()> {
 	let mut topologies = BTreeSet::new();
 	for seed in 0..128 {
 		let mut rng = Pcg64::seed_from_u64(seed);
+		for num_leaves in 2..=12 {
+			let tree = BinaryTree::random(num_leaves, &mut rng)?;
+			assert_random_tree(&tree, num_leaves);
+		}
 		let tree = BinaryTree::random(64, &mut rng)?;
 		assert_random_tree(&tree, 64);
 		topologies.insert(topology(&tree));
