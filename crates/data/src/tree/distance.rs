@@ -2,7 +2,7 @@ use anyhow::{Result, ensure};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use smallvec::SmallVec;
 
-use super::BinaryTree;
+use super::{BinaryTree, Node};
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
 struct CladeHash {
@@ -40,16 +40,25 @@ fn mix(mut value: u64) -> u64 {
 fn clade_hashes(tree: &BinaryTree) -> Vec<CladeHash> {
 	let mut hashes = vec![CladeHash::default(); tree.num_nodes() as usize];
 	for node in tree.postorder() {
-		hashes[node.i()] = if let Some(leaf) = tree.as_leaf(node) {
-			CladeHash::leaf(leaf.index())
-		} else {
-			let internal = tree.as_internal(node).unwrap();
-			let [left, right] = tree.children_of(internal);
-			hashes[left.index() as usize]
-				.combine(hashes[right.index() as usize])
-		};
+		let hash = clade_hash(tree, &hashes, node);
+		hashes[node.i()] = hash;
 	}
 	hashes
+}
+
+fn clade_hash(
+	tree: &BinaryTree,
+	hashes: &[CladeHash],
+	node: Node,
+) -> CladeHash {
+	if let Some(leaf) = tree.as_leaf(node) {
+		CladeHash::leaf(leaf.index())
+	} else {
+		let internal = tree.as_internal(node).unwrap();
+		let [left, right] = tree.children_of(internal);
+		hashes[left.index() as usize]
+			.combine(hashes[right.index() as usize])
+	}
 }
 
 pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
@@ -77,15 +86,17 @@ pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
 			capacity,
 			FxBuildHasher,
 		);
+	let mut hashes =
+		vec![CladeHash::default(); first_tree.num_nodes() as usize];
 
 	for (tree_index, tree) in trees.iter().enumerate() {
-		let hashes = clade_hashes(tree);
 		for node in tree.postorder() {
+			let hash = clade_hash(tree, &hashes, node);
+			hashes[node.i()] = hash;
 			if node != tree.root().into() && tree.is_internal(node)
 			{
-				let tree_indices = clades
-					.entry(hashes[node.i()])
-					.or_default();
+				let tree_indices =
+					clades.entry(hash).or_default();
 				if tree_indices.last() != Some(&tree_index) {
 					tree_indices.push(tree_index);
 				}
