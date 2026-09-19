@@ -39,6 +39,11 @@ fn mix(mut value: u64) -> u64 {
 
 fn clade_hashes(tree: &BinaryTree) -> Vec<CladeHash> {
 	let mut hashes = vec![CladeHash::default(); tree.num_nodes() as usize];
+	fill_clade_hashes(tree, &mut hashes);
+	hashes
+}
+
+fn fill_clade_hashes(tree: &BinaryTree, hashes: &mut [CladeHash]) {
 	for node in tree.postorder() {
 		hashes[node.i()] = if let Some(leaf) = tree.as_leaf(node) {
 			CladeHash::leaf(leaf.index())
@@ -49,7 +54,6 @@ fn clade_hashes(tree: &BinaryTree) -> Vec<CladeHash> {
 				.combine(hashes[right.index() as usize])
 		};
 	}
-	hashes
 }
 
 pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
@@ -77,9 +81,11 @@ pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
 			capacity,
 			FxBuildHasher,
 		);
+	let mut hashes =
+		vec![CladeHash::default(); first_tree.num_nodes() as usize];
 
 	for (tree_index, tree) in trees.iter().enumerate() {
-		let hashes = clade_hashes(tree);
+		fill_clade_hashes(tree, &mut hashes);
 		for node in tree.postorder() {
 			if node != tree.root().into() && tree.is_internal(node)
 			{
