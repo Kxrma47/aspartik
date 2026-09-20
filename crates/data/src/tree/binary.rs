@@ -40,6 +40,7 @@ impl BinaryTree {
 			})?;
 		let num_internals = num_leaves - 1;
 		let num_nodes_usize = usize::try_from(num_nodes)?;
+		let num_edges = num_nodes - 1;
 		let num_edges_usize = num_nodes_usize - 1;
 
 		let internals = num_leaves..num_nodes;
@@ -48,7 +49,7 @@ impl BinaryTree {
 		let root = prufer.pop().unwrap();
 		prufer.shuffle(rng);
 
-		let mut children = vec![ROOT_PARENT; num_edges_usize];
+		let mut children = Buffer::repeat(ROOT_PARENT, num_edges);
 		let mut remaining = vec![2; num_internals as usize];
 		*remaining.last_mut().unwrap() = 1;
 		let mut unused =
@@ -83,33 +84,166 @@ impl BinaryTree {
 		for _ in 0..num_edges_usize {
 			edge_metadata.push(None)?;
 		}
-		let edge_lengths = vec![0.0; num_edges_usize];
+		let edge_lengths = Buffer::repeat(0.0, num_edges);
 
-		Self::new(
+		Self::canonical(
 			num_leaves,
 			root,
-			&children,
-			&edge_lengths,
+			children,
+			edge_lengths,
 			node_names,
 			node_metadata,
 			edge_metadata,
 		)
 	}
 
+	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		num_leaves: u32,
 		root: u32,
-		children: &[u32],
-		edge_lengths: &[f64],
-		mut node_names: ArrayUtf8<Nullable>,
-		mut node_metadata: ArrayUtf8<Nullable>,
-		mut edge_metadata: ArrayUtf8<Nullable>,
+		children: Buffer<u32>,
+		parents: Buffer<u32>,
+		edge_lengths: Buffer<f64>,
+		node_names: ArrayUtf8<Nullable>,
+		node_metadata: ArrayUtf8<Nullable>,
+		edge_metadata: ArrayUtf8<Nullable>,
+	) -> Result<Self> {
+		let mut tree = Self {
+			num_leaves,
+			root,
+			children,
+			parents,
+			edge_lengths,
+			node_names,
+			node_metadata,
+			edge_metadata,
+		};
+		tree.validate()?;
+		tree.node_names.shrink_to_fit();
+		tree.node_metadata.shrink_to_fit();
+		tree.edge_metadata.shrink_to_fit();
+		Ok(tree)
+	}
+
+	pub fn canonical(
+		num_leaves: u32,
+		root: u32,
+		children: Buffer<u32>,
+		edge_lengths: Buffer<f64>,
+		node_names: ArrayUtf8<Nullable>,
+		node_metadata: ArrayUtf8<Nullable>,
+		edge_metadata: ArrayUtf8<Nullable>,
 	) -> Result<Self> {
 		ensure!(
 			num_leaves >= 2,
 			"Expected at least two leaves, got {num_leaves}"
 		);
+		let num_nodes = num_leaves
+			.checked_mul(2)
+			.and_then(|value| value.checked_sub(1))
+			.ok_or_else(|| {
+				anyhow!(
+					"The number of nodes does not fit in u32"
+				)
+			})?;
+		ensure!(
+			children.len() == num_nodes - 1,
+			"Expected {} child entries, got {}",
+			num_nodes - 1,
+			children.len()
+		);
+		let mut parents = Buffer::repeat(ROOT_PARENT, num_nodes);
+		for (offset, pair) in
+			children.as_chunks::<2>().0.iter().enumerate()
+		{
+			let parent = num_leaves
+				.checked_add(u32::try_from(offset)?)
+				.ok_or_else(|| {
+					anyhow!(
+						"The number of nodes does not fit in u32"
+					)
+				})?;
+			for &child in pair {
+				let slot = parents
+					.get_mut(child as usize)
+					.ok_or_else(|| {
+						anyhow!(
+							"Child {child} of node {parent} is out of range"
+						)
+					})?;
+				*slot = parent;
+			}
+		}
+		let tree = Self::new(
+			num_leaves,
+			root,
+			children,
+			parents,
+			edge_lengths,
+			node_names,
+			node_metadata,
+			edge_metadata,
+		)?;
+		let mut order = (0..num_leaves).collect::<Vec<_>>();
+		order.extend(tree.postorder().filter_map(|node| {
+			tree.is_internal(node).then_some(node.index())
+		}));
+		if order.iter().copied().eq(0..num_nodes) {
+			return Ok(tree);
+		}
 
+		let mut mapping = vec![0; num_nodes as usize];
+		for (new, &old) in order.iter().enumerate() {
+			mapping[old as usize] = u32::try_from(new)?;
+		}
+		let num_edges = num_nodes - 1;
+		let mut children = Buffer::repeat(0, num_edges);
+		let mut parents = Buffer::repeat(ROOT_PARENT, num_nodes);
+		for (offset, &old) in
+			order[num_leaves as usize..].iter().enumerate()
+		{
+			let parent = num_leaves + u32::try_from(offset)?;
+			let [left, right] = tree.children_of(Internal(old));
+			for (slot, child) in
+				[left, right].into_iter().enumerate()
+			{
+				let child = mapping[child.i()];
+				children[offset * 2 + slot] = child;
+				parents[child as usize] = parent;
+			}
+		}
+		let mut lengths = Buffer::repeat(0.0, num_edges);
+		let mut names = ArrayUtf8::<Nullable>::new();
+		let mut node_metadata = ArrayUtf8::<Nullable>::new();
+		let mut edge_metadata = ArrayUtf8::<Nullable>::new();
+		for (new, &old) in order.iter().enumerate() {
+			let old = Node(old);
+			names.push(tree.name(old))?;
+			node_metadata.push(tree.node_metadata(old))?;
+			if new < num_edges as usize {
+				lengths[new] = tree.edge_length(old).unwrap();
+				edge_metadata.push(tree.edge_metadata(old))?;
+			}
+		}
+		Self::new(
+			num_leaves,
+			num_nodes - 1,
+			children,
+			parents,
+			lengths,
+			names,
+			node_metadata,
+			edge_metadata,
+		)
+	}
+
+	pub fn validate(&self) -> Result<()> {
+		let num_leaves = self.num_leaves;
+		let root = self.root;
+		ensure!(
+			num_leaves >= 2,
+			"Expected at least two leaves, got {num_leaves}"
+		);
 		let num_nodes = num_leaves
 			.checked_mul(2)
 			.and_then(|value| value.checked_sub(1))
@@ -119,44 +253,46 @@ impl BinaryTree {
 				)
 			})?;
 		let num_edges = num_nodes - 1;
-		let num_nodes_usize = usize::try_from(num_nodes)?;
-		let num_edges_usize = usize::try_from(num_edges)?;
+		let num_nodes_usize = num_nodes as usize;
+		let num_edges_usize = num_edges as usize;
 		ensure!(
 			(num_leaves..num_nodes).contains(&root),
 			"Root node {root} is not an internal node"
 		);
-
 		ensure!(
-			children.len() == num_edges_usize,
+			self.children.len() == num_edges,
 			"Expected {num_edges} child entries, got {}",
-			children.len()
+			self.children.len()
 		);
 		ensure!(
-			edge_lengths.len() == num_edges_usize,
+			self.parents.len() == num_nodes,
+			"Expected {num_nodes} parent entries, got {}",
+			self.parents.len()
+		);
+		ensure!(
+			self.edge_lengths.len() == num_edges,
 			"Expected {num_edges} edge lengths, got {}",
-			edge_lengths.len()
+			self.edge_lengths.len()
 		);
 		ensure!(
-			node_names.len() == num_nodes_usize,
+			self.node_names.len() == num_nodes_usize,
 			"Expected {num_nodes} node names, got {}",
-			node_names.len()
+			self.node_names.len()
 		);
 		ensure!(
-			node_metadata.len() == num_nodes_usize,
+			self.node_metadata.len() == num_nodes_usize,
 			"Expected {num_nodes} node metadata entries, got {}",
-			node_metadata.len()
+			self.node_metadata.len()
 		);
 		ensure!(
-			edge_metadata.len() == num_edges_usize,
+			self.edge_metadata.len() == num_edges_usize,
 			"Expected {num_edges} edge metadata entries, got {}",
-			edge_metadata.len()
+			self.edge_metadata.len()
 		);
 
-		let mut parents = vec![ROOT_PARENT; num_nodes_usize];
 		let mut seen = vec![false; num_nodes_usize];
-
 		for (offset, pair) in
-			children.as_chunks::<2>().0.iter().enumerate()
+			self.children.as_chunks::<2>().0.iter().enumerate()
 		{
 			let parent = num_leaves + u32::try_from(offset)?;
 			for &child in pair {
@@ -168,9 +304,11 @@ impl BinaryTree {
 					!seen[child as usize],
 					"Node {child} appears as a child more than once"
 				);
-
+				ensure!(
+					self.parents[child as usize] == parent,
+					"Parent of node {child} is inconsistent"
+				);
 				seen[child as usize] = true;
-				parents[child as usize] = parent;
 			}
 		}
 
@@ -179,6 +317,11 @@ impl BinaryTree {
 				ensure!(
 					!seen[node as usize],
 					"The root appears as a child"
+				);
+				ensure!(
+					self.parents[node as usize]
+						== ROOT_PARENT,
+					"The root has a parent"
 				);
 			} else {
 				ensure!(
@@ -191,11 +334,15 @@ impl BinaryTree {
 		seen.fill(false);
 		let mut stack = vec![root];
 		while let Some(node) = stack.pop() {
+			ensure!(
+				!seen[node as usize],
+				"The tree contains a cycle"
+			);
 			seen[node as usize] = true;
 			if node >= num_leaves {
 				let offset = (node - num_leaves) as usize * 2;
 				stack.extend_from_slice(
-					&children[offset..offset + 2],
+					&self.children[offset..offset + 2],
 				);
 			}
 		}
@@ -204,20 +351,7 @@ impl BinaryTree {
 			"Not all nodes are reachable from the root"
 		);
 
-		node_names.shrink_to_fit();
-		node_metadata.shrink_to_fit();
-		edge_metadata.shrink_to_fit();
-
-		Ok(Self {
-			num_leaves,
-			root,
-			children: Buffer::from_slice(children),
-			parents: Buffer::from_slice(&parents),
-			edge_lengths: Buffer::from_slice(edge_lengths),
-			node_names,
-			node_metadata,
-			edge_metadata,
-		})
+		Ok(())
 	}
 
 	pub fn num_nodes(&self) -> u32 {

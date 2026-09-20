@@ -1,6 +1,7 @@
 use anyhow::{Result, ensure};
 use arbitrary::Unstructured;
 use arbtest::arbtest;
+use buffer::Buffer;
 use computare_core::assert_almost_eq;
 use picoarrow::array::{ArrayUtf8, Nullable};
 use rand::SeedableRng;
@@ -65,11 +66,18 @@ fn tree_with_root(
 	node_names: ArrayUtf8<Nullable>,
 ) -> Result<BinaryTree> {
 	let num_nodes = num_leaves as usize * 2 - 1;
+	let mut parents = vec![u32::MAX; num_nodes];
+	for (offset, pair) in children.as_chunks::<2>().0.iter().enumerate() {
+		for &child in pair {
+			parents[child as usize] = num_leaves + offset as u32;
+		}
+	}
 	BinaryTree::new(
 		num_leaves,
 		root,
-		&children,
-		&edge_lengths,
+		Buffer::from_slice(&children),
+		Buffer::from_slice(&parents),
+		Buffer::from_slice(&edge_lengths),
 		node_names,
 		nulls(num_nodes),
 		nulls(num_nodes - 1),
@@ -473,6 +481,146 @@ fn two_leaf_tree() -> Result<()> {
 }
 
 #[test]
+fn constructor_accepts_owned_buffers() -> Result<()> {
+	let children = Buffer::from_slice(&[1, 0]);
+	let edge_lengths = Buffer::from_slice(&[1.0, 2.0]);
+	let tree = BinaryTree::new(
+		2,
+		2,
+		children,
+		Buffer::from_slice(&[2, 2, u32::MAX]),
+		edge_lengths,
+		str_names(&["A", "B", "root"]),
+		nulls(3),
+		nulls(2),
+	)?;
+
+	assert_eq!(tree.children_of(tree.root()).map(Node::index), [1, 0]);
+	assert_eq!(tree.edge_length(node(&tree, 0)), Some(1.0));
+	assert_eq!(tree.edge_length(node(&tree, 1)), Some(2.0));
+	tree.validate()?;
+	Ok(())
+}
+
+#[test]
+fn canonical_constructor_relabels_internals() -> Result<()> {
+	let tree = BinaryTree::canonical(
+		4,
+		4,
+		Buffer::from_slice(&[5, 6, 0, 1, 2, 3]),
+		Buffer::from_slice(&[0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
+		str_names(&["A", "B", "C", "D", "ROOT", "AB", "CD"]),
+		nullable_values([
+			None,
+			None,
+			None,
+			None,
+			Some("[&node=root]"),
+			Some("[&node=AB]"),
+			Some("[&node=CD]"),
+		]),
+		nullable_values([
+			None,
+			None,
+			None,
+			None,
+			Some("[&edge=AB]"),
+			Some("[&edge=CD]"),
+		]),
+	)?;
+
+	tree.validate()?;
+	assert_eq!(tree.root().index(), 6);
+	assert_eq!(
+		tree.postorder()
+			.filter(|&node| tree.is_internal(node))
+			.map(Node::index)
+			.collect::<Vec<_>>(),
+		vec![4, 5, 6]
+	);
+	assert_eq!(tree.name(node(&tree, 4)), Some("AB"));
+	assert_eq!(tree.name(node(&tree, 5)), Some("CD"));
+	assert_eq!(tree.name(node(&tree, 6)), Some("ROOT"));
+	assert_eq!(tree.node_metadata(node(&tree, 4)), Some("[&node=AB]"));
+	assert_eq!(tree.node_metadata(node(&tree, 6)), Some("[&node=root]"));
+	assert_eq!(tree.edge_metadata(node(&tree, 4)), Some("[&edge=AB]"));
+	assert_eq!(tree.edge_metadata(node(&tree, 5)), Some("[&edge=CD]"));
+	assert_eq!(tree.edge_length(node(&tree, 4)), Some(0.5));
+	assert_eq!(tree.edge_length(node(&tree, 5)), Some(0.6));
+	assert_eq!(
+		tree.to_newick()?,
+		"((A:0.1,B:0.2)AB[&node=AB]:0.5[&edge=AB],(C:0.3,D:0.4)CD[&node=CD]:0.6[&edge=CD])ROOT[&node=root];"
+	);
+	Ok(())
+}
+
+#[test]
+fn random_canonical_constructor() {
+	arbtest(|u: &mut Unstructured<'_>| {
+		let num_leaves = u.int_in_range(2_u32..=100)?;
+		let original = arbitrary_tree(u, num_leaves)?;
+		let children = topology(&original)
+			.into_iter()
+			.flatten()
+			.collect::<Vec<_>>();
+		let lengths = original
+			.edges()
+			.map(|child| original.edge_length(child).unwrap())
+			.collect::<Vec<_>>();
+		let labels = original
+			.nodes()
+			.map(|node| {
+				original.name(node)
+					.unwrap_or_default()
+					.to_owned()
+			})
+			.collect::<Vec<_>>();
+		let canonical = BinaryTree::canonical(
+			num_leaves,
+			original.root().index(),
+			Buffer::from_slice(&children),
+			Buffer::from_slice(&lengths),
+			names(&labels),
+			nulls(original.num_nodes() as usize),
+			nulls(original.num_edges() as usize),
+		)
+		.unwrap();
+
+		assert_eq!(
+			canonical.to_newick().unwrap(),
+			original.to_newick().unwrap()
+		);
+		assert_eq!(
+			canonical
+				.postorder()
+				.filter(|&node| canonical.is_internal(node))
+				.map(Node::index)
+				.collect::<Vec<_>>(),
+			(num_leaves..canonical.num_nodes()).collect::<Vec<_>>()
+		);
+		canonical.validate().unwrap();
+		Ok(())
+	});
+}
+
+#[test]
+fn constructor_rejects_inconsistent_parents() {
+	for parents in [[u32::MAX, 2, u32::MAX], [2, 2, 0], [2, 2, 2]] {
+		assert!(BinaryTree::new(
+			2,
+			2,
+			Buffer::from_slice(&[0, 1]),
+			Buffer::from_slice(&parents),
+			Buffer::from_slice(&[1.0, 2.0]),
+			str_names(&["A", "B", "root"]),
+			nulls(3),
+			nulls(2),
+		)
+		.is_err());
+	}
+}
+
+#[test]
 fn balanced_and_ladder_traversals() -> Result<()> {
 	let balanced = tree(
 		4,
@@ -505,8 +653,9 @@ fn explicit_nonterminal_root() -> Result<()> {
 	let tree = BinaryTree::new(
 		4,
 		4,
-		&[5, 6, 0, 1, 2, 3],
-		&[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+		Buffer::from_slice(&[5, 6, 0, 1, 2, 3]),
+		Buffer::from_slice(&[5, 5, 6, 6, u32::MAX, 4, 4]),
+		Buffer::from_slice(&[0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
 		str_names(&["A", "B", "C", "D", "ROOT", "AB", "CD"]),
 		nulls(7),
 		nulls(6),
@@ -604,11 +753,11 @@ fn metadata_roundtrip() -> Result<()> {
 
 #[test]
 fn constructor_rejects_invalid_layouts() {
-	assert!(BinaryTree::new(
+	assert!(BinaryTree::canonical(
 		1,
 		0,
-		&[],
-		&[],
+		Buffer::from_slice(&[]),
+		Buffer::from_slice(&[]),
 		str_names(&["A"]),
 		nulls(1),
 		nulls(0),
@@ -620,11 +769,11 @@ fn constructor_rejects_invalid_layouts() {
 		(vec![0, 1], vec![1.0], vec!["A", "B", ""]),
 		(vec![0, 1], vec![1.0, 1.0], vec!["A", "B"]),
 	] {
-		assert!(BinaryTree::new(
+		assert!(BinaryTree::canonical(
 			2,
 			2,
-			&children,
-			&lengths,
+			Buffer::from_slice(&children),
+			Buffer::from_slice(&lengths),
 			str_names(&labels),
 			nulls(3),
 			nulls(2),
@@ -632,41 +781,41 @@ fn constructor_rejects_invalid_layouts() {
 		.is_err());
 	}
 
-	assert!(BinaryTree::new(
+	assert!(BinaryTree::canonical(
 		2,
 		0,
-		&[0, 1],
-		&[1.0, 1.0],
+		Buffer::from_slice(&[0, 1]),
+		Buffer::from_slice(&[1.0, 1.0]),
 		str_names(&["A", "B", ""]),
 		nulls(3),
 		nulls(2),
 	)
 	.is_err());
-	assert!(BinaryTree::new(
+	assert!(BinaryTree::canonical(
 		2,
 		3,
-		&[0, 1],
-		&[1.0, 1.0],
+		Buffer::from_slice(&[0, 1]),
+		Buffer::from_slice(&[1.0, 1.0]),
 		str_names(&["A", "B", ""]),
 		nulls(3),
 		nulls(2),
 	)
 	.is_err());
-	assert!(BinaryTree::new(
+	assert!(BinaryTree::canonical(
 		2,
 		2,
-		&[0, 1],
-		&[1.0, 1.0],
+		Buffer::from_slice(&[0, 1]),
+		Buffer::from_slice(&[1.0, 1.0]),
 		str_names(&["A", "B", ""]),
 		nulls(2),
 		nulls(2),
 	)
 	.is_err());
-	assert!(BinaryTree::new(
+	assert!(BinaryTree::canonical(
 		2,
 		2,
-		&[0, 1],
-		&[1.0, 1.0],
+		Buffer::from_slice(&[0, 1]),
+		Buffer::from_slice(&[1.0, 1.0]),
 		str_names(&["A", "B", ""]),
 		nulls(3),
 		nulls(1),
@@ -676,11 +825,11 @@ fn constructor_rejects_invalid_layouts() {
 	for children in [vec![0, 3], vec![0, 2], vec![0, 0], vec![0, 3, 1, 2]] {
 		let num_leaves = if children.len() == 2 { 2 } else { 3 };
 		let num_nodes = num_leaves * 2 - 1;
-		assert!(BinaryTree::new(
+		assert!(BinaryTree::canonical(
 			num_leaves,
 			num_nodes - 1,
-			&children,
-			&vec![1.0; num_nodes as usize - 1],
+			Buffer::from_slice(&children),
+			Buffer::from_slice(&vec![1.0; num_nodes as usize - 1]),
 			str_names(&vec![""; num_nodes as usize]),
 			nulls(num_nodes as usize),
 			nulls(num_nodes as usize - 1),
@@ -1347,8 +1496,9 @@ fn svg_rendering() -> Result<()> {
 	let tree = BinaryTree::new(
 		2,
 		2,
-		&[0, 1],
-		&[1.0, 2.0],
+		Buffer::from_slice(&[0, 1]),
+		Buffer::from_slice(&[2, 2, u32::MAX]),
+		Buffer::from_slice(&[1.0, 2.0]),
 		str_names(&["A<&\"'", "B", "root"]),
 		nullable_values([Some("node<&\"'"), None, Some("root data")]),
 		nullable_values([Some("edge<&\"'"), None]),
