@@ -80,7 +80,7 @@ def run_benchmark(
     z = perf_counter()
     trees = random_trees(metric, tree_count, leaf_count, seed)
     start = perf_counter()
-    print(start - z)
+    print(f"{start - z:.2f}sec")
     _ = distance_matrix(metric, trees)
     end = perf_counter()
 

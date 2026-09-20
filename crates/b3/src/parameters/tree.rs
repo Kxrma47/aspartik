@@ -7,7 +7,6 @@ use pyo3::{
 	types::PyAny,
 };
 use rand::{RngExt, seq::SliceRandom};
-use rustc_hash::{FxBuildHasher, FxHashSet};
 
 use std::{
 	cmp::{Reverse, max, min},
@@ -1003,94 +1002,6 @@ impl Tree {
 		out.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
 		out
 	}
-
-	fn robinson_foulds(&self, other: &Tree) -> u32 {
-		let mut counter = 0;
-		let mut labels = vec![0; self.num_nodes() as usize];
-		let mut clades = FxHashSet::with_capacity_and_hasher(
-			self.num_nodes() as usize,
-			FxBuildHasher,
-		);
-
-		fn process(
-			node: Node,
-			tree: &Tree,
-			counter: &mut u32,
-			labels: &mut [u32],
-			clades: &mut FxHashSet<(u32, u32)>,
-		) -> (u32, u32, u32) {
-			let Some(internal) = tree.as_internal(node) else {
-				let label = *counter;
-				labels[node.i()] = label;
-				*counter += 1;
-				return (label, label, 1);
-			};
-
-			let (left, right) = tree.children_of(internal);
-			let (left_min, _left_max, left_size) =
-				process(left, tree, counter, labels, clades);
-			let (_right_min, right_max, right_size) =
-				process(right, tree, counter, labels, clades);
-			let size = left_size + right_size;
-
-			if node != *tree.root() {
-				clades.insert((left_min, right_max));
-			}
-
-			(left_min, right_max, size)
-		}
-		process(
-			*self.root(),
-			self,
-			&mut counter,
-			&mut labels,
-			&mut clades,
-		);
-
-		let mut num_shared_clades = 0;
-		fn p_other(
-			node: Node,
-			tree: &Tree,
-			labels: &[u32],
-			clades: &FxHashSet<(u32, u32)>,
-			num_shared: &mut u32,
-		) -> (u32, u32, u32) {
-			let Some(internal) = tree.as_internal(node) else {
-				let label = labels[node.i()];
-				return (label, label, 1);
-			};
-
-			let (left, right) = tree.children_of(internal);
-			let (left_min, left_max, left_size) =
-				p_other(left, tree, labels, clades, num_shared);
-			let (right_min, right_max, right_size) = p_other(
-				right, tree, labels, clades, num_shared,
-			);
-			let size = left_size + right_size;
-
-			let min_val = left_min.min(right_min);
-			let max_val = left_max.max(right_max);
-
-			if node != *tree.root()
-				&& max_val - min_val + 1 == size
-				&& clades.contains(&(min_val, max_val))
-			{
-				*num_shared += 1;
-			}
-
-			(min_val, max_val, size)
-		}
-		p_other(
-			*other.root(),
-			other,
-			&labels,
-			&clades,
-			&mut num_shared_clades,
-		);
-
-		let num_nontrivial = self.num_leaves() - 2;
-		2 * (num_nontrivial - num_shared_clades)
-	}
 }
 
 struct Postorder<'a> {
@@ -1633,13 +1544,5 @@ impl_pyparameter_common!(PyTree, Tree, {
 	/// analysis.
 	fn internal_heights(&self) -> Vec<f64> {
 		self.inner().internal_heights()
-	}
-
-	fn robinson_foulds(&self, other: &PyTree) -> u32 {
-		if std::ptr::eq(self, other) {
-			0
-		} else {
-			self.inner().robinson_foulds(&other.inner())
-		}
 	}
 });

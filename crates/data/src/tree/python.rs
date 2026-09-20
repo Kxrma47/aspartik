@@ -518,6 +518,10 @@ impl PyBinaryTree {
 		)
 	}
 
+	fn robinson_foulds(&self, other: &PyBinaryTree) -> u32 {
+		self.inner.robinson_foulds(&other.inner)
+	}
+
 	fn branch_score(&self, other: &PyBinaryTree) -> Result<f64> {
 		branch_score(&self.inner, &other.inner)
 	}

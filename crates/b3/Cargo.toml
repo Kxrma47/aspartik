@@ -28,7 +28,6 @@ parking_lot = { workspace = true }
 picoarrow = { workspace = true }
 pyo3 = { workspace = true, features = ["anyhow"] }
 rand = { workspace = true, features = ["alloc"] }
-rustc-hash = { workspace = true }
 
 [lints]
 workspace = true
