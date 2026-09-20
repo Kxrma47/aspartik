@@ -725,13 +725,15 @@ impl Tree {
 		);
 		ensure!(roots[0] == self.root.0);
 
-		let mut children = FxHashSet::default();
+		let mut is_child = vec![false; self.num_nodes() as usize];
 		for node in self.internals() {
 			let (left, right) = self.children_of(node);
-			children.insert(left);
-			children.insert(right);
+			is_child[left.i()] = true;
+			is_child[right.i()] = true;
 		}
-		ensure!(children.len() == self.num_nodes() as usize - 1);
+		let child_count: u32 =
+			is_child.into_iter().map(u32::from).sum();
+		ensure!(child_count == self.num_nodes() - 1);
 
 		Ok(())
 	}
