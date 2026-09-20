@@ -44,19 +44,27 @@ impl BinaryTree {
 		let num_edges_usize = num_nodes_usize - 1;
 
 		let internals = num_leaves..num_nodes;
-		let mut prufer =
-			Vec::from_iter(internals.clone().chain(internals));
-		let root = prufer.pop().unwrap();
-		prufer.shuffle(rng);
+		let mut parents = Buffer::repeat(ROOT_PARENT, num_nodes);
+		for (slot, parent) in parents[..num_edges_usize]
+			.iter_mut()
+			.zip(internals.clone().chain(internals))
+		{
+			*slot = parent;
+		}
+		let root = parents[num_edges_usize - 1];
+		parents[..num_edges_usize - 1].shuffle(rng);
 
 		let mut children = Buffer::repeat(ROOT_PARENT, num_edges);
 		let mut remaining = vec![2; num_internals as usize];
 		*remaining.last_mut().unwrap() = 1;
 		let mut unused =
 			BinaryHeap::from_iter((0..num_leaves).map(Reverse));
+		let mut removed = Vec::with_capacity(num_edges_usize);
 
-		for parent in prufer {
+		for step in 0..num_edges_usize - 1 {
+			let parent = parents[step];
 			let child = unused.pop().unwrap().0;
+			removed.push(child);
 			let offset = ((parent - num_leaves) * 2) as usize;
 			if children[offset] == ROOT_PARENT {
 				children[offset] = child;
@@ -72,7 +80,15 @@ impl BinaryTree {
 		}
 
 		let child = unused.pop().unwrap().0;
+		removed.push(child);
 		children[(root - num_leaves) as usize * 2 + 1] = child;
+		for index in 0..num_edges_usize {
+			while removed[index] != index as u32 {
+				let target = removed[index] as usize;
+				parents.swap(index, target);
+				removed.swap(index, target);
+			}
+		}
 
 		let mut node_names = ArrayUtf8::<Nullable>::new();
 		let mut node_metadata = ArrayUtf8::<Nullable>::new();
@@ -86,15 +102,16 @@ impl BinaryTree {
 		}
 		let edge_lengths = Buffer::repeat(0.0, num_edges);
 
-		Self::canonical(
+		Ok(Self {
 			num_leaves,
 			root,
 			children,
+			parents,
 			edge_lengths,
 			node_names,
 			node_metadata,
 			edge_metadata,
-		)
+		})
 	}
 
 	#[allow(clippy::too_many_arguments)]
