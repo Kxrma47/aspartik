@@ -28,31 +28,31 @@ pub struct Leaf(u32);
 pub struct Internal(u32);
 
 impl Node {
-	pub fn index(self) -> u32 {
+	pub fn u32(self) -> u32 {
 		self.0
 	}
 
-	fn i(self) -> usize {
+	pub fn usize(self) -> usize {
 		self.0 as usize
 	}
 }
 
 impl Leaf {
-	pub fn index(self) -> u32 {
+	pub fn u32(self) -> u32 {
 		self.0
 	}
 
-	fn i(self) -> usize {
+	pub fn usize(self) -> usize {
 		self.0 as usize
 	}
 }
 
 impl Internal {
-	pub fn index(self) -> u32 {
+	pub fn u32(self) -> u32 {
 		self.0
 	}
 
-	fn i(self) -> usize {
+	pub fn usize(self) -> usize {
 		self.0 as usize
 	}
 }

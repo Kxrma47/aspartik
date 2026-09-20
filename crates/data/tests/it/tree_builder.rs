@@ -50,8 +50,8 @@ fn canonical_edges(tree: &TreeBuilder) -> Vec<(u32, u32, Option<u64>, String)> {
 			let parent = tree.parent_of(child)?;
 			let edge = tree.edge(child);
 			Some((
-				parent.index(),
-				child.index(),
+				parent.u32(),
+				child.u32(),
 				edge.length.map(f64::to_bits),
 				edge.attributes.clone(),
 			))

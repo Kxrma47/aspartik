@@ -90,7 +90,7 @@ fn node(tree: &BinaryTree, index: u32) -> Node {
 
 fn topology(tree: &BinaryTree) -> Vec<[u32; 2]> {
 	tree.internals()
-		.map(|internal| tree.children_of(internal).map(Node::index))
+		.map(|internal| tree.children_of(internal).map(Node::u32))
 		.collect()
 }
 
@@ -98,14 +98,14 @@ fn assert_random_tree(tree: &BinaryTree, num_leaves: u32) {
 	assert_eq!(tree.num_leaves(), num_leaves);
 	assert_eq!(tree.num_nodes(), num_leaves * 2 - 1);
 	assert_eq!(tree.num_edges(), num_leaves * 2 - 2);
-	assert_eq!(tree.root().index(), num_leaves * 2 - 2);
+	assert_eq!(tree.root().u32(), num_leaves * 2 - 2);
 	assert_eq!(tree.preorder().count(), tree.num_nodes() as usize);
 	assert_eq!(tree.postorder().count(), tree.num_nodes() as usize);
 
 	let mut seen = vec![false; tree.num_nodes() as usize];
 	for node in tree.preorder() {
-		assert!(!seen[node.index() as usize]);
-		seen[node.index() as usize] = true;
+		assert!(!seen[node.usize()]);
+		seen[node.usize()] = true;
 		assert_eq!(tree.name(node), None);
 		assert_eq!(tree.node_metadata(node), None);
 
@@ -134,7 +134,7 @@ fn internal(tree: &BinaryTree, index: u32) -> Internal {
 }
 
 fn indices(nodes: impl Iterator<Item = Node>) -> Vec<u32> {
-	nodes.map(Node::index).collect()
+	nodes.map(Node::u32).collect()
 }
 
 fn indexed_tree(source: &str) -> Result<BinaryTree> {
@@ -151,7 +151,7 @@ fn indexed_tree(source: &str) -> Result<BinaryTree> {
 		let index = name.parse::<u32>()?;
 		ensure!(index < num_leaves);
 		ensure!(!seen[index as usize]);
-		mapping[old_node.index() as usize] = index;
+		mapping[old_node.usize()] = index;
 		seen[index as usize] = true;
 		node_names[index as usize] = name.to_owned();
 	}
@@ -162,7 +162,7 @@ fn indexed_tree(source: &str) -> Result<BinaryTree> {
 		.filter_map(|node| source.as_internal(node))
 		.collect::<Vec<_>>();
 	for (offset, internal) in internal_order.into_iter().enumerate() {
-		mapping[internal.index() as usize] = num_leaves + offset as u32;
+		mapping[internal.usize()] = num_leaves + offset as u32;
 		if let Some(name) = source.name(internal.into()) {
 			node_names[(num_leaves + offset as u32) as usize] =
 				name.to_owned();
@@ -171,16 +171,16 @@ fn indexed_tree(source: &str) -> Result<BinaryTree> {
 
 	let mut children = vec![0; source.num_internals() as usize * 2];
 	for internal in source.internals() {
-		let mapped = mapping[internal.index() as usize];
+		let mapped = mapping[internal.usize()];
 		let offset = (mapped - num_leaves) as usize * 2;
 		let [left, right] = source.children_of(internal);
-		children[offset] = mapping[left.index() as usize];
-		children[offset + 1] = mapping[right.index() as usize];
+		children[offset] = mapping[left.usize()];
+		children[offset + 1] = mapping[right.usize()];
 	}
-	let root = mapping[source.root().index() as usize];
+	let root = mapping[source.root().usize()];
 	let mut edge_lengths = vec![0.0; source.num_edges() as usize];
 	for old_child in source.edges() {
-		let child = mapping[old_child.index() as usize];
+		let child = mapping[old_child.usize()];
 		let edge = child - u32::from(child > root);
 		edge_lengths[edge as usize] =
 			source.edge_length(old_child).unwrap();
@@ -201,19 +201,19 @@ fn clades(tree: &BinaryTree) -> BTreeSet<Vec<u32>> {
 
 	for node in tree.postorder() {
 		if let Some(leaf) = tree.as_leaf(node) {
-			descendants[node.index() as usize] = vec![leaf.index()];
+			descendants[node.usize()] = vec![leaf.u32()];
 			continue;
 		}
 
 		let internal = tree.as_internal(node).unwrap();
 		let [left, right] = tree.children_of(internal);
-		let mut leaves = descendants[left.index() as usize].clone();
-		leaves.extend_from_slice(&descendants[right.index() as usize]);
+		let mut leaves = descendants[left.usize()].clone();
+		leaves.extend_from_slice(&descendants[right.usize()]);
 		leaves.sort_unstable();
 		if internal != tree.root() {
 			clades.insert(leaves.clone());
 		}
-		descendants[node.index() as usize] = leaves;
+		descendants[node.usize()] = leaves;
 	}
 
 	clades
@@ -224,15 +224,12 @@ fn branch_clades(tree: &BinaryTree) -> BTreeMap<Vec<u32>, f64> {
 	let mut clades = BTreeMap::new();
 	for node in tree.postorder() {
 		let leaves = if let Some(leaf) = tree.as_leaf(node) {
-			vec![leaf.index()]
+			vec![leaf.u32()]
 		} else {
 			let internal = tree.as_internal(node).unwrap();
 			let [left, right] = tree.children_of(internal);
-			let mut leaves =
-				descendants[left.index() as usize].clone();
-			leaves.extend_from_slice(
-				&descendants[right.index() as usize],
-			);
+			let mut leaves = descendants[left.usize()].clone();
+			leaves.extend_from_slice(&descendants[right.usize()]);
 			leaves.sort_unstable();
 			leaves
 		};
@@ -242,7 +239,7 @@ fn branch_clades(tree: &BinaryTree) -> BTreeMap<Vec<u32>, f64> {
 				tree.edge_length(node).unwrap(),
 			);
 		}
-		descendants[node.index() as usize] = leaves;
+		descendants[node.usize()] = leaves;
 	}
 	clades
 }
@@ -282,10 +279,8 @@ fn lca_depths(tree: &BinaryTree) -> Vec<u32> {
 	for node in tree.preorder() {
 		if let Some(internal) = tree.as_internal(node) {
 			let [left, right] = tree.children_of(internal);
-			depths[left.index() as usize] =
-				depths[node.index() as usize] + 1;
-			depths[right.index() as usize] =
-				depths[node.index() as usize] + 1;
+			depths[left.usize()] = depths[node.usize()] + 1;
+			depths[right.usize()] = depths[node.usize()] + 1;
 		}
 	}
 
@@ -294,21 +289,17 @@ fn lca_depths(tree: &BinaryTree) -> Vec<u32> {
 		for second in first + 1..num_leaves {
 			let mut left = node(tree, first as u32);
 			let mut right = node(tree, second as u32);
-			while depths[left.index() as usize]
-				> depths[right.index() as usize]
-			{
+			while depths[left.usize()] > depths[right.usize()] {
 				left = tree.parent_of(left).unwrap().into();
 			}
-			while depths[right.index() as usize]
-				> depths[left.index() as usize]
-			{
+			while depths[right.usize()] > depths[left.usize()] {
 				right = tree.parent_of(right).unwrap().into();
 			}
 			while left != right {
 				left = tree.parent_of(left).unwrap().into();
 				right = tree.parent_of(right).unwrap().into();
 			}
-			let depth = depths[left.index() as usize];
+			let depth = depths[left.usize()];
 			lca_depths[first * num_leaves + second] = depth;
 			lca_depths[second * num_leaves + first] = depth;
 		}
@@ -431,30 +422,27 @@ fn two_leaf_tree() -> Result<()> {
 	assert_eq!(tree.num_leaves(), 2);
 	assert_eq!(tree.num_internals(), 1);
 	assert_eq!(tree.num_edges(), 2);
-	assert_eq!(tree.root().index(), 2);
+	assert_eq!(tree.root().u32(), 2);
 	assert_eq!(
-		tree.nodes().map(Node::index).collect::<Vec<_>>(),
+		tree.nodes().map(Node::u32).collect::<Vec<_>>(),
 		vec![0, 1, 2]
 	);
 	assert_eq!(
-		tree.leaves().map(|leaf| leaf.index()).collect::<Vec<_>>(),
+		tree.leaves().map(|leaf| leaf.u32()).collect::<Vec<_>>(),
 		vec![0, 1]
 	);
 	assert_eq!(
 		tree.internals()
-			.map(|internal| internal.index())
+			.map(|internal| internal.u32())
 			.collect::<Vec<_>>(),
 		vec![2]
 	);
-	assert_eq!(
-		tree.edges().map(Node::index).collect::<Vec<_>>(),
-		vec![0, 1]
-	);
+	assert_eq!(tree.edges().map(Node::u32).collect::<Vec<_>>(), vec![0, 1]);
 	assert!(tree.is_leaf(node(&tree, 0)));
 	assert!(!tree.is_leaf(node(&tree, 2)));
 	assert!(tree.is_internal(node(&tree, 2)));
 	assert!(!tree.is_internal(node(&tree, 0)));
-	assert_eq!(tree.as_leaf(node(&tree, 0)).unwrap().index(), 0);
+	assert_eq!(tree.as_leaf(node(&tree, 0)).unwrap().u32(), 0);
 	assert_eq!(tree.as_leaf(node(&tree, 2)), None);
 	assert_eq!(tree.as_internal(node(&tree, 2)), Some(tree.root()));
 	assert_eq!(tree.as_internal(node(&tree, 0)), None);
@@ -473,7 +461,7 @@ fn two_leaf_tree() -> Result<()> {
 	assert_eq!(tree.node_metadata(node(&tree, 0)), None);
 	assert_eq!(tree.edge_metadata(node(&tree, 0)), None);
 	assert_eq!(tree.edge_metadata(node(&tree, 2)), None);
-	assert_eq!(tree.leaf_by_name("B").unwrap().index(), 1);
+	assert_eq!(tree.leaf_by_name("B").unwrap().u32(), 1);
 	assert_eq!(indices(tree.preorder()), vec![2, 0, 1]);
 	assert_eq!(indices(tree.postorder()), vec![0, 1, 2]);
 
@@ -495,7 +483,7 @@ fn constructor_accepts_owned_buffers() -> Result<()> {
 		nulls(2),
 	)?;
 
-	assert_eq!(tree.children_of(tree.root()).map(Node::index), [1, 0]);
+	assert_eq!(tree.children_of(tree.root()).map(Node::u32), [1, 0]);
 	assert_eq!(tree.edge_length(node(&tree, 0)), Some(1.0));
 	assert_eq!(tree.edge_length(node(&tree, 1)), Some(2.0));
 	tree.validate()?;
@@ -530,11 +518,11 @@ fn canonical_constructor_relabels_internals() -> Result<()> {
 	)?;
 
 	tree.validate()?;
-	assert_eq!(tree.root().index(), 6);
+	assert_eq!(tree.root().u32(), 6);
 	assert_eq!(
 		tree.postorder()
 			.filter(|&node| tree.is_internal(node))
-			.map(Node::index)
+			.map(Node::u32)
 			.collect::<Vec<_>>(),
 		vec![4, 5, 6]
 	);
@@ -577,7 +565,7 @@ fn random_canonical_constructor() {
 			.collect::<Vec<_>>();
 		let canonical = BinaryTree::canonical(
 			num_leaves,
-			original.root().index(),
+			original.root().u32(),
 			Buffer::from_slice(&children),
 			Buffer::from_slice(&lengths),
 			names(&labels),
@@ -594,7 +582,7 @@ fn random_canonical_constructor() {
 			canonical
 				.postorder()
 				.filter(|&node| canonical.is_internal(node))
-				.map(Node::index)
+				.map(Node::u32)
 				.collect::<Vec<_>>(),
 			(num_leaves..canonical.num_nodes()).collect::<Vec<_>>()
 		);
@@ -661,7 +649,7 @@ fn explicit_nonterminal_root() -> Result<()> {
 		nulls(6),
 	)?;
 
-	assert_eq!(tree.root().index(), 4);
+	assert_eq!(tree.root().u32(), 4);
 	assert_eq!(
 		tree.children_of(tree.root()),
 		[node(&tree, 5), node(&tree, 6)]
