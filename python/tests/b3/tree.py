@@ -126,6 +126,46 @@ def test_ola(rng: RNG):
     assert tree.ola() == [0, -1, 1, -3]
 
 
+def test_depth(rng: RNG):
+    # TODO: fixture for example trees
+    values = {
+        "ago": 4,
+        "cal": 6,
+        "cgl": 3,
+        "ctr": 6,
+        "dha": 4,
+        "kla": 4,
+        "kwa": 4,
+        "lel": 5,
+        "pgu": 4,
+        "pst": 4,
+        "sba": 5,
+        "sca": 4,
+        "sce": 8,
+        "skl": 4,
+        "sku": 6,
+        "smi": 7,
+        "spa": 8,
+        "yli": 2,
+    }
+    tree = Tree(list(values.keys()), rng)
+    tree.load_newick(
+        NewickTree.from_newick(
+            "((yli:1,(((lel:1,(cal:1,ctr:1):1):1,pst:1):1,(pgu:1,dha:1):1):1):1,(((kla:1,ago:1):1,(skl:1,kwa:1):1):1,(cgl:1,(sca:1,(sba:1,(((sce:1,spa:1):1,smi:1):1,sku:1):1):1):1):1):1):0;"
+        )
+    )
+
+    for name, value in values.items():
+        leaf = tree.leaf_by_name(name)
+        assert leaf is not None
+        assert tree.depth(leaf) == value
+
+
+def test_depth_root(rng: RNG):
+    tree = Tree([str(i) for i in range(5)], rng)
+    assert tree.depth(tree.root) == 0
+
+
 def test_mrca(rng: RNG):
     tree = Tree([str(i) for i in range(4)], rng)
     newick = NewickTree.from_newick("((0:0,1:0):0,(2:0,3:0):0);")

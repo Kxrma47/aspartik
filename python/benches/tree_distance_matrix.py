@@ -77,8 +77,10 @@ def random_trees(
 def run_benchmark(
     tree_count, leaf_count: int, seed: int, metric: Metric = "rf"
 ) -> float:
+    z = perf_counter()
     trees = random_trees(metric, tree_count, leaf_count, seed)
     start = perf_counter()
+    print(start - z)
     _ = distance_matrix(metric, trees)
     end = perf_counter()
 

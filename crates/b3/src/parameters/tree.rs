@@ -836,22 +836,34 @@ impl Tree {
 		}
 	}
 
-	pub fn mrca(&self, a: Node, b: Node) -> Internal {
-		let mut ancestors = FxHashSet::default();
-		let mut curr = a;
-		ancestors.insert(curr);
-		while let Some(parent) = self.parent_of(curr) {
-			curr = *parent;
-			ancestors.insert(curr);
+	pub fn depth(&self, mut node: Node) -> u32 {
+		let mut out = 0;
+		while let Some(parent) = self.parent_of(node) {
+			out += 1;
+			node = *parent;
+		}
+		out
+	}
+
+	pub fn mrca(&self, mut a: Node, mut b: Node) -> Internal {
+		let mut depth_a = self.depth(a);
+		let mut depth_b = self.depth(b);
+
+		while depth_a > depth_b {
+			a = *self.parent_of(a).expect("unreachable");
+			depth_a -= 1;
+		}
+		while depth_b > depth_a {
+			b = *self.parent_of(b).expect("unreachable");
+			depth_b -= 1;
 		}
 
-		let mut curr = b;
-		while !ancestors.contains(&curr) {
-			curr = *self
-				.parent_of(curr)
-				.expect("unreachable: no common ancestor");
+		while a != b {
+			a = *self.parent_of(a).expect("unreachable");
+			b = *self.parent_of(b).expect("unreachable");
 		}
-		Internal(curr.0)
+
+		Internal(a.0)
 	}
 
 	pub fn is_grandparent(&self, node: Internal) -> bool {
@@ -1481,6 +1493,10 @@ impl_pyparameter_common!(PyTree, Tree, {
 	/// Returns the parent of `node`, or `None` for the root node
 	fn parent_of(&self, node: Node) -> Result<Option<Internal>> {
 		Ok(self.inner().parent_of(node))
+	}
+
+	fn depth(&self, node: Node) -> u32 {
+		self.inner().depth(node)
 	}
 
 	/// The most recent common ancestor of `a` and `b`
