@@ -70,14 +70,14 @@ impl<T> IndexMut<usize> for EpochBuf<T> {
 }
 
 impl<T: Default + Copy> From<Vec<T>> for EpochBuf<T> {
-	fn from(value: Vec<T>) -> Self {
-		let len = value.len();
-		let mut values = vec![T::default(); len * 2].into_boxed_slice();
-		values[..len].copy_from_slice(&value);
-		values[len..].copy_from_slice(&value);
+	fn from(mut values: Vec<T>) -> Self {
+		let len = values.len();
+		values.reserve_exact(len * 2);
+		values.resize(len * 2, T::default());
+		values.copy_within(..len, len);
 		Self {
 			len,
-			values,
+			values: values.into_boxed_slice(),
 			indices: Vec::new(),
 		}
 	}
