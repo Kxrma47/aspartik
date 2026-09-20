@@ -1074,6 +1074,7 @@ fn random_binary_tree_rejects_invalid_sizes() {
 	let mut rng = Pcg64::seed_from_u64(0);
 	assert!(BinaryTree::random(0, &mut rng).is_err());
 	assert!(BinaryTree::random(1, &mut rng).is_err());
+	assert!(BinaryTree::random(u32::MAX / 2 + 1, &mut rng).is_err());
 	assert!(BinaryTree::random(u32::MAX, &mut rng).is_err());
 }
 

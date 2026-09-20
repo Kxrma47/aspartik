@@ -37,19 +37,8 @@ impl BinaryTree {
 	}
 
 	pub fn random<R: Rng>(num_leaves: u32, rng: &mut R) -> Result<Self> {
-		ensure!(
-			num_leaves >= 2,
-			"Expected at least two leaves, got {num_leaves}"
-		);
-
-		let num_nodes = num_leaves
-			.checked_mul(2)
-			.and_then(|value| value.checked_sub(1))
-			.ok_or_else(|| {
-				anyhow!(
-					"The number of nodes does not fit in u32"
-				)
-			})?;
+		Self::validate_num_leaves(num_leaves)?;
+		let num_nodes = num_leaves * 2 - 1;
 		let num_internals = num_leaves - 1;
 		let num_nodes_usize = usize::try_from(num_nodes)?;
 		let num_edges = num_nodes - 1;
