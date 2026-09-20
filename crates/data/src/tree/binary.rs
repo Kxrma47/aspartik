@@ -141,7 +141,7 @@ impl BinaryTree {
 		Ok(tree)
 	}
 
-	pub fn canonical(
+	pub fn from_children(
 		num_leaves: u32,
 		root: u32,
 		children: Buffer<u32>,
@@ -239,6 +239,123 @@ impl BinaryTree {
 			if new < num_edges as usize {
 				lengths[new] = tree.edge_length(old).unwrap();
 				edge_metadata.push(tree.edge_metadata(old))?;
+			}
+		}
+		Self::new(
+			num_leaves,
+			num_nodes - 1,
+			children,
+			parents,
+			lengths,
+			names,
+			node_metadata,
+			edge_metadata,
+		)
+	}
+
+	pub fn canonical(&self) -> Result<Self> {
+		let mut leaves = Vec::with_capacity(self.num_leaves as usize);
+		for leaf in self.leaves() {
+			let name = self.name(leaf.into()).ok_or_else(|| {
+				anyhow!("Leaf {} has no name", leaf.u32())
+			})?;
+			ensure!(
+				!name.is_empty(),
+				"Leaf {} has no name",
+				leaf.u32()
+			);
+			leaves.push((name, leaf.u32()));
+		}
+		leaves.sort_unstable_by(|left, right| left.0.cmp(right.0));
+		for pair in leaves.windows(2) {
+			ensure!(
+				pair[0].0 != pair[1].0,
+				"Duplicate leaf name: {}",
+				pair[0].0
+			);
+		}
+
+		let num_leaves = self.num_leaves;
+		let num_nodes = self.num_nodes();
+		let num_edges = self.num_edges();
+		let mut mapping = vec![0; num_nodes as usize];
+		let mut order = Vec::with_capacity(num_nodes as usize);
+		let mut minima = vec![0; num_nodes as usize];
+		for (index, &(_, old)) in leaves.iter().enumerate() {
+			minima[old as usize] = index as u32;
+			order.push(old);
+		}
+		for node in self.postorder() {
+			if let Some(internal) = self.as_internal(node) {
+				let [left, right] = self.children_of(internal);
+				minima[node.usize()] = minima[left.usize()]
+					.min(minima[right.usize()]);
+			}
+		}
+		let ordered_children = |internal| {
+			let [left, right] = self.children_of(internal);
+			if (self.is_internal(left), minima[left.usize()])
+				< (
+					self.is_internal(right),
+					minima[right.usize()],
+				) {
+				[left, right]
+			} else {
+				[right, left]
+			}
+		};
+
+		let mut stack = vec![(Node(self.root), false)];
+		while let Some((node, visited)) = stack.pop() {
+			let Some(internal) = self.as_internal(node) else {
+				continue;
+			};
+			if visited {
+				order.push(node.u32());
+				continue;
+			}
+			let [left, right] = ordered_children(internal);
+			stack.push((node, true));
+			stack.push((right, false));
+			stack.push((left, false));
+		}
+		for (index, &old) in order.iter().enumerate() {
+			mapping[old as usize] = index as u32;
+		}
+
+		let mut children = Buffer::repeat(0, num_edges);
+		let mut parents = Buffer::repeat(ROOT_PARENT, num_nodes);
+		for (index, &old) in
+			order[num_leaves as usize..].iter().enumerate()
+		{
+			let parent = num_leaves + index as u32;
+			let [left, right] = ordered_children(Internal(old));
+			for (slot, child) in
+				[left, right].into_iter().enumerate()
+			{
+				let child = mapping[child.usize()];
+				children[index * 2 + slot] = child;
+				parents[child as usize] = parent;
+			}
+		}
+
+		let mut lengths = Buffer::repeat(0.0, num_edges);
+		let mut names = ArrayUtf8::<Nullable>::with_capacity(
+			num_nodes as usize,
+		);
+		let mut node_metadata = ArrayUtf8::<Nullable>::with_capacity(
+			num_nodes as usize,
+		);
+		let mut edge_metadata = ArrayUtf8::<Nullable>::with_capacity(
+			num_edges as usize,
+		);
+		for (index, &old) in order.iter().enumerate() {
+			let old = Node(old);
+			names.push(self.name(old))?;
+			node_metadata.push(self.node_metadata(old))?;
+			if index < num_edges as usize {
+				lengths[index] = self.edge_length(old).unwrap();
+				edge_metadata.push(self.edge_metadata(old))?;
 			}
 		}
 		Self::new(

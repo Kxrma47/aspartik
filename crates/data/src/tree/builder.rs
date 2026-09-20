@@ -559,7 +559,7 @@ impl TryFrom<TreeBuilder> for BinaryTree {
 			edge_metadata.push(attributes)?;
 		}
 
-		Self::canonical(
+		Self::from_children(
 			num_leaves,
 			root,
 			Buffer::from_slice(&children),

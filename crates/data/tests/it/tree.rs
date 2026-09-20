@@ -492,7 +492,7 @@ fn constructor_accepts_owned_buffers() -> Result<()> {
 
 #[test]
 fn canonical_constructor_relabels_internals() -> Result<()> {
-	let tree = BinaryTree::canonical(
+	let tree = BinaryTree::from_children(
 		4,
 		4,
 		Buffer::from_slice(&[5, 6, 0, 1, 2, 3]),
@@ -543,6 +543,157 @@ fn canonical_constructor_relabels_internals() -> Result<()> {
 }
 
 #[test]
+fn canonical_names_and_topology() -> Result<()> {
+	let first = parse_newick(
+		"((B:2[&edge=B],A[&node=A]:1)AB[&node=AB]:5[&edge=AB],(D:4,C:3)CD:6)ROOT;",
+	)?
+	.into_binary()?
+	.canonical()?;
+	let second = parse_newick(
+		"((C:3,D:4)CD:6,(A[&node=A]:1,B:2[&edge=B])AB[&node=AB]:5[&edge=AB])ROOT;",
+	)?
+	.into_binary()?
+	.canonical()?;
+
+	assert_eq!(first.to_newick()?, second.to_newick()?);
+	assert_eq!(first.to_newick()?, first.canonical()?.to_newick()?);
+	assert_eq!(first.root().u32(), 6);
+	assert_eq!(
+		first.leaves()
+			.map(|leaf| first.name(leaf.into()).unwrap())
+			.collect::<Vec<_>>(),
+		["A", "B", "C", "D"]
+	);
+	assert_eq!(
+		first.edge_length(first.leaf_by_name("B").unwrap().into()),
+		Some(2.0)
+	);
+	assert_eq!(
+		first.edge_metadata(first.leaf_by_name("B").unwrap().into()),
+		Some("[&edge=B]")
+	);
+	assert_eq!(
+		first.node_metadata(first.leaf_by_name("A").unwrap().into()),
+		Some("[&node=A]")
+	);
+	assert_eq!(
+		first.postorder()
+			.filter(|&node| first.is_internal(node))
+			.map(Node::u32)
+			.collect::<Vec<_>>(),
+		vec![4, 5, 6]
+	);
+	Ok(())
+}
+
+#[test]
+fn canonical_rejects_missing_and_duplicate_names() -> Result<()> {
+	let unnamed = BinaryTree::random(3, &mut Pcg64::seed_from_u64(4))?;
+	assert!(unnamed.canonical().is_err());
+	for labels in [["A", "", "root"], ["A", "A", "root"]] {
+		let tree = tree(
+			2,
+			vec![0, 1],
+			vec![1.0, 2.0],
+			str_names(&labels),
+		)?;
+		assert!(tree.canonical().is_err());
+	}
+	Ok(())
+}
+
+#[test]
+fn canonical_is_independent_of_child_order_and_internal_ids() {
+	arbtest(|u: &mut Unstructured<'_>| {
+		let num_leaves = u.int_in_range(2_u32..=80)?;
+		let original = arbitrary_tree(u, num_leaves)?;
+		let mut children = topology(&original)
+			.into_iter()
+			.flatten()
+			.collect::<Vec<_>>();
+		for pair in children.as_chunks_mut::<2>().0 {
+			pair.swap(0, 1);
+		}
+		let lengths = original
+			.edges()
+			.map(|child| original.edge_length(child).unwrap())
+			.collect::<Vec<_>>();
+		let labels = original
+			.nodes()
+			.map(|node| {
+				original.name(node)
+					.unwrap_or_default()
+					.to_owned()
+			})
+			.collect::<Vec<_>>();
+		let swapped = tree_with_root(
+			num_leaves,
+			original.root().u32(),
+			children,
+			lengths,
+			names(&labels),
+		)
+		.unwrap();
+		let first = original.canonical().unwrap();
+		let second = swapped.canonical().unwrap();
+		let reparsed = parse_newick(&original.to_newick().unwrap())
+			.unwrap()
+			.into_binary()
+			.unwrap()
+			.canonical()
+			.unwrap();
+		assert_eq!(
+			first.to_newick().unwrap(),
+			second.to_newick().unwrap()
+		);
+		assert_eq!(
+			first.to_newick().unwrap(),
+			reparsed.to_newick().unwrap()
+		);
+		assert_eq!(
+			first.to_newick().unwrap(),
+			first.canonical().unwrap().to_newick().unwrap()
+		);
+		for internal in first.internals() {
+			let [left, right] = first.children_of(internal);
+			assert!(left.u32() < right.u32());
+		}
+		first.validate().unwrap();
+		Ok(())
+	});
+}
+
+#[test]
+fn canonical_deep_ladder() -> Result<()> {
+	const NUM_LEAVES: u32 = 10_000;
+	let mut children = Vec::with_capacity((NUM_LEAVES as usize - 1) * 2);
+	children.extend([0, 1]);
+	for parent in NUM_LEAVES + 1..NUM_LEAVES * 2 - 1 {
+		children.extend([parent - NUM_LEAVES + 1, parent - 1]);
+	}
+	let labels = (0..NUM_LEAVES)
+		.map(|leaf| format!("leaf_{:05}", NUM_LEAVES - leaf))
+		.chain((NUM_LEAVES..NUM_LEAVES * 2 - 1).map(|_| String::new()))
+		.collect::<Vec<_>>();
+	let tree = tree(
+		NUM_LEAVES,
+		children,
+		vec![1.0; (NUM_LEAVES as usize - 1) * 2],
+		names(&labels),
+	)?;
+	let canonical = tree.canonical()?;
+	assert_eq!(canonical.num_nodes(), tree.num_nodes());
+	assert_eq!(
+		canonical.name(canonical.leaves().next().unwrap().into()),
+		Some("leaf_00001")
+	);
+	assert_eq!(canonical.root().u32(), canonical.num_nodes() - 1);
+	assert_eq!(canonical.robinson_foulds(&canonical), 0);
+	canonical.validate()?;
+	Ok(())
+}
+
+#[test]
 fn random_canonical_constructor() {
 	arbtest(|u: &mut Unstructured<'_>| {
 		let num_leaves = u.int_in_range(2_u32..=100)?;
@@ -563,7 +714,7 @@ fn random_canonical_constructor() {
 					.to_owned()
 			})
 			.collect::<Vec<_>>();
-		let canonical = BinaryTree::canonical(
+		let canonical = BinaryTree::from_children(
 			num_leaves,
 			original.root().u32(),
 			Buffer::from_slice(&children),
@@ -741,7 +892,7 @@ fn metadata_roundtrip() -> Result<()> {
 
 #[test]
 fn constructor_rejects_invalid_layouts() {
-	assert!(BinaryTree::canonical(
+	assert!(BinaryTree::from_children(
 		1,
 		0,
 		Buffer::from_slice(&[]),
@@ -757,7 +908,7 @@ fn constructor_rejects_invalid_layouts() {
 		(vec![0, 1], vec![1.0], vec!["A", "B", ""]),
 		(vec![0, 1], vec![1.0, 1.0], vec!["A", "B"]),
 	] {
-		assert!(BinaryTree::canonical(
+		assert!(BinaryTree::from_children(
 			2,
 			2,
 			Buffer::from_slice(&children),
@@ -769,7 +920,7 @@ fn constructor_rejects_invalid_layouts() {
 		.is_err());
 	}
 
-	assert!(BinaryTree::canonical(
+	assert!(BinaryTree::from_children(
 		2,
 		0,
 		Buffer::from_slice(&[0, 1]),
@@ -779,7 +930,7 @@ fn constructor_rejects_invalid_layouts() {
 		nulls(2),
 	)
 	.is_err());
-	assert!(BinaryTree::canonical(
+	assert!(BinaryTree::from_children(
 		2,
 		3,
 		Buffer::from_slice(&[0, 1]),
@@ -789,7 +940,7 @@ fn constructor_rejects_invalid_layouts() {
 		nulls(2),
 	)
 	.is_err());
-	assert!(BinaryTree::canonical(
+	assert!(BinaryTree::from_children(
 		2,
 		2,
 		Buffer::from_slice(&[0, 1]),
@@ -799,7 +950,7 @@ fn constructor_rejects_invalid_layouts() {
 		nulls(2),
 	)
 	.is_err());
-	assert!(BinaryTree::canonical(
+	assert!(BinaryTree::from_children(
 		2,
 		2,
 		Buffer::from_slice(&[0, 1]),
@@ -813,7 +964,7 @@ fn constructor_rejects_invalid_layouts() {
 	for children in [vec![0, 3], vec![0, 2], vec![0, 0], vec![0, 3, 1, 2]] {
 		let num_leaves = if children.len() == 2 { 2 } else { 3 };
 		let num_nodes = num_leaves * 2 - 1;
-		assert!(BinaryTree::canonical(
+		assert!(BinaryTree::from_children(
 			num_leaves,
 			num_nodes - 1,
 			Buffer::from_slice(&children),
