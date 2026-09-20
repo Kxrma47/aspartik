@@ -27,7 +27,6 @@ arbitrary = "1.4"
 arbtest = "0.3.2"
 blake3 = "1.8"
 bytemuck = "1.25"
-bytes = "1.12"
 computare-buffer = { git = "https://github.com/kaathewisegit/computare", version = "0.1.0-alpha.0" }
 computare-core = { git = "https://github.com/kaathewisegit/computare", version = "0.1.0-alpha.0" }
 computare-distributions = { git = "https://github.com/kaathewisegit/computare", version = "0.1.0-alpha.0" }
