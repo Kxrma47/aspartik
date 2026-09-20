@@ -1,7 +1,6 @@
 use anyhow::{Result, anyhow, ensure};
 use picoarrow::array::{Array, ArrayUtf8, Nullable};
 use rand::{Rng, seq::SliceRandom};
-use rustc_hash::{FxBuildHasher, FxHashSet};
 
 use std::{
 	cmp::{Reverse, max, min},
@@ -554,92 +553,7 @@ impl BinaryTree {
 	}
 
 	pub fn robinson_foulds(&self, other: &Self) -> u32 {
-		let mut counter = 0;
-		let mut labels = vec![0; self.num_nodes() as usize];
-		let mut clades = FxHashSet::with_capacity_and_hasher(
-			self.num_nodes() as usize,
-			FxBuildHasher,
-		);
-
-		fn process(
-			node: Node,
-			tree: &BinaryTree,
-			counter: &mut u32,
-			labels: &mut [u32],
-			clades: &mut FxHashSet<(u32, u32)>,
-		) -> (u32, u32, u32) {
-			let Some(internal) = tree.as_internal(node) else {
-				let label = *counter;
-				labels[node.i()] = label;
-				*counter += 1;
-				return (label, label, 1);
-			};
-
-			let [left, right] = tree.children_of(internal);
-			let (left_min, _left_max, left_size) =
-				process(left, tree, counter, labels, clades);
-			let (_right_min, right_max, right_size) =
-				process(right, tree, counter, labels, clades);
-			let size = left_size + right_size;
-
-			if node != tree.root().into() {
-				clades.insert((left_min, right_max));
-			}
-
-			(left_min, right_max, size)
-		}
-		process(
-			self.root().into(),
-			self,
-			&mut counter,
-			&mut labels,
-			&mut clades,
-		);
-
-		let mut num_shared_clades = 0;
-		fn process_other(
-			node: Node,
-			tree: &BinaryTree,
-			labels: &[u32],
-			clades: &FxHashSet<(u32, u32)>,
-			num_shared: &mut u32,
-		) -> (u32, u32, u32) {
-			let Some(internal) = tree.as_internal(node) else {
-				let label = labels[node.i()];
-				return (label, label, 1);
-			};
-
-			let [left, right] = tree.children_of(internal);
-			let (left_min, left_max, left_size) = process_other(
-				left, tree, labels, clades, num_shared,
-			);
-			let (right_min, right_max, right_size) = process_other(
-				right, tree, labels, clades, num_shared,
-			);
-			let size = left_size + right_size;
-
-			let min_val = left_min.min(right_min);
-			let max_val = left_max.max(right_max);
-
-			if node != tree.root().into()
-				&& max_val - min_val + 1 == size
-				&& clades.contains(&(min_val, max_val))
-			{
-				*num_shared += 1;
-			}
-
-			(min_val, max_val, size)
-		}
-		process_other(
-			other.root().into(),
-			other,
-			&labels,
-			&clades,
-			&mut num_shared_clades,
-		);
-
-		let num_nontrivial = self.num_leaves() - 2;
-		2 * (num_nontrivial - num_shared_clades)
+		super::distance::robinson_foulds(self, other)
 	}
 
 	pub fn triplet_distance(&self, other: &Self) -> u128 {

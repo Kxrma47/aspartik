@@ -878,6 +878,7 @@ fn deep_ladder_uses_iterative_traversal() -> Result<()> {
 	assert_eq!(tree.preorder().count(), tree.num_nodes() as usize);
 	assert_eq!(tree.postorder().count(), tree.num_nodes() as usize);
 	assert_eq!(roundtrip.num_nodes(), tree.num_nodes());
+	assert_eq!(tree.robinson_foulds(&tree), 0);
 	assert_eq!(tree.triplet_distance(&tree), 0);
 	assert_eq!(
 		tree.mrca(node(&tree, 0), node(&tree, NUM_LEAVES - 1)),

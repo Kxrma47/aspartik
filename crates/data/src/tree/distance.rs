@@ -1,5 +1,5 @@
 use anyhow::{Result, ensure};
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
 use super::{BinaryTree, Node};
@@ -44,6 +44,23 @@ fn clade_hashes(tree: &BinaryTree) -> Vec<CladeHash> {
 		hashes[node.i()] = hash;
 	}
 	hashes
+}
+
+pub(super) fn robinson_foulds(first: &BinaryTree, second: &BinaryTree) -> u32 {
+	assert_eq!(first.num_leaves(), second.num_leaves());
+	let first_hashes = clade_hashes(first);
+	let second_hashes = clade_hashes(second);
+	let clades = first
+		.internals()
+		.filter(|&node| node != first.root())
+		.map(|node| first_hashes[node.i()])
+		.collect::<FxHashSet<_>>();
+	let shared = second
+		.internals()
+		.filter(|&node| node != second.root())
+		.filter(|&node| clades.contains(&second_hashes[node.i()]))
+		.count() as u32;
+	2 * (first.num_leaves() - 2 - shared)
 }
 
 fn clade_hash(
