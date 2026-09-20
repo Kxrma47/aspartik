@@ -9,8 +9,8 @@ use pyo3::{
 use rand::{RngExt, seq::SliceRandom};
 
 use std::{
-	cmp::{Reverse, max, min},
-	collections::{BinaryHeap, VecDeque},
+	cmp::{max, min},
+	collections::VecDeque,
 	io::Write,
 	mem,
 	ops::Deref,
@@ -187,11 +187,10 @@ impl Tree {
 		let num_leaves = self.num_leaves();
 		let num_internals = self.num_internals();
 		let num_nodes = self.num_nodes();
-		// Here we create a Prüfer sequence, which encodes a binary
-		// tree with the root in the last node with the ID `2l - 2`.
-		// To do that we create a sequence in which all internal nodes
-		// appear twice.  Except the last node, which only appears
-		// once.
+		// Here we create a Prüfer sequence, which encodes a binary tree
+		// with the root in the last node with the ID `2l - 2`.  To do
+		// that we create a sequence in which all internal nodes appear
+		// twice.  Except the last node, which only appears once.
 		let internals = num_leaves..num_nodes;
 		let mut prüfer: Vec<u32> =
 			internals.clone().chain(internals).collect();
@@ -201,35 +200,41 @@ impl Tree {
 		let mut parents = vec![ROOT; num_nodes as usize];
 		let mut children = vec![ROOT; (2 * num_internals) as usize];
 
-		let mut histogram = vec![2; num_internals as usize];
-		// the last node only appears once
-		*histogram.last_mut().unwrap() = 1;
-		let mut unused =
-			BinaryHeap::from_iter((0..num_leaves).map(Reverse));
+		let mut degrees = vec![1u8; num_nodes as usize];
+		for internal in num_leaves..num_nodes {
+			degrees[internal as usize] = 3;
+		}
+		degrees[root as usize] = 2;
 
+		let mut ptr = 0;
+		let mut next = ptr;
 		for parent in prüfer {
-			let child = unused.pop().unwrap().0;
+			let child = next;
 
 			parents[child as usize] = parent;
 
-			// `children` update
-			let idx = ((parent - num_leaves) * 2) as usize;
-			// first encountered child goes in the left slot,
-			// second one goes in the right
-			if children[idx] == ROOT {
-				children[idx] = child;
-			} else {
-				children[idx + 1] = child;
-			}
+			// first encountered child goes in the left slot, second
+			// one goes in the right
+			let idx = ((parent - num_leaves) * 2) as usize
+				+ degrees[parent as usize] as usize
+				- 2;
+			children[idx] = child;
 
-			let hist_idx = (parent - num_leaves) as usize;
-			histogram[hist_idx] -= 1;
-			if histogram[hist_idx] == 0 {
-				unused.push(Reverse(parent));
+			degrees[parent as usize] -= 1;
+			degrees[child as usize] -= 1;
+
+			if degrees[parent as usize] == 1 && parent < ptr {
+				next = parent;
+			} else {
+				while degrees[ptr as usize] != 1
+					&& ptr < num_nodes
+				{
+					ptr += 1;
+				}
+				next = ptr;
 			}
 		}
-		// last node, which should be connected to the root
-		let child = unused.pop().unwrap().0;
+		let child = next;
 		parents[child as usize] = root;
 		children[(root - num_leaves) as usize * 2 + 1] = child;
 
