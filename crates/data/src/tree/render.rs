@@ -27,7 +27,7 @@ pub struct TreeLayout {
 
 impl TreeLayout {
 	pub fn point(&self, node: Node) -> Option<Point> {
-		self.coordinates.get(node.i()).copied()
+		self.coordinates.get(node.usize()).copied()
 	}
 
 	pub fn points(&self) -> &[Point] {
@@ -106,9 +106,9 @@ impl BinaryTree {
 		];
 		let mut next_leaf = 0_u32;
 		for node in self.preorder() {
-			coordinates[node.i()].x = distances[node.i()];
+			coordinates[node.usize()].x = distances[node.usize()];
 			if self.is_leaf(node) {
-				coordinates[node.i()].y =
+				coordinates[node.usize()].y =
 					f64::from(next_leaf) * separation;
 				next_leaf += 1;
 			}
@@ -118,9 +118,9 @@ impl BinaryTree {
 				continue;
 			};
 			let [left, right] = self.children_of(internal);
-			coordinates[node.i()].y = (coordinates[left.i()].y
-				+ coordinates[right.i()].y)
-				/ 2.0;
+			coordinates[node.usize()].y =
+				(coordinates[left.usize()].y
+					+ coordinates[right.usize()].y) / 2.0;
 		}
 		Ok(TreeLayout {
 			width: distances.into_iter().fold(0.0, f64::max),
@@ -156,19 +156,20 @@ impl BinaryTree {
 				self, left, right, &distances, &mut state,
 				separation,
 			);
-			state[node.i()].preliminary =
-				(state[left.i()].preliminary
-					+ state[left.i()].modifier + state[right.i()]
-					.modifier + state[right.i()].preliminary)
-					/ 2.0;
-			state[node.i()].extreme_left =
-				state[left.i()].extreme_left;
-			state[node.i()].modifier_extreme_left =
-				state[left.i()].modifier_extreme_left;
-			state[node.i()].extreme_right =
-				state[right.i()].extreme_right;
-			state[node.i()].modifier_extreme_right =
-				state[right.i()].modifier_extreme_right;
+			state[node.usize()].preliminary = (state[left.usize()]
+				.preliminary
+				+ state[left.usize()].modifier
+				+ state[right.usize()].modifier
+				+ state[right.usize()].preliminary)
+				/ 2.0;
+			state[node.usize()].extreme_left =
+				state[left.usize()].extreme_left;
+			state[node.usize()].modifier_extreme_left =
+				state[left.usize()].modifier_extreme_left;
+			state[node.usize()].extreme_right =
+				state[right.usize()].extreme_right;
+			state[node.usize()].modifier_extreme_right =
+				state[right.usize()].modifier_extreme_right;
 		}
 
 		let mut vertical = vec![0.0; self.num_nodes() as usize];
@@ -176,10 +177,10 @@ impl BinaryTree {
 		let mut maximum = f64::NEG_INFINITY;
 		let mut stack = vec![(Node::from(self.root()), 0.0)];
 		while let Some((node, modifier_sum)) = stack.pop() {
-			let item = state[node.i()];
+			let item = state[node.usize()];
 			let modifier_sum = modifier_sum + item.modifier;
 			let value = item.preliminary + modifier_sum;
-			vertical[node.i()] = value;
+			vertical[node.usize()] = value;
 			minimum = minimum.min(value);
 			maximum = maximum.max(value);
 			if let Some(internal) = self.as_internal(node) {
@@ -192,8 +193,8 @@ impl BinaryTree {
 		let coordinates = self
 			.nodes()
 			.map(|node| Point {
-				x: distances[node.i()],
-				y: vertical[node.i()] - minimum,
+				x: distances[node.usize()],
+				y: vertical[node.usize()] - minimum,
 			})
 			.collect::<Vec<_>>();
 		Ok(TreeLayout {
@@ -235,7 +236,7 @@ impl BinaryTree {
 				let Some(name) = self.name(node) else {
 					continue;
 				};
-				let x = layout.coordinates[node.i()].x
+				let x = layout.coordinates[node.usize()].x
 					* options.x_scale;
 				content_width = content_width.max(x
 					+ label_gap
@@ -258,8 +259,9 @@ impl BinaryTree {
 		for child in self.edges() {
 			let parent = self.parent_of(child).unwrap();
 			let parent_point =
-				scaled(layout.coordinates[parent.i()]);
-			let child_point = scaled(layout.coordinates[child.i()]);
+				scaled(layout.coordinates[parent.usize()]);
+			let child_point =
+				scaled(layout.coordinates[child.usize()]);
 			let color = edge_color(child);
 			match layout.kind {
 				LayoutKind::Rectangular | LayoutKind::Tidy => {
@@ -321,7 +323,7 @@ impl BinaryTree {
 		}
 
 		for node in self.nodes() {
-			let point = scaled(layout.coordinates[node.i()]);
+			let point = scaled(layout.coordinates[node.usize()]);
 			let color = node_color(node);
 			output.push_str("<circle cx=\"");
 			write_horizontal(&mut output, point.x)?;
@@ -367,7 +369,8 @@ impl BinaryTree {
 					continue;
 				};
 				let point =
-					scaled(layout.coordinates[node.i()]);
+					scaled(layout.coordinates
+						[node.usize()]);
 				output.push_str("<text x=\"");
 				write_horizontal(
 					&mut output,
@@ -399,10 +402,10 @@ impl BinaryTree {
 				ensure!(
 					length.is_finite() && length >= 0.0,
 					"Branch length for node {} must be finite and nonnegative",
-					child.index()
+					child.u32()
 				);
-				distances[child.i()] =
-					distances[node.i()] + length;
+				distances[child.usize()] =
+					distances[node.usize()] + length;
 			}
 		}
 		Ok(distances)
@@ -419,66 +422,66 @@ fn separate_subtrees(
 ) {
 	let mut upper = Some(left);
 	let mut lower = Some(right);
-	let mut upper_modifiers = state[left.i()].modifier;
-	let mut lower_modifiers = state[right.i()].modifier;
+	let mut upper_modifiers = state[left.usize()].modifier;
+	let mut lower_modifiers = state[right.usize()].modifier;
 	let mut first = true;
 
 	while let (Some(upper_node), Some(lower_node)) = (upper, lower) {
 		let distance = upper_modifiers
-			+ state[upper_node.i()].preliminary
+			+ state[upper_node.usize()].preliminary
 			+ separation - lower_modifiers
-			- state[lower_node.i()].preliminary;
+			- state[lower_node.usize()].preliminary;
 		if (first && distance < 0.0) || distance > 0.0 {
 			lower_modifiers += distance;
-			let item = &mut state[right.i()];
+			let item = &mut state[right.usize()];
 			item.modifier += distance;
 			item.modifier_extreme_left += distance;
 			item.modifier_extreme_right += distance;
 			first = false;
 		}
 
-		let upper_depth = distances[upper_node.i()];
-		let lower_depth = distances[lower_node.i()];
+		let upper_depth = distances[upper_node.usize()];
+		let lower_depth = distances[lower_node.usize()];
 		if upper_depth <= lower_depth {
 			upper = next_right_contour(tree, state, upper_node);
 			if let Some(node) = upper {
-				upper_modifiers += state[node.i()].modifier;
+				upper_modifiers += state[node.usize()].modifier;
 			}
 		}
 		if upper_depth >= lower_depth {
 			lower = next_left_contour(tree, state, lower_node);
 			if let Some(node) = lower {
-				lower_modifiers += state[node.i()].modifier;
+				lower_modifiers += state[node.usize()].modifier;
 			}
 		}
 	}
 
 	match (upper, lower) {
 		(None, Some(lower_node)) => {
-			let extreme = state[left.i()].extreme_left;
-			state[extreme.i()].left_thread = Some(lower_node);
+			let extreme = state[left.usize()].extreme_left;
+			state[extreme.usize()].left_thread = Some(lower_node);
 			let difference = lower_modifiers
-				- state[lower_node.i()].modifier
-				- state[left.i()].modifier_extreme_left;
-			state[extreme.i()].modifier += difference;
-			state[extreme.i()].preliminary -= difference;
-			state[left.i()].extreme_left =
-				state[right.i()].extreme_left;
-			state[left.i()].modifier_extreme_left =
-				state[right.i()].modifier_extreme_left;
+				- state[lower_node.usize()].modifier
+				- state[left.usize()].modifier_extreme_left;
+			state[extreme.usize()].modifier += difference;
+			state[extreme.usize()].preliminary -= difference;
+			state[left.usize()].extreme_left =
+				state[right.usize()].extreme_left;
+			state[left.usize()].modifier_extreme_left =
+				state[right.usize()].modifier_extreme_left;
 		}
 		(Some(upper_node), None) => {
-			let extreme = state[right.i()].extreme_right;
-			state[extreme.i()].right_thread = Some(upper_node);
+			let extreme = state[right.usize()].extreme_right;
+			state[extreme.usize()].right_thread = Some(upper_node);
 			let difference = upper_modifiers
-				- state[upper_node.i()].modifier
-				- state[right.i()].modifier_extreme_right;
-			state[extreme.i()].modifier += difference;
-			state[extreme.i()].preliminary -= difference;
-			state[right.i()].extreme_right =
-				state[left.i()].extreme_right;
-			state[right.i()].modifier_extreme_right =
-				state[left.i()].modifier_extreme_right;
+				- state[upper_node.usize()].modifier
+				- state[right.usize()].modifier_extreme_right;
+			state[extreme.usize()].modifier += difference;
+			state[extreme.usize()].preliminary -= difference;
+			state[right.usize()].extreme_right =
+				state[left.usize()].extreme_right;
+			state[right.usize()].modifier_extreme_right =
+				state[left.usize()].modifier_extreme_right;
 		}
 		_ => {}
 	}
@@ -492,7 +495,7 @@ fn next_left_contour(
 	if let Some(internal) = tree.as_internal(node) {
 		Some(tree.children_of(internal)[0])
 	} else {
-		state[node.i()].left_thread
+		state[node.usize()].left_thread
 	}
 }
 
@@ -504,7 +507,7 @@ fn next_right_contour(
 	if let Some(internal) = tree.as_internal(node) {
 		Some(tree.children_of(internal)[1])
 	} else {
-		state[node.i()].right_thread
+		state[node.usize()].right_thread
 	}
 }
 

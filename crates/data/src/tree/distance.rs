@@ -41,7 +41,7 @@ fn clade_hashes(tree: &BinaryTree) -> Vec<CladeHash> {
 	let mut hashes = vec![CladeHash::default(); tree.num_nodes() as usize];
 	for node in tree.postorder() {
 		let hash = clade_hash(tree, &hashes, node);
-		hashes[node.i()] = hash;
+		hashes[node.usize()] = hash;
 	}
 	hashes
 }
@@ -53,12 +53,12 @@ pub(super) fn robinson_foulds(first: &BinaryTree, second: &BinaryTree) -> u32 {
 	let clades = first
 		.internals()
 		.filter(|&node| node != first.root())
-		.map(|node| first_hashes[node.i()])
+		.map(|node| first_hashes[node.usize()])
 		.collect::<FxHashSet<_>>();
 	let shared = second
 		.internals()
 		.filter(|&node| node != second.root())
-		.filter(|&node| clades.contains(&second_hashes[node.i()]))
+		.filter(|&node| clades.contains(&second_hashes[node.usize()]))
 		.count() as u32;
 	2 * (first.num_leaves() - 2 - shared)
 }
@@ -69,12 +69,11 @@ fn clade_hash(
 	node: Node,
 ) -> CladeHash {
 	if let Some(leaf) = tree.as_leaf(node) {
-		CladeHash::leaf(leaf.index())
+		CladeHash::leaf(leaf.u32())
 	} else {
 		let internal = tree.as_internal(node).unwrap();
 		let [left, right] = tree.children_of(internal);
-		hashes[left.index() as usize]
-			.combine(hashes[right.index() as usize])
+		hashes[left.usize()].combine(hashes[right.usize()])
 	}
 }
 
@@ -109,7 +108,7 @@ pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
 	for (tree_index, tree) in trees.iter().enumerate() {
 		for node in tree.postorder() {
 			let hash = clade_hash(tree, &hashes, node);
-			hashes[node.i()] = hash;
+			hashes[node.usize()] = hash;
 			if node != tree.root().into() && tree.is_internal(node)
 			{
 				let tree_indices =
@@ -154,7 +153,7 @@ pub fn branch_score(first: &BinaryTree, second: &BinaryTree) -> Result<f64> {
 	);
 	for child in first.edges() {
 		lengths.insert(
-			first_hashes[child.index() as usize],
+			first_hashes[child.usize()],
 			first.edge_length(child).unwrap(),
 		);
 	}
@@ -163,7 +162,7 @@ pub fn branch_score(first: &BinaryTree, second: &BinaryTree) -> Result<f64> {
 	for child in second.edges() {
 		let length = second.edge_length(child).unwrap();
 		let first_length = lengths
-			.remove(&second_hashes[child.index() as usize])
+			.remove(&second_hashes[child.usize()])
 			.unwrap_or(0.0);
 		squared += (first_length - length).powi(2);
 	}

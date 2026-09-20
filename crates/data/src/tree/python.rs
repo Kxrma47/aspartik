@@ -50,11 +50,11 @@ impl PyTree {
 
 	#[getter]
 	fn root(&self) -> u32 {
-		self.inner().root().index()
+		self.inner().root().u32()
 	}
 
 	fn nodes(&self) -> Vec<u32> {
-		self.inner().nodes().map(Node::index).collect()
+		self.inner().nodes().map(Node::u32).collect()
 	}
 
 	fn is_leaf(&self, node: u32) -> Result<bool> {
@@ -71,14 +71,14 @@ impl PyTree {
 		let node = checked_node(node, tree.num_nodes())?;
 		Ok(tree.children_of(node)
 			.iter()
-			.map(|child| child.index())
+			.map(|child| child.u32())
 			.collect())
 	}
 
 	fn parent_of(&self, node: u32) -> Result<Option<u32>> {
 		let tree = self.inner();
 		let node = checked_node(node, tree.num_nodes())?;
-		Ok(tree.parent_of(node).map(Node::index))
+		Ok(tree.parent_of(node).map(Node::u32))
 	}
 
 	fn name(&self, node: u32) -> Result<Option<String>> {
@@ -111,7 +111,7 @@ impl PyTree {
 		let mut output = Vec::with_capacity(tree.num_nodes() as usize);
 		let mut stack = vec![tree.root()];
 		while let Some(node) = stack.pop() {
-			output.push(node.index());
+			output.push(node.u32());
 			stack.extend(tree
 				.children_of(node)
 				.iter()
@@ -130,7 +130,7 @@ impl PyTree {
 		let mut stack = vec![(tree.root(), false)];
 		while let Some((node, visited)) = stack.pop() {
 			if visited {
-				output.push(node.index());
+				output.push(node.u32());
 				continue;
 			}
 			stack.push((node, true));
@@ -174,7 +174,7 @@ impl PyTree {
 				edge_metadata.unwrap_or_default(),
 			),
 		)?
-		.index())
+		.u32())
 	}
 
 	#[pyo3(signature = (parent, child, length = None, metadata = None))]
@@ -395,26 +395,26 @@ impl PyBinaryTree {
 
 	#[getter]
 	fn root(&self) -> u32 {
-		self.inner.root().index()
+		self.inner.root().u32()
 	}
 
 	fn nodes(&self) -> Vec<u32> {
-		self.inner.nodes().map(Node::index).collect()
+		self.inner.nodes().map(Node::u32).collect()
 	}
 
 	fn leaves(&self) -> Vec<u32> {
-		self.inner.leaves().map(|leaf| leaf.index()).collect()
+		self.inner.leaves().map(|leaf| leaf.u32()).collect()
 	}
 
 	fn internals(&self) -> Vec<u32> {
 		self.inner
 			.internals()
-			.map(|internal| internal.index())
+			.map(|internal| internal.u32())
 			.collect()
 	}
 
 	fn edges(&self) -> Vec<u32> {
-		self.inner.edges().map(Node::index).collect()
+		self.inner.edges().map(Node::u32).collect()
 	}
 
 	fn is_leaf(&self, node: u32) -> Result<bool> {
@@ -429,18 +429,18 @@ impl PyBinaryTree {
 		let node = self.node(node)?;
 		let internal =
 			self.inner.as_internal(node).ok_or_else(|| {
-				anyhow!("Node {} is a leaf", node.index())
+				anyhow!("Node {} is a leaf", node.u32())
 			})?;
 		let [left, right] = self.inner.children_of(internal);
 		// We return a tuple instead of an array in Python because the
 		// former is more compact
-		Ok((left.index(), right.index()))
+		Ok((left.u32(), right.u32()))
 	}
 
 	fn parent_of(&self, node: u32) -> Result<Option<u32>> {
 		Ok(self.inner
 			.parent_of(self.node(node)?)
-			.map(|parent| parent.index()))
+			.map(|parent| parent.u32()))
 	}
 
 	fn name(&self, node: u32) -> Result<Option<&str>> {
@@ -460,7 +460,7 @@ impl PyBinaryTree {
 	}
 
 	fn leaf_by_name(&self, name: &str) -> Option<u32> {
-		self.inner.leaf_by_name(name).map(|leaf| leaf.index())
+		self.inner.leaf_by_name(name).map(|leaf| leaf.u32())
 	}
 
 	fn nhx(&self, node: u32, key: &str) -> Result<Option<&str>> {
@@ -468,11 +468,11 @@ impl PyBinaryTree {
 	}
 
 	fn preorder(&self) -> Vec<u32> {
-		self.inner.preorder().map(Node::index).collect()
+		self.inner.preorder().map(Node::u32).collect()
 	}
 
 	fn postorder(&self) -> Vec<u32> {
-		self.inner.postorder().map(Node::index).collect()
+		self.inner.postorder().map(Node::u32).collect()
 	}
 
 	fn to_newick(&self) -> Result<String> {

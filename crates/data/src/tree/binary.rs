@@ -202,7 +202,7 @@ impl BinaryTree {
 		)?;
 		let mut order = (0..num_leaves).collect::<Vec<_>>();
 		order.extend(tree.postorder().filter_map(|node| {
-			tree.is_internal(node).then_some(node.index())
+			tree.is_internal(node).then_some(node.u32())
 		}));
 		if order.iter().copied().eq(0..num_nodes) {
 			return Ok(tree);
@@ -223,7 +223,7 @@ impl BinaryTree {
 			for (slot, child) in
 				[left, right].into_iter().enumerate()
 			{
-				let child = mapping[child.i()];
+				let child = mapping[child.usize()];
 				children[offset * 2 + slot] = child;
 				parents[child as usize] = parent;
 			}
@@ -431,7 +431,7 @@ impl BinaryTree {
 	}
 
 	pub fn parent_of(&self, node: Node) -> Option<Internal> {
-		let parent = self.parents[node.i()];
+		let parent = self.parents[node.usize()];
 		(parent != ROOT_PARENT).then_some(Internal(parent))
 	}
 
@@ -440,11 +440,11 @@ impl BinaryTree {
 	}
 
 	pub fn name(&self, node: Node) -> Option<&str> {
-		self.node_names.get(node.i())
+		self.node_names.get(node.usize())
 	}
 
 	pub fn node_metadata(&self, node: Node) -> Option<&str> {
-		self.node_metadata.get(node.i())
+		self.node_metadata.get(node.usize())
 	}
 
 	pub fn edge_metadata(&self, child: Node) -> Option<&str> {
@@ -495,12 +495,12 @@ impl BinaryTree {
 
 		for node in self.postorder() {
 			if let Some(leaf) = self.as_leaf(node) {
-				clade_founder[leaf.i()] = leaf.0
+				clade_founder[leaf.usize()] = leaf.0
 			} else if let Some(internal) = self.as_internal(node) {
 				let [left, right] = self.children_of(internal);
-				clade_founder[internal.i()] = min(
-					clade_founder[left.i()],
-					clade_founder[right.i()],
+				clade_founder[internal.usize()] = min(
+					clade_founder[left.usize()],
+					clade_founder[right.usize()],
 				);
 			} else {
 				unreachable!()
@@ -517,11 +517,11 @@ impl BinaryTree {
 			let [left, right] = self.children_of(internal);
 
 			let splitter = max(
-				clade_founder[left.i()],
-				clade_founder[right.i()],
+				clade_founder[left.usize()],
+				clade_founder[right.usize()],
 			);
-			clade_splitter[node.i()] = splitter;
-			labels[node.i()] = -(splitter as i32);
+			clade_splitter[node.usize()] = splitter;
+			labels[node.usize()] = -(splitter as i32);
 			splitter_to_node[splitter as usize] = node.0;
 		}
 
@@ -533,19 +533,19 @@ impl BinaryTree {
 				Internal(splitter_to_node[label as usize]);
 			let [left, right] = self.children_of(splitter_node);
 
-			let sibling = if clade_founder[left.i()] == label {
+			let sibling = if clade_founder[left.usize()] == label {
 				right
 			} else {
 				left
 			};
 
 			let mut curr = sibling;
-			while forward_to[curr.i()] != curr.0 {
-				curr = Node(forward_to[curr.i()]);
+			while forward_to[curr.usize()] != curr.0 {
+				curr = Node(forward_to[curr.usize()]);
 			}
 
-			ola.push(labels[curr.i()]);
-			forward_to[splitter_node.i()] = curr.0;
+			ola.push(labels[curr.usize()]);
+			forward_to[splitter_node.usize()] = curr.0;
 		}
 		ola.reverse();
 
@@ -572,14 +572,14 @@ impl BinaryTree {
 		let mut subtree_sizes = vec![0; self.num_nodes() as usize];
 		for node in self.postorder() {
 			if self.is_leaf(node) {
-				subtree_sizes[node.i()] = 1;
+				subtree_sizes[node.usize()] = 1;
 			} else {
 				let [left, right] = self.children_of(
 					self.as_internal(node).unwrap(),
 				);
-				subtree_sizes[node.i()] = subtree_sizes
-					[left.i()]
-					+ subtree_sizes[right.i()];
+				subtree_sizes[node.usize()] = subtree_sizes
+					[left.usize()]
+					+ subtree_sizes[right.usize()];
 			}
 		}
 		subtree_sizes
@@ -610,8 +610,8 @@ impl BinaryTree {
 					let [left, right] =
 						self.children_of(internal);
 					let [small, large] = if subtree_sizes
-						[left.i()]
-						<= subtree_sizes[right.i()]
+						[left.usize()]
+						<= subtree_sizes[right.usize()]
 					{
 						[left, right]
 					} else {
@@ -867,7 +867,7 @@ impl TripletHdt {
 		let mut components =
 			Vec::with_capacity(tree.num_nodes() as usize * 2 - 1);
 		for node in tree.nodes() {
-			let index = node.i();
+			let index = node.usize();
 			components.push(if tree.is_leaf(node) {
 				TripletComponent::leaf(index)
 			} else {
@@ -878,12 +878,12 @@ impl TripletHdt {
 		let mut edges = tree
 			.edges()
 			.map(|child| TripletEdge {
-				up: tree.parent_of(child).unwrap().i(),
-				down: child.i(),
+				up: tree.parent_of(child).unwrap().usize(),
+				down: child.usize(),
 			})
 			.collect::<Vec<_>>();
 		let mut next = Vec::with_capacity(edges.len());
-		let mut root = tree.root().i();
+		let mut root = tree.root().usize();
 
 		while !edges.is_empty() {
 			for edge in edges.drain(..) {

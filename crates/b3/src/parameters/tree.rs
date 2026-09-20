@@ -287,14 +287,14 @@ impl Tree {
 				"Node {name} occurs more than once"
 			);
 			seen[index] = true;
-			mapping[node.index() as usize] = index as u32;
+			mapping[node.usize()] = index as u32;
 		}
 		ensure!(seen.into_iter().all(|value| value));
 
 		let mut internal_index = self.num_leaves();
 		for node in tree.postorder() {
 			if tree.is_internal(node) {
-				mapping[node.index() as usize] = internal_index;
+				mapping[node.usize()] = internal_index;
 				internal_index += 1;
 			}
 		}
@@ -306,18 +306,18 @@ impl Tree {
 			self.parents[index] = ROOT;
 		}
 		for internal in tree.internals() {
-			let parent = mapping[internal.index() as usize];
+			let parent = mapping[internal.usize()];
 			let offset = (parent - self.num_leaves()) as usize * 2;
 			let [left, right] = tree.children_of(internal);
 			for (slot, child) in
 				[left, right].into_iter().enumerate()
 			{
-				let child = mapping[child.index() as usize];
+				let child = mapping[child.usize()];
 				self.children[offset + slot] = child;
 				self.parents[child as usize] = parent;
 			}
 		}
-		let root = mapping[tree.root().index() as usize];
+		let root = mapping[tree.root().usize()];
 		self.set_root(Internal(root));
 
 		let mut heights = vec![0.0; tree.num_nodes() as usize];
@@ -328,14 +328,14 @@ impl Tree {
 			let length = tree.edge_length(node).context(
 				"Encountered Newick node without length",
 			)?;
-			heights[node.index() as usize] =
-				heights[parent.index() as usize] - length;
+			heights[node.usize()] =
+				heights[parent.usize()] - length;
 		}
 		let minimum = heights.iter().copied().fold(0.0, f64::min);
 		for node in tree.nodes() {
 			self.set_height(
-				Node(mapping[node.index() as usize]),
-				heights[node.index() as usize] - minimum,
+				Node(mapping[node.usize()]),
+				heights[node.usize()] - minimum,
 			);
 		}
 
