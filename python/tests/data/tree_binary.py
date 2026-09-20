@@ -46,7 +46,7 @@ def test_random_tree():
     assert sorted(tree.postorder()) == tree.nodes()
     assert all(tree.name(node) is None for node in tree.nodes())
     assert all(tree.node_metadata(node) is None for node in tree.nodes())
-    assert all(tree.edge_length(child) == 0.0 for child in tree.edges())
+    assert all(tree.edge_length(child) == 1.0 for child in tree.edges())
     assert all(tree.edge_metadata(child) is None for child in tree.edges())
 
 

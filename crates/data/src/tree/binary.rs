@@ -99,7 +99,7 @@ impl BinaryTree {
 		for _ in 0..num_edges_usize {
 			edge_metadata.push(None)?;
 		}
-		let edge_lengths = Buffer::repeat(0.0, num_edges);
+		let edge_lengths = Buffer::repeat(1.0, num_edges);
 
 		Ok(Self {
 			num_leaves,

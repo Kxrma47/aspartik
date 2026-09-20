@@ -122,7 +122,7 @@ fn assert_random_tree(tree: &BinaryTree, num_leaves: u32) {
 			assert_eq!(tree.parent_of(node), None);
 			assert_eq!(tree.edge_length(node), None);
 		} else {
-			assert_eq!(tree.edge_length(node), Some(0.0));
+			assert_eq!(tree.edge_length(node), Some(1.0));
 		}
 		assert_eq!(tree.edge_metadata(node), None);
 	}

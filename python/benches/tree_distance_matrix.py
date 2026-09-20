@@ -4,7 +4,6 @@ from typing import Literal
 
 from aspartik.data.tree import (
     BinaryTree,
-    Tree,
     robinson_foulds_matrix,
     triplet_distance_matrix,
 )
@@ -40,7 +39,7 @@ def pairwise_matrix(trees, distance):
 
 def distance_matrix(metric, trees):
     match metric:
-        case "rf":
+        case "robinson-foulds":
             return robinson_foulds_matrix(trees)
         case "branch-score":
             return pairwise_matrix(trees, BinaryTree.branch_score)
@@ -48,19 +47,6 @@ def distance_matrix(metric, trees):
             return triplet_distance_matrix(trees)
         case _:
             raise ValueError(f"unknown distance metric: {metric}")
-
-
-def random_tree(metric, leaf_count, rng):
-    tree = BinaryTree.random(leaf_count, rng)
-    if metric != "branch-score":
-        return tree
-
-    # TODO: branch lengths in `BinaryTree.random`
-    builder = Tree.from_newick(tree.to_newick())
-    for node in builder.nodes():
-        if node != builder.root:
-            builder.set_edge_length(node, rng.random_float(0.1, 1.0))
-    return builder.to_binary()
 
 
 def random_trees(
@@ -71,26 +57,20 @@ def random_trees(
         raise ValueError("expected at least one tree")
     if leaf_count < 2:
         raise ValueError("expected at least two leaves")
-    return [random_tree(metric, leaf_count, rng) for _ in range(tree_count)]
+    return [BinaryTree.random(leaf_count, rng) for _ in range(tree_count)]
 
 
 def run_benchmark(
     tree_count, leaf_count: int, seed: int, metric: Metric = "rf"
 ) -> float:
-    z = perf_counter()
+    generation = perf_counter()
     trees = random_trees(metric, tree_count, leaf_count, seed)
     start = perf_counter()
-    print(f"{start - z:.2f}sec")
+    print(f"generation: {start - generation:.2f}sec")
     _ = distance_matrix(metric, trees)
     end = perf_counter()
 
     return end - start
-
-
-def format_number(value):
-    if isinstance(value, int):
-        return str(value)
-    return f"{value:.6g}"
 
 
 def parse_cli_args():
