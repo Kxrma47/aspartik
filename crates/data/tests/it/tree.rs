@@ -978,6 +978,21 @@ fn constructor_rejects_invalid_layouts() {
 }
 
 #[test]
+fn from_children_rejects_oversized_leaf_count() {
+	let error = BinaryTree::from_children(
+		u32::MAX / 2 + 1,
+		0,
+		Buffer::from_slice(&[]),
+		Buffer::from_slice(&[]),
+		nulls(0),
+		nulls(0),
+		nulls(0),
+	)
+	.unwrap_err();
+	assert!(error.to_string().contains("Expected at most"));
+}
+
+#[test]
 fn newick_rejects_unsupported_structures() -> Result<()> {
 	for source in ["A;", "(A:1);", "(A:1,B:1,C:1);", "(A:1,B:);"] {
 		assert!(parse_newick(source)?.into_binary().is_err());
