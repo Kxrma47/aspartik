@@ -6,8 +6,7 @@ use crate::tree::{
 	BinaryTree, Node, SvgOptions as TreeSvgOptions, TreeLayout,
 	branch_score,
 	builder::{EdgeData, NodeData, TreeBuilder},
-	distance::robinson_foulds_matrix,
-	triplet_distance_matrix,
+	robinson_foulds_matrix, triplet_distance_matrix,
 };
 use rng::PyRng;
 
