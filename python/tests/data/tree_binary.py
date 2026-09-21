@@ -7,7 +7,7 @@ from array import array
 
 from aspartik.data.tree import (
     BinaryTree,
-    Tree,
+    TreeBuilder,
     robinson_foulds_matrix,
     triplet_distance_matrix,
 )
@@ -19,7 +19,7 @@ def topology(tree):
 
 
 def indexed_tree(topology):
-    tree = Tree()
+    tree = TreeBuilder()
     leaves = [tree.add_node(tree.root, str(index), 0.0) for index in range(4)]
 
     def attach(clade, parent):

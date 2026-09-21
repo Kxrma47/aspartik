@@ -21,7 +21,7 @@ use bitmap::Bitmap;
 use data::tree::{
 	Node as DataNode,
 	builder::{EdgeData, NodeData, TreeBuilder},
-	python::PyTree as PyNewickTree,
+	python::PyTreeBuilder as PyNewickTree,
 };
 use rng::{PyRng, Rng};
 use sk::EpochBuf;

@@ -2,14 +2,14 @@ import pytest
 
 from pathlib import Path
 
-from aspartik.data.tree import BinaryTree, Tree, robinson_foulds_matrix
+from aspartik.data.tree import BinaryTree, TreeBuilder, robinson_foulds_matrix
 
 TREE_PATHS = sorted(Path("data/runs").glob("*/beast*.trees"))
 assert TREE_PATHS
 
 
 def canonical_tree(newick, leaf_names):
-    source = Tree.from_newick(newick)
+    source = TreeBuilder.from_newick(newick)
     source_leaves = {}
     for node in source.nodes():
         if source.is_leaf(node):
@@ -18,7 +18,7 @@ def canonical_tree(newick, leaf_names):
             source_leaves[name] = node
     assert set(source_leaves) == set(leaf_names)
 
-    target = Tree()
+    target = TreeBuilder()
     mapping = {source.root: target.root}
     for name in leaf_names:
         mapping[source_leaves[name]] = target.add_node(target.root, name, 0.0)
