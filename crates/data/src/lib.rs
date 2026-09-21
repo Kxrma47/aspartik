@@ -29,7 +29,8 @@ pub mod pymodule {
 		fasta::python::PyFastaDnaRecord,
 		msa::python::PyMsa,
 		seq::python::PyDnaSeq,
-		tree::python::{PyBinaryTree, PySvgOptions, PyTree},
+		tree::python::{PyBinaryTree, PySvgOptions, PyTreeBuilder},
+		tree::{Internal, Leaf, Node},
 	};
 
 	#[pymodule_init]

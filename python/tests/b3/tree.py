@@ -6,7 +6,7 @@ import itertools
 from aspartik.b3.config import MCMCConfig
 from aspartik.b3.parameters import Tree
 from aspartik.data.msa import MSA
-from aspartik.data.tree import Tree as NewickTree
+from aspartik.data.tree import TreeBuilder as NewickTree
 from aspartik.rng import RNG
 
 

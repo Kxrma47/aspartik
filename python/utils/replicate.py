@@ -3,7 +3,7 @@ import polars as pl
 from aspartik.b3 import Prior
 from aspartik.b3.likelihoods import Likelihood
 from aspartik.b3.parameters import IntVector, Parameter, Real, RealVector, Tree
-from aspartik.data.tree import Tree as NewickTree
+from aspartik.data.tree import TreeBuilder as NewickTree
 
 
 def replicate_b3(

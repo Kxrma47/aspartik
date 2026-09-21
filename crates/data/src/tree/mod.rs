@@ -16,14 +16,26 @@ pub use render::{LayoutKind, Point, SvgOptions, TreeLayout};
 const ROOT_PARENT: u32 = u32::MAX;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+	feature = "python",
+	pyo3::pyclass(module = "aspartik.data.tree", frozen, from_py_object)
+)]
 #[repr(transparent)]
 pub struct Node(u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+	feature = "python",
+	pyo3::pyclass(module = "aspartik.data.tree", frozen, from_py_object)
+)]
 #[repr(transparent)]
 pub struct Leaf(u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+	feature = "python",
+	pyo3::pyclass(module = "aspartik.data.tree", frozen, from_py_object)
+)]
 #[repr(transparent)]
 pub struct Internal(u32);
 
