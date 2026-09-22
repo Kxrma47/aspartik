@@ -978,6 +978,20 @@ fn constructor_rejects_invalid_layouts() {
 }
 
 #[test]
+fn from_children_rejects_oversized_leaf_count() {
+	assert!(BinaryTree::from_children(
+		u32::MAX / 2 + 1,
+		0,
+		Buffer::from_slice(&[]),
+		Buffer::from_slice(&[]),
+		nulls(0),
+		nulls(0),
+		nulls(0),
+	)
+	.is_err());
+}
+
+#[test]
 fn newick_rejects_unsupported_structures() -> Result<()> {
 	for source in ["A;", "(A:1);", "(A:1,B:1,C:1);", "(A:1,B:);"] {
 		assert!(parse_newick(source)?.into_binary().is_err());
@@ -1059,6 +1073,7 @@ fn random_binary_tree_rejects_invalid_sizes() {
 	let mut rng = Pcg64::seed_from_u64(0);
 	assert!(BinaryTree::random(0, &mut rng).is_err());
 	assert!(BinaryTree::random(1, &mut rng).is_err());
+	assert!(BinaryTree::random(u32::MAX / 2 + 1, &mut rng).is_err());
 	assert!(BinaryTree::random(u32::MAX, &mut rng).is_err());
 }
 

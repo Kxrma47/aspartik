@@ -29,7 +29,8 @@ fn validate_num_leaves(num_leaves: u32) -> Result<()> {
 	);
 	ensure!(
 		num_leaves <= u32::MAX / 2,
-		"A tree cannot have more than 2 billion trees, got {num_leaves}"
+		"A tree cannot have more than {} leaves, got {num_leaves}",
+		u32::MAX / 2
 	);
 	Ok(())
 }
@@ -1143,5 +1144,20 @@ impl Iterator for Postorder<'_> {
 		}
 
 		None
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::validate_num_leaves;
+
+	#[test]
+	fn leaf_count_bounds() {
+		assert!(validate_num_leaves(0).is_err());
+		assert!(validate_num_leaves(1).is_err());
+		assert!(validate_num_leaves(2).is_ok());
+		assert!(validate_num_leaves(u32::MAX / 2).is_ok());
+		assert!(validate_num_leaves(u32::MAX / 2 + 1).is_err());
+		assert!(validate_num_leaves(u32::MAX).is_err());
 	}
 }
