@@ -1,6 +1,6 @@
 import argparse
 from time import perf_counter
-from typing import Literal
+from typing import Literal, get_args
 
 from aspartik.data.tree import (
     BinaryTree,
@@ -9,8 +9,7 @@ from aspartik.data.tree import (
 )
 from aspartik.rng import RNG
 
-Metric = Literal["rf", "branch-score", "triplet"]
-METRICS = ("rf", "branch-score", "triplet")
+type Metric = Literal["robinson-foulds", "branch-score", "triplet"]
 
 
 def positive_int(value):
@@ -60,9 +59,7 @@ def random_trees(
     return [BinaryTree.random(leaf_count, rng) for _ in range(tree_count)]
 
 
-def run_benchmark(
-    tree_count, leaf_count: int, seed: int, metric: Metric = "rf"
-) -> float:
+def run_benchmark(tree_count, leaf_count: int, seed: int, metric: Metric) -> float:
     generation = perf_counter()
     trees = random_trees(metric, tree_count, leaf_count, seed)
     start = perf_counter()
@@ -76,7 +73,9 @@ def run_benchmark(
 def parse_cli_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("n", type=positive_int)
-    parser.add_argument("--metric", choices=METRICS, default="rf")
+    parser.add_argument(
+        "--metric", choices=get_args(Metric.__value__), default="robinson-foulds"
+    )
     parser.add_argument("--num-leaves", type=num_leaves, default=100)
     parser.add_argument("--seed", type=int, default=4)
     return parser.parse_args()
