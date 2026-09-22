@@ -188,10 +188,10 @@ impl BinaryTree {
 		robinson_foulds(self, other)
 	}
 
-	/// Computes triplet distance using smaller-half recoloring and an HDT.
+	/// Computes triplet distance using cache-oblivious tree contractions.
 	///
-	/// Time is O(n log^2 n) for trees with n leaves. See
-	/// <https://doi.org/10.1186/1471-2105-14-S2-S18>.
+	/// Time is O(n log n) for trees with n leaves. See
+	/// <https://doi.org/10.4230/LIPIcs.ESA.2017.21>.
 	pub fn triplet_distance(&self, other: &Self) -> u128 {
 		assert_eq!(self.num_leaves(), other.num_leaves());
 
@@ -199,109 +199,14 @@ impl BinaryTree {
 			return 0;
 		}
 
-		let subtree_sizes = self.triplet_subtree_sizes();
-		let mut hdt = TripletHdt::new(other);
-		self.triplet_distance_with_hdt(&subtree_sizes, &mut hdt)
-	}
-
-	fn triplet_subtree_sizes(&self) -> Vec<u32> {
-		let mut subtree_sizes = vec![0; self.num_nodes() as usize];
-		for node in self.postorder() {
-			if self.is_leaf(node) {
-				subtree_sizes[node.usize()] = 1;
-			} else {
-				let [left, right] = self.children_of(
-					self.as_internal(node).unwrap(),
-				);
-				subtree_sizes[node.usize()] = subtree_sizes
-					[left.usize()]
-					+ subtree_sizes[right.usize()];
-			}
-		}
-		subtree_sizes
-	}
-
-	fn triplet_distance_with_hdt(
-		&self,
-		subtree_sizes: &[u32],
-		hdt: &mut TripletHdt,
-	) -> u128 {
-		let mut steps = vec![TripletStep::Count(self.root().into())];
-		let mut leaves = Vec::new();
-		let mut shared = 0;
-
-		while let Some(step) = steps.pop() {
-			match step {
-				TripletStep::Count(node) => {
-					let Some(internal) =
-						self.as_internal(node)
-					else {
-						hdt.set_color(
-							node.0,
-							TripletColor::None,
-						);
-						continue;
-					};
-
-					let [left, right] =
-						self.children_of(internal);
-					let [small, large] = if subtree_sizes
-						[left.usize()]
-						<= subtree_sizes[right.usize()]
-					{
-						[left, right]
-					} else {
-						[right, left]
-					};
-
-					steps.push(TripletStep::Count(small));
-					steps.push(TripletStep::Color(
-						small,
-						TripletColor::Red,
-					));
-					steps.push(TripletStep::Count(large));
-					steps.push(TripletStep::Color(
-						small,
-						TripletColor::None,
-					));
-					steps.push(TripletStep::AddShared);
-					steps.push(TripletStep::Color(
-						small,
-						TripletColor::Blue,
-					));
-				}
-				TripletStep::Color(root, color) => {
-					leaves.clear();
-					leaves.push(root);
-					while let Some(node) = leaves.pop() {
-						if self.is_leaf(node) {
-							hdt.set_color(
-								node.0, color,
-							);
-						} else {
-							let [left, right] = self.children_of(
-								self.as_internal(node).unwrap(),
-							);
-							leaves.extend([
-								left, right,
-							]);
-						}
-					}
-				}
-				TripletStep::AddShared => {
-					shared += hdt.shared()
-				}
-			}
-		}
-
-		choose3(self.num_leaves()) - shared
+		TripletCounter::new(self, other).distance()
 	}
 }
 
-/// Computes all pairwise triplet distances using HDT templates.
+/// Computes all pairwise triplet distances using tree contractions.
 ///
-/// Time is O(k^2 n log^2 n) for k trees with n leaves. See
-/// <https://doi.org/10.1186/1471-2105-14-S2-S18>.
+/// Time is O(k^2 n log n) for k trees with n leaves. See
+/// <https://doi.org/10.4230/LIPIcs.ESA.2017.21>.
 pub fn triplet_distance_matrix(
 	trees: &[&BinaryTree],
 ) -> Result<Vec<Vec<u128>>> {
@@ -322,22 +227,11 @@ pub fn triplet_distance_matrix(
 		);
 	}
 
-	let subtree_sizes = trees
-		.iter()
-		.map(|tree| tree.triplet_subtree_sizes())
-		.collect::<Vec<_>>();
-	let templates = trees
-		.iter()
-		.map(|tree| TripletHdt::new(tree))
-		.collect::<Vec<_>>();
 	let mut distances = vec![vec![0; trees.len()]; trees.len()];
 	for first in 0..trees.len() {
 		for second in 0..first {
-			let mut hdt = templates[second].clone();
-			let distance = trees[first].triplet_distance_with_hdt(
-				&subtree_sizes[first],
-				&mut hdt,
-			);
+			let distance =
+				trees[first].triplet_distance(trees[second]);
 			distances[first][second] = distance;
 			distances[second][first] = distance;
 		}
@@ -346,272 +240,478 @@ pub fn triplet_distance_matrix(
 }
 
 #[derive(Clone, Copy)]
-enum TripletColor {
-	None,
-	Red,
-	Blue,
+struct TripletCentroidNode {
+	left: u32,
+	right: u32,
+	size: u32,
+	num_leaves: u32,
+	min_leaf: u32,
+	max_leaf: u32,
+	alive: bool,
+	on_heavy_path: bool,
 }
 
-enum TripletStep {
-	Count(Node),
-	Color(Node, TripletColor),
-	AddShared,
-}
-
-#[derive(Clone, Copy, Default)]
-struct TripletCounts {
-	red: u32,
-	blue: u32,
-	same_red: u64,
-	same_blue: u64,
-	red_below_blue: u64,
-	blue_below_red: u64,
-	shared: u128,
-}
-
-impl TripletCounts {
-	fn leaf(color: TripletColor) -> Self {
-		match color {
-			TripletColor::None => Self::default(),
-			TripletColor::Red => Self {
-				red: 1,
-				..Self::default()
-			},
-			TripletColor::Blue => Self {
-				blue: 1,
-				..Self::default()
-			},
-		}
-	}
-
-	fn merge(lower: Self, upper: Self) -> Self {
-		Self {
-			red: lower.red + upper.red,
-			blue: lower.blue + upper.blue,
-			same_red: lower.same_red + upper.same_red,
-			same_blue: lower.same_blue + upper.same_blue,
-			red_below_blue: upper.red_below_blue
-				+ lower.red_below_blue + u64::from(
-				lower.red,
-			) * u64::from(
-				upper.blue,
-			),
-			blue_below_red: upper.blue_below_red
-				+ lower.blue_below_red + u64::from(
-				lower.blue,
-			) * u64::from(
-				upper.red,
-			),
-			shared: lower.shared
-				+ upper.shared + u128::from(choose2(lower.red))
-				* u128::from(upper.blue) + u128::from(choose2(
-				lower.blue,
-			)) * u128::from(
-				upper.red,
-			) + u128::from(upper.same_red)
-				* u128::from(lower.blue) + u128::from(
-				upper.same_blue,
-			) * u128::from(
-				lower.red,
-			) + u128::from(lower.red)
-				* u128::from(upper.red_below_blue)
-				+ u128::from(lower.blue)
-					* u128::from(upper.blue_below_red),
-		}
-	}
-
-	fn attach_internal(lower: Self) -> Self {
-		Self {
-			red: lower.red,
-			blue: lower.blue,
-			same_red: choose2(lower.red),
-			same_blue: choose2(lower.blue),
-			shared: lower.shared,
-			..Self::default()
-		}
-	}
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum TripletComponentKind {
-	Leaf,
-	Internal,
-	Path {
-		lower: usize,
-		upper: usize,
-		upper_is_internal: bool,
-	},
-}
-
-#[derive(Clone)]
-struct TripletComponent {
-	kind: TripletComponentKind,
-	parent: usize,
-	down_closed: bool,
-	counts: TripletCounts,
-}
-
-impl TripletComponent {
-	fn leaf(index: usize) -> Self {
-		Self {
-			kind: TripletComponentKind::Leaf,
-			parent: index,
-			down_closed: true,
-			counts: TripletCounts::leaf(TripletColor::Red),
-		}
-	}
-
-	fn internal(index: usize) -> Self {
-		Self {
-			kind: TripletComponentKind::Internal,
-			parent: index,
-			down_closed: false,
-			counts: TripletCounts::default(),
-		}
+impl TripletCentroidNode {
+	fn is_leaf(self) -> bool {
+		self.left == u32::MAX
 	}
 }
 
 #[derive(Clone, Copy)]
-struct TripletEdge {
-	up: usize,
-	down: usize,
+struct TripletColors {
+	red_min: u32,
+	red_max: u32,
+	blue_min: u32,
+	blue_max: u32,
 }
 
-#[derive(Clone)]
-struct TripletHdt {
-	components: Vec<TripletComponent>,
-	root: usize,
+impl TripletColors {
+	fn is_red(self, leaf: u32) -> bool {
+		(self.red_min..=self.red_max).contains(&leaf)
+	}
+
+	fn is_blue(self, leaf: u32) -> bool {
+		(self.blue_min..=self.blue_max).contains(&leaf)
+	}
+
+	fn is_colored(self, leaf: u32) -> bool {
+		self.is_red(leaf) || self.is_blue(leaf)
+	}
 }
 
-impl TripletHdt {
-	fn new(tree: &BinaryTree) -> Self {
-		let mut components =
-			Vec::with_capacity(tree.num_nodes() as usize * 2 - 1);
-		for node in tree.nodes() {
-			let index = node.usize();
-			components.push(if tree.is_leaf(node) {
-				TripletComponent::leaf(index)
+#[derive(Clone, Copy)]
+struct TripletContractNode {
+	leaf: u32,
+	same_red: u64,
+	red: u64,
+}
+
+impl TripletContractNode {
+	fn leaf(leaf: u32) -> Self {
+		Self {
+			leaf,
+			same_red: 0,
+			red: 0,
+		}
+	}
+
+	fn internal() -> Self {
+		Self {
+			leaf: u32::MAX,
+			same_red: 0,
+			red: 0,
+		}
+	}
+
+	fn is_leaf(self) -> bool {
+		self.leaf != u32::MAX
+	}
+}
+
+#[derive(Clone, Copy)]
+struct TripletLeafCounts {
+	red: u64,
+	blue: u64,
+}
+
+#[derive(Clone, Copy)]
+struct TripletPruneState {
+	position: usize,
+	same_red: u64,
+	red: u64,
+	kept: bool,
+}
+
+#[derive(Clone, Copy)]
+enum TripletPruneKind {
+	Red,
+	Uncolored,
+}
+
+struct TripletCounter {
+	centroids: Vec<TripletCentroidNode>,
+	contracts: Vec<TripletContractNode>,
+	current_start: usize,
+	current_end: usize,
+	colors: TripletColors,
+	counting: Vec<TripletLeafCounts>,
+	keep_states: Vec<bool>,
+	prune_states: Vec<TripletPruneState>,
+	num_leaves: u32,
+}
+
+impl TripletCounter {
+	fn new(first: &BinaryTree, second: &BinaryTree) -> Self {
+		let (centroids, leaf_order) = Self::centroids(first);
+		let contracts =
+			second.postorder()
+				.map(|node| {
+					second.as_leaf(node).map_or_else(
+						TripletContractNode::internal,
+						|leaf| {
+							TripletContractNode::leaf(
+							leaf_order[leaf.usize()],
+						)
+						},
+					)
+				})
+				.collect::<Vec<_>>();
+		let current_end = contracts.len();
+
+		Self {
+			centroids,
+			contracts,
+			current_start: 0,
+			current_end,
+			colors: TripletColors {
+				red_min: 0,
+				red_max: 0,
+				blue_min: 0,
+				blue_max: 0,
+			},
+			counting: Vec::new(),
+			keep_states: Vec::new(),
+			prune_states: Vec::new(),
+			num_leaves: first.num_leaves(),
+		}
+	}
+
+	fn centroids(
+		tree: &BinaryTree,
+	) -> (Vec<TripletCentroidNode>, Vec<u32>) {
+		let mut subtree_sizes = vec![0; tree.num_nodes() as usize];
+		for node in tree.postorder() {
+			subtree_sizes[node.usize()] = if tree.is_leaf(node) {
+				1
 			} else {
-				TripletComponent::internal(index)
+				let [left, right] = tree.children_of(
+					tree.as_internal(node).unwrap(),
+				);
+				1 + subtree_sizes[left.usize()]
+					+ subtree_sizes[right.usize()]
+			};
+		}
+
+		let mut centroids =
+			Vec::with_capacity(tree.num_nodes() as usize);
+		let mut leaf_order = vec![0; tree.num_leaves() as usize];
+		let mut next_leaf = 0;
+		let mut stack = vec![tree.root().into()];
+		while let Some(node) = stack.pop() {
+			let index = centroids.len() as u32;
+			if let Some(leaf) = tree.as_leaf(node) {
+				leaf_order[leaf.usize()] = next_leaf;
+				centroids.push(TripletCentroidNode {
+					left: u32::MAX,
+					right: u32::MAX,
+					size: 1,
+					num_leaves: 1,
+					min_leaf: next_leaf,
+					max_leaf: next_leaf,
+					alive: true,
+					on_heavy_path: false,
+				});
+				next_leaf += 1;
+				continue;
+			}
+
+			let [mut left, mut right] = tree
+				.children_of(tree.as_internal(node).unwrap());
+			if subtree_sizes[left.usize()]
+				< subtree_sizes[right.usize()]
+			{
+				std::mem::swap(&mut left, &mut right);
+			}
+			centroids.push(TripletCentroidNode {
+				left: index + 1,
+				right: index + 1 + subtree_sizes[left.usize()],
+				size: subtree_sizes[node.usize()],
+				num_leaves: 0,
+				min_leaf: 0,
+				max_leaf: 0,
+				alive: true,
+				on_heavy_path: false,
+			});
+			stack.push(right);
+			stack.push(left);
+		}
+
+		for index in (0..centroids.len()).rev() {
+			let node = centroids[index];
+			if node.is_leaf() {
+				continue;
+			}
+			let left = centroids[node.left as usize];
+			let right = centroids[node.right as usize];
+			centroids[index].num_leaves =
+				left.num_leaves + right.num_leaves;
+			centroids[index].min_leaf = left.min_leaf;
+			centroids[index].max_leaf = right.max_leaf;
+		}
+
+		(centroids, leaf_order)
+	}
+
+	fn distance(mut self) -> u128 {
+		let shared = self.count_component(0, 0);
+		choose3(self.num_leaves) - shared
+	}
+
+	fn find_centroid(&mut self, root: u32, excluded_size: u32) -> u32 {
+		let threshold = u64::from(self.centroids[root as usize].size)
+			+ u64::from(excluded_size);
+		let mut index = root;
+		loop {
+			let node = self.centroids[index as usize];
+			if u64::from(node.size) * 2 < threshold {
+				return index - 1;
+			}
+			self.centroids[index as usize].on_heavy_path = true;
+			if node.is_leaf() {
+				return index;
+			}
+			index += 1;
+		}
+	}
+
+	fn count_component(&mut self, root: u32, excluded_size: u32) -> u128 {
+		let centroid = self.find_centroid(root, excluded_size);
+		let node = self.centroids[centroid as usize];
+		self.centroids[centroid as usize].alive = false;
+		if node.is_leaf() {
+			return 0;
+		}
+
+		let left = self.centroids[node.left as usize];
+		let right = self.centroids[node.right as usize];
+		let colors = TripletColors {
+			red_min: left.min_leaf,
+			red_max: left.max_leaf,
+			blue_min: right.min_leaf,
+			blue_max: right.max_leaf,
+		};
+		self.colors = colors;
+		let mut shared = self.count_shared();
+		let component_start = self.current_start;
+		let component_end = self.current_end;
+
+		let left_is_complete = !left.on_heavy_path;
+		if left.alive && (!left_is_complete || left.num_leaves >= 3) {
+			self.contract_pruned(TripletPruneKind::Red);
+			shared +=
+				self.count_component(node.left, excluded_size);
+			self.restore_component(
+				component_start,
+				component_end,
+				colors,
+			);
+		}
+
+		if right.alive && right.num_leaves >= 3 {
+			self.contract_blue();
+			shared += self.count_component(node.right, 0);
+			self.restore_component(
+				component_start,
+				component_end,
+				colors,
+			);
+		}
+
+		if centroid != root {
+			self.contract_pruned(TripletPruneKind::Uncolored);
+			shared += self.count_component(root, node.size);
+			self.restore_component(
+				component_start,
+				component_end,
+				colors,
+			);
+		}
+
+		shared
+	}
+
+	fn restore_component(
+		&mut self,
+		start: usize,
+		end: usize,
+		colors: TripletColors,
+	) {
+		self.contracts.truncate(end);
+		self.current_start = start;
+		self.current_end = end;
+		self.colors = colors;
+	}
+
+	fn count_shared(&mut self) -> u128 {
+		self.counting.clear();
+		let mut shared = 0;
+		for index in self.current_start..self.current_end {
+			let node = self.contracts[index];
+			if node.is_leaf() {
+				let blue = u64::from(
+					self.colors.is_blue(node.leaf),
+				);
+				if blue == 1 {
+					shared += u128::from(node.same_red);
+				}
+				self.counting.push(TripletLeafCounts {
+					red: u64::from(
+						self.colors.is_red(node.leaf),
+					) + node.red,
+					blue,
+				});
+				continue;
+			}
+
+			let right = self.counting.pop().unwrap();
+			let left = self.counting.pop().unwrap();
+			let blue = left.blue + right.blue;
+			shared += u128::from(choose2_u64(left.red))
+				* u128::from(right.blue) + u128::from(
+				choose2_u64(left.blue),
+			) * u128::from(
+				right.red,
+			) + u128::from(left.red)
+				* u128::from(choose2_u64(right.blue))
+				+ u128::from(left.blue)
+					* u128::from(choose2_u64(right.red))
+				+ u128::from(node.same_red) * u128::from(blue)
+				+ u128::from(node.red)
+					* u128::from(choose2_u64(blue));
+			self.counting.push(TripletLeafCounts {
+				red: left.red + right.red + node.red,
+				blue,
 			});
 		}
-
-		let mut edges = tree
-			.edges()
-			.map(|child| TripletEdge {
-				up: tree.parent_of(child).unwrap().usize(),
-				down: child.usize(),
-			})
-			.collect::<Vec<_>>();
-		let mut next = Vec::with_capacity(edges.len());
-		let mut root = tree.root().usize();
-
-		while !edges.is_empty() {
-			for edge in edges.drain(..) {
-				if components[edge.up].parent != edge.up
-					|| components[edge.down].parent
-						!= edge.down
-				{
-					next.push(edge);
-					continue;
-				}
-
-				let up_kind = components[edge.up].kind;
-				let down_kind = components[edge.down].kind;
-				let upper_is_internal = up_kind
-					== TripletComponentKind::Internal;
-				let path_merge = matches!(
-					up_kind,
-					TripletComponentKind::Path { .. }
-				) && matches!(
-					down_kind,
-					TripletComponentKind::Path { .. }
-						| TripletComponentKind::Leaf
-				);
-				let internal_merge = upper_is_internal
-					&& components[edge.down].down_closed;
-
-				if !path_merge && !internal_merge {
-					next.push(edge);
-					continue;
-				}
-
-				let index = components.len();
-				let counts = if upper_is_internal {
-					TripletCounts::attach_internal(
-						components[edge.down].counts,
-					)
-				} else {
-					TripletCounts::merge(
-						components[edge.down].counts,
-						components[edge.up].counts,
-					)
-				};
-				let down_closed = if upper_is_internal {
-					false
-				} else {
-					components[edge.down].down_closed
-				};
-
-				components[edge.up].parent = index;
-				components[edge.down].parent = index;
-				components.push(TripletComponent {
-					kind: TripletComponentKind::Path {
-						lower: edge.down,
-						upper: edge.up,
-						upper_is_internal,
-					},
-					parent: index,
-					down_closed,
-					counts,
-				});
-				root = index;
-			}
-
-			for edge in &mut next {
-				edge.up = components[edge.up].parent;
-				edge.down = components[edge.down].parent;
-			}
-			std::mem::swap(&mut edges, &mut next);
-		}
-
-		Self { components, root }
+		debug_assert_eq!(self.counting.len(), 1);
+		shared
 	}
 
-	fn set_color(&mut self, leaf: u32, color: TripletColor) {
-		let mut index = leaf as usize;
-		self.components[index].counts = TripletCounts::leaf(color);
+	fn contract_blue(&mut self) {
+		self.keep_states.clear();
+		let new_start = self.contracts.len();
+		for index in self.current_start..self.current_end {
+			let node = self.contracts[index];
+			if node.is_leaf() {
+				let keep = self.colors.is_blue(node.leaf);
+				if keep {
+					self.contracts.push(
+						TripletContractNode::leaf(
+							node.leaf,
+						),
+					);
+				}
+				self.keep_states.push(keep);
+				continue;
+			}
 
-		while index != self.root {
-			index = self.components[index].parent;
-			let TripletComponentKind::Path {
-				lower,
-				upper,
-				upper_is_internal,
-			} = self.components[index].kind
-			else {
-				unreachable!()
-			};
-			self.components[index].counts = if upper_is_internal {
-				TripletCounts::attach_internal(
-					self.components[lower].counts,
-				)
-			} else {
-				TripletCounts::merge(
-					self.components[lower].counts,
-					self.components[upper].counts,
-				)
-			};
+			let right = self.keep_states.pop().unwrap();
+			let left = self.keep_states.pop().unwrap();
+			if left && right {
+				self.contracts
+					.push(TripletContractNode::internal());
+			}
+			self.keep_states.push(left || right);
 		}
+		debug_assert_eq!(self.keep_states, [true]);
+		self.current_start = new_start;
+		self.current_end = self.contracts.len();
 	}
 
-	fn shared(&self) -> u128 {
-		self.components[self.root].counts.shared
+	fn contract_pruned(&mut self, kind: TripletPruneKind) {
+		self.prune_states.clear();
+		let new_start = self.contracts.len();
+		for index in self.current_start..self.current_end {
+			let node = self.contracts[index];
+			if node.is_leaf() {
+				let keep = match kind {
+					TripletPruneKind::Red => {
+						self.colors.is_red(node.leaf)
+					}
+					TripletPruneKind::Uncolored => !self
+						.colors
+						.is_colored(node.leaf),
+				};
+				if keep {
+					let position = self.contracts.len();
+					self.contracts.push(node);
+					self.prune_states.push(
+						TripletPruneState {
+							position,
+							same_red: node.same_red,
+							red: node.red,
+							kept: true,
+						},
+					);
+				} else {
+					let red = node.red
+						+ u64::from(matches!(
+							kind,
+							TripletPruneKind::Uncolored
+						));
+					self.prune_states.push(
+						TripletPruneState {
+							position: 0,
+							same_red: choose2_u64(
+								red,
+							),
+							red,
+							kept: false,
+						},
+					);
+				}
+				continue;
+			}
+
+			let right = self.prune_states.pop().unwrap();
+			let left = self.prune_states.pop().unwrap();
+			let red = left.red + right.red + node.red;
+			let state = match (left.kept, right.kept) {
+				(false, false) => TripletPruneState {
+					position: 0,
+					same_red: choose2_u64(red),
+					red,
+					kept: false,
+				},
+				(true, false) | (false, true) => {
+					let mut kept = if left.kept {
+						left
+					} else {
+						right
+					};
+					kept.same_red = left.same_red
+						+ right.same_red + node
+						.same_red;
+					kept.red = red;
+					self.contracts[kept.position]
+						.same_red = kept.same_red;
+					self.contracts[kept.position].red =
+						kept.red;
+					kept
+				}
+				(true, true) => {
+					let position = self.contracts.len();
+					self.contracts.push(node);
+					TripletPruneState {
+						position,
+						same_red: node.same_red,
+						red: node.red,
+						kept: true,
+					}
+				}
+			};
+			self.prune_states.push(state);
+		}
+		debug_assert!(
+			self.prune_states.len() == 1
+				&& self.prune_states[0].kept
+		);
+		self.current_start = new_start;
+		self.current_end = self.contracts.len();
 	}
 }
 
-fn choose2(value: u32) -> u64 {
-	let value = u64::from(value);
+fn choose2_u64(value: u64) -> u64 {
 	value * value.saturating_sub(1) / 2
 }
 
