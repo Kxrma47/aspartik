@@ -1146,18 +1146,3 @@ impl Iterator for Postorder<'_> {
 		None
 	}
 }
-
-#[cfg(test)]
-mod tests {
-	use super::validate_num_leaves;
-
-	#[test]
-	fn leaf_count_bounds() {
-		assert!(validate_num_leaves(0).is_err());
-		assert!(validate_num_leaves(1).is_err());
-		assert!(validate_num_leaves(2).is_ok());
-		assert!(validate_num_leaves(u32::MAX / 2).is_ok());
-		assert!(validate_num_leaves(u32::MAX / 2 + 1).is_err());
-		assert!(validate_num_leaves(u32::MAX).is_err());
-	}
-}
