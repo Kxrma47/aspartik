@@ -316,10 +316,16 @@ struct TripletLeafCounts {
 
 #[derive(Clone, Copy)]
 struct TripletPruneState {
-	position: usize,
+	position: u32,
 	same_red: u64,
 	red: u64,
 	kept: bool,
+}
+
+impl TripletPruneState {
+	fn position(&self) -> usize {
+		self.position as usize
+	}
 }
 
 #[derive(Clone, Copy)]
@@ -619,8 +625,8 @@ impl TripletCounter {
 	}
 
 	fn contract_pruned(&mut self, kind: TripletPruneKind) {
-		self.prune_states.clear();
 		let new_start = self.contracts.len();
+		let mut state_len = 0;
 		for index in self.current_start..self.current_end {
 			let node = self.contracts[index];
 			if node.is_leaf() {
@@ -632,65 +638,93 @@ impl TripletCounter {
 						.colors
 						.is_colored(node.leaf),
 				};
-				if keep {
-					let position = self.contracts.len();
+				let state = if keep {
+					let position = u32::try_from(
+						self.contracts.len()
+							- new_start,
+					)
+					.unwrap();
 					self.contracts.push(node);
-					self.prune_states.push(
-						TripletPruneState {
-							position,
-							same_red: node.same_red,
-							red: node.red,
-							kept: true,
-						},
-					);
+					TripletPruneState {
+						position,
+						same_red: node.same_red,
+						red: node.red,
+						kept: true,
+					}
 				} else {
 					let red = node.red
 						+ u64::from(matches!(
 							kind,
 							TripletPruneKind::Uncolored
 						));
-					self.prune_states.push(
-						TripletPruneState {
-							position: 0,
-							same_red: choose2_u64(
-								red,
-							),
-							red,
-							kept: false,
-						},
-					);
+					TripletPruneState {
+						position: 0,
+						same_red: choose2_u64(red),
+						red,
+						kept: false,
+					}
+				};
+				if state_len == self.prune_states.len() {
+					self.prune_states.push(state);
+				} else {
+					self.prune_states[state_len] = state;
 				}
+				state_len += 1;
 				continue;
 			}
 
-			let right = self.prune_states.pop().unwrap();
-			let left = self.prune_states.pop().unwrap();
-			let red = left.red + right.red + node.red;
-			let state = match (left.kept, right.kept) {
-				(false, false) => TripletPruneState {
-					position: 0,
-					same_red: choose2_u64(red),
-					red,
-					kept: false,
-				},
+			let right = state_len - 1;
+			let left = right - 1;
+			let left_kept = self.prune_states[left].kept;
+			let right_kept = self.prune_states[right].kept;
+			let state = match (left_kept, right_kept) {
+				(false, false) => {
+					let red = self.prune_states[left].red
+						+ self.prune_states[right].red
+						+ node.red;
+					TripletPruneState {
+						position: 0,
+						same_red: choose2_u64(red),
+						red,
+						kept: false,
+					}
+				}
 				(true, false) | (false, true) => {
-					let mut kept = if left.kept {
+					let kept = if left_kept {
 						left
 					} else {
 						right
 					};
-					kept.same_red = left.same_red
-						+ right.same_red + node
+					let red = self.prune_states[left].red
+						+ self.prune_states[right].red
+						+ node.red;
+					let same_red = self.prune_states[left]
+						.same_red + self
+						.prune_states[right]
+						.same_red + node
 						.same_red;
-					kept.red = red;
-					self.contracts[kept.position]
-						.same_red = kept.same_red;
-					self.contracts[kept.position].red =
-						kept.red;
-					kept
+					let contract_index = new_start
+						+ self.prune_states[kept]
+							.position();
+					let position = self.prune_states[kept]
+						.position;
+					let contract = &mut self.contracts
+						[contract_index];
+					contract.same_red = same_red;
+					contract.red = red;
+					TripletPruneState {
+						position,
+						same_red,
+						red,
+						kept: true,
+					}
 				}
 				(true, true) => {
-					let position = self.contracts.len();
+					let position = u32::try_from(
+						self.contracts.len()
+							- new_start,
+					)
+					.unwrap();
 					self.contracts.push(node);
 					TripletPruneState {
 						position,
@@ -700,12 +734,11 @@ impl TripletCounter {
 					}
 				}
 			};
-			self.prune_states.push(state);
+			self.prune_states[left] = state;
+			state_len -= 1;
 		}
-		debug_assert!(
-			self.prune_states.len() == 1
-				&& self.prune_states[0].kept
-		);
+		debug_assert!(state_len == 1 && self.prune_states[0].kept);
+		self.prune_states.truncate(state_len);
 		self.current_start = new_start;
 		self.current_end = self.contracts.len();
 	}
