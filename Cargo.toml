@@ -33,6 +33,7 @@ computare-distributions = { git = "https://github.com/kaathewisegit/computare", 
 computare-special = { git = "https://github.com/kaathewisegit/computare", version = "0.1.0-alpha.0" }
 cudarc = { version = "0.19.9", default-features = false }
 fork_union = "2.3"
+hashbrown = "0.17"
 parking_lot = "0.12.5"
 picoarrow = "0.3.3"
 pyo3 = "0.29.2"

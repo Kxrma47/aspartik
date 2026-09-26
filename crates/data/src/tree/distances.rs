@@ -1,5 +1,6 @@
 use anyhow::{Result, ensure};
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use hashbrown::HashTable;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use smallvec::SmallVec;
 
 use super::{BinaryTree, Node};
@@ -50,15 +51,20 @@ pub(super) fn robinson_foulds(first: &BinaryTree, second: &BinaryTree) -> u32 {
 	assert_eq!(first.num_leaves(), second.num_leaves());
 	let first_hashes = clade_hashes(first);
 	let second_hashes = clade_hashes(second);
-	let clades = first
-		.internals()
-		.filter(|&node| node != first.root())
-		.map(|node| first_hashes[node.usize()])
-		.collect::<FxHashSet<_>>();
+	let mut clades =
+		HashTable::with_capacity(first.num_leaves() as usize - 2);
+	for node in first.internals().filter(|&node| node != first.root()) {
+		let hash = first_hashes[node.usize()];
+		clades.insert_unique(hash.first, hash, |hash| hash.first);
+	}
 	let shared = second
 		.internals()
 		.filter(|&node| node != second.root())
-		.filter(|&node| clades.contains(&second_hashes[node.usize()]))
+		.filter(|&node| {
+			let hash = second_hashes[node.usize()];
+			clades.find(hash.first, |clade| *clade == hash)
+				.is_some()
+		})
 		.count() as u32;
 	2 * (first.num_leaves() - 2 - shared)
 }
@@ -103,9 +109,8 @@ pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
 	let num_clades = usize::try_from(num_leaves - 2)?;
 	let capacity = trees.len().checked_mul(num_clades).unwrap_or(0);
 	let mut clades =
-		FxHashMap::<CladeHash, SmallVec<[usize; 2]>>::with_capacity_and_hasher(
+		HashTable::<(CladeHash, SmallVec<[usize; 2]>)>::with_capacity(
 			capacity,
-			FxBuildHasher,
 		);
 	let mut hashes =
 		vec![CladeHash::default(); first_tree.num_nodes() as usize];
@@ -116,8 +121,16 @@ pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
 			hashes[node.usize()] = hash;
 			if node != tree.root().into() && tree.is_internal(node)
 			{
-				let tree_indices =
-					clades.entry(hash).or_default();
+				let mut entry = clades
+					.entry(
+						hash.first,
+						|entry| entry.0 == hash,
+						|entry| entry.0.first,
+					)
+					.or_insert_with(|| {
+						(hash, SmallVec::new())
+					});
+				let tree_indices = &mut entry.get_mut().1;
 				if tree_indices.last() != Some(&tree_index) {
 					tree_indices.push(tree_index);
 				}
@@ -131,7 +144,7 @@ pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
 		row[index] = 0;
 	}
 
-	for tree_indices in clades.values() {
+	for (_, tree_indices) in clades.iter() {
 		for (offset, &first) in tree_indices.iter().enumerate() {
 			for &second in &tree_indices[offset + 1..] {
 				distances[first][second] -= 2;
