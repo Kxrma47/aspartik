@@ -77,7 +77,7 @@ class Phred:
     def probability_incorrect(self) -> float: ...
 
 class MSA:
-    def __init__(self, names: list[str], sequences: list[DNASeq]): ...
+    def __init__(self, names: TaxonSet, sequences: list[DNASeq]): ...
     @classmethod
     def from_fasta_file(cls, path: PathLike | str) -> MSA:
         """
@@ -88,7 +88,7 @@ class MSA:
 
     @classmethod
     def random(
-        _cls, num_sequences: int, num_sites: int, names: list[str], rng: RNG
+        _cls, num_sequences: int, num_sites: int, names: TaxonSet, rng: RNG
     ) -> MSA:
         """A random alignment of given dimensions"""
 
@@ -109,7 +109,7 @@ class MSA:
     def sequence_name(self, index: int) -> str:
         """The name (or id) of the `index`'th sequence"""
 
-    def sequence_names(self) -> list[str]:
+    def sequence_names(self) -> TaxonSet:
         """A list of all sequence names in the alignment"""
 
     def sequence(self, index: int) -> DNASeq:
@@ -272,3 +272,9 @@ class BinaryTree:
 
 def robinson_foulds_matrix(trees: list[BinaryTree]) -> list[list[int]]: ...
 def triplet_distance_matrix(trees: list[BinaryTree]) -> array: ...
+
+class TaxonSet:
+    def __init__(self, names: list[str]): ...
+    @classmethod
+    def ranged_ints(_cls, len: int) -> TaxonSet: ...
+    def to_list(self) -> list[str]: ...

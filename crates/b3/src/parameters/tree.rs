@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use bytemuck::{Pod, Zeroable, allocation::cast_vec};
 use parking_lot::Mutex;
+use picoarrow::array::Array;
 use pyo3::{
 	exceptions::{PyTypeError, PyValueError},
 	prelude::*,
@@ -18,10 +19,13 @@ use std::{
 
 use crate::{clock::PyClock, impl_pyparameter_common, parameters::Parameter};
 use bitmap::Bitmap;
-use data::tree::{
-	Node as DataNode,
-	builder::{EdgeData, NodeData, TreeBuilder},
-	python::PyTreeBuilder as PyNewickTree,
+use data::{
+	PyTaxonSet, TaxonSet,
+	tree::{
+		Node as DataNode,
+		builder::{EdgeData, NodeData, TreeBuilder},
+		python::PyTreeBuilder as PyNewickTree,
+	},
 };
 use rng::{PyRng, Rng};
 use sk::EpochBuf;
@@ -31,7 +35,7 @@ const ROOT: u32 = 0x524f4f54;
 
 #[derive(Debug, Clone)]
 pub struct Tree {
-	names: Vec<String>,
+	names: TaxonSet,
 
 	num_nodes: u32,
 	num_leaves: u32,
@@ -149,7 +153,7 @@ nodes_2!(Leaf);
 nodes_2!(Internal);
 
 impl Tree {
-	pub fn new(names: Vec<String>, rng: &mut Rng) -> Result<Self> {
+	pub fn new(names: TaxonSet, rng: &mut Rng) -> Result<Self> {
 		ensure!(
 			names.len() >= 2,
 			"Expected at least 2 nodes, got {}",
@@ -420,7 +424,7 @@ impl Tree {
 		ola
 	}
 
-	pub fn names(&self) -> &[String] {
+	pub fn names(&self) -> &TaxonSet {
 		&self.names
 	}
 
@@ -965,7 +969,7 @@ impl Tree {
 			let mut next = Vec::with_capacity(2);
 			for child in [left, right] {
 				let name = if self.is_leaf(child) {
-					self.names[child.i()].clone()
+					self.names.get(child.i()).to_owned()
 				} else if internal_ids {
 					child.0.to_string()
 				} else {
@@ -1205,8 +1209,8 @@ pub struct PyTree {
 
 impl_pyparameter_common!(PyTree, Tree, {
 	#[new]
-	fn new(names: Vec<String>, rng: Py<PyRng>) -> Result<Self> {
-		let tree = Tree::new(names, &mut rng.get().inner())?;
+	fn new(names: PyTaxonSet, rng: Py<PyRng>) -> Result<Self> {
+		let tree = Tree::new(names.0, &mut rng.get().inner())?;
 		let tree = Self {
 			inner: Mutex::new(tree),
 		};
@@ -1243,8 +1247,8 @@ impl_pyparameter_common!(PyTree, Tree, {
 	/// The order is the same as leaf indices: the first name is that of
 	/// `Leaf(0)`, the second one is `Leaf(1)`, and so on.
 	#[getter]
-	fn names(&self) -> Vec<String> {
-		self.inner().names().to_vec()
+	fn names(&self) -> PyTaxonSet {
+		PyTaxonSet(self.inner().names().clone())
 	}
 
 	/// Multiplies the heights of all internal nodes by `scale`

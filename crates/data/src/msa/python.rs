@@ -3,7 +3,7 @@ use pyo3::{prelude::*, types::PyType};
 
 use std::{fs::File, io::BufReader, ops::Deref, path::PathBuf};
 
-use crate::{DnaNucleotide, Msa, seq::python::PyDnaSeq};
+use crate::{DnaNucleotide, Msa, seq::python::PyDnaSeq, taxon_set::PyTaxonSet};
 use rng::PyRng;
 
 /// DNA multiple sequence alignment
@@ -44,13 +44,13 @@ impl PyMsa {
 		_cls: Py<PyType>,
 		num_sequences: usize,
 		num_sites: usize,
-		names: Vec<String>,
+		names: PyTaxonSet,
 		rng: Py<PyRng>,
 	) -> Result<Self> {
 		let msa = Msa::random(
 			num_sequences,
 			num_sites,
-			names.into(),
+			names.0,
 			&mut rng.get().inner(),
 		)?;
 		Ok(Self(msa))
@@ -74,8 +74,8 @@ impl PyMsa {
 	}
 
 	/// A list with all of the sequence names
-	fn sequence_names(&self) -> &[String] {
-		self.0.sequence_names()
+	fn sequence_names(&self) -> PyTaxonSet {
+		PyTaxonSet(self.0.sequence_names().clone())
 	}
 
 	/// `index`'th sequence

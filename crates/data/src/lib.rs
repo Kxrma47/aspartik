@@ -5,6 +5,7 @@ mod nucleotides;
 mod parser;
 mod phred;
 pub mod seq;
+mod taxon_set;
 pub mod tree;
 
 pub use aa::AminoAcid;
@@ -14,6 +15,9 @@ pub use msa::python::PyMsa;
 pub use nucleotides::DnaNucleotide;
 pub use parser::Parser;
 pub use phred::Phred;
+#[cfg(feature = "python")]
+pub use taxon_set::PyTaxonSet;
+pub use taxon_set::TaxonSet;
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -25,9 +29,8 @@ pub mod pymodule {
 
 	#[pymodule_export]
 	use crate::{
-		AminoAcid, DnaNucleotide, Phred,
+		AminoAcid, DnaNucleotide, Phred, PyMsa, PyTaxonSet,
 		fasta::python::PyFastaDnaRecord,
-		msa::python::PyMsa,
 		seq::python::PyDnaSeq,
 		tree::python::{PyBinaryTree, PySvgOptions, PyTreeBuilder},
 		tree::{Internal, Leaf, Node},

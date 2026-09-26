@@ -1,10 +1,11 @@
 use anyhow::{Result, ensure};
+use picoarrow::array::{Array, ArrayUtf8, NonNullable};
 use rand::Rng;
 
-use std::{cmp::Ordering, io::BufRead, mem, ops::Range};
+use std::{cmp::Ordering, io::BufRead, ops::Range};
 
 use crate::{
-	DnaNucleotide,
+	DnaNucleotide, TaxonSet,
 	fasta::FastaParser,
 	seq::{Character, random_dna},
 };
@@ -16,7 +17,7 @@ pub mod python;
 pub struct Msa<C: Character> {
 	num_sequences: usize,
 	num_sites: usize,
-	names: Box<[String]>,
+	names: TaxonSet,
 	data: Vec<C>,
 }
 
@@ -24,7 +25,7 @@ impl<C: Character> Msa<C> {
 	pub fn new(
 		num_sequences: usize,
 		num_sites: usize,
-		names: Box<[String]>,
+		names: TaxonSet,
 		data: Vec<C>,
 	) -> Result<Self> {
 		ensure!(num_sequences * num_sites == data.len());
@@ -46,7 +47,7 @@ impl<C: Character> Msa<C> {
 		let mut num_sequences = 0;
 
 		let mut data = Vec::new();
-		let mut names = Vec::new();
+		let mut names = ArrayUtf8::<NonNullable>::new();
 
 		let mut add_record = |parser: &mut FastaParser<C>| {
 			if num_sites == 0 {
@@ -55,7 +56,7 @@ impl<C: Character> Msa<C> {
 			ensure!(num_sites == parser.seq.len());
 
 			data.append(&mut parser.seq);
-			names.push(mem::take(&mut parser.description));
+			names.push(&parser.description)?;
 			num_sequences += 1;
 			Ok(())
 		};
@@ -100,10 +101,10 @@ impl<C: Character> Msa<C> {
 	}
 
 	pub fn sequence_name(&self, index: usize) -> &str {
-		&self.names[index]
+		self.names.get(index)
 	}
 
-	pub fn sequence_names(&self) -> &[String] {
+	pub fn sequence_names(&self) -> &TaxonSet {
 		&self.names
 	}
 
@@ -152,7 +153,7 @@ impl Msa<DnaNucleotide> {
 	pub fn random<R: Rng>(
 		num_sequences: usize,
 		num_sites: usize,
-		names: Box<[String]>,
+		names: TaxonSet,
 		rng: &mut R,
 	) -> Result<Self> {
 		let seq = random_dna(num_sequences * num_sites, rng);

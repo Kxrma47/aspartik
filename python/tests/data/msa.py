@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from aspartik.data import TaxonSet
 from aspartik.data.msa import MSA
 from aspartik.rng import RNG
 
@@ -29,8 +30,8 @@ def test_eq():
 
 def test_random(rng: RNG):
     for num_sequences in [1, 3, 10, 100]:
+        names = TaxonSet.ranged_ints(num_sequences)
         for num_sites in [1, 3, 10, 100]:
-            names = [str(i) for i in range(num_sequences)]
             msa = MSA.random(num_sequences, num_sites, names, rng)
             assert msa.num_sequences == num_sequences
             assert msa.num_sites == num_sites
@@ -39,9 +40,9 @@ def test_random(rng: RNG):
 
 def test_reproducible():
     rng_a = RNG(4)
-    msa_a = MSA.random(100, 1000, [str(i) for i in range(100)], rng_a)
+    msa_a = MSA.random(100, 1000, TaxonSet.ranged_ints(100), rng_a)
 
     rng_b = RNG(4)
-    msa_b = MSA.random(100, 1000, [str(i) for i in range(100)], rng_b)
+    msa_b = MSA.random(100, 1000, TaxonSet.ranged_ints(100), rng_b)
 
     assert msa_a == msa_b

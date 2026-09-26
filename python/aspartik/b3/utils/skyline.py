@@ -1,5 +1,6 @@
 from typing import Literal
 
+from ...data import TaxonSet
 from ._common import raise_import
 
 try:
@@ -21,7 +22,7 @@ def plot_skyline_coalescent(
     trees: pl.Series,
     group_sizes: pl.Series,
     values: pl.Series,
-    sequence_names: list[str],
+    sequence_names: TaxonSet,
     mode: Mode = "traces",
     *,
     num_points: int = 200,

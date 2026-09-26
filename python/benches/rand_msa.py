@@ -2,6 +2,7 @@ import argparse
 from typing import Literal, Optional
 
 from aspartik.b3.config import MCMCConfig
+from aspartik.data import TaxonSet
 from aspartik.data.msa import MSA
 from aspartik.rng import RNG
 
@@ -16,9 +17,8 @@ def run_mcmc(
     seed: int = 4,
 ) -> Optional[float]:
     rng = RNG(seed)
-    msa = MSA.random(
-        num_sequences, num_sites, [str(i) for i in range(num_sequences)], rng
-    )
+    names = TaxonSet.ranged_ints(num_sequences)
+    msa = MSA.random(num_sequences, num_sites, names, rng)
 
     config = MCMCConfig(
         msa,

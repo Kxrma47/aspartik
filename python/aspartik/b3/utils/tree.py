@@ -9,12 +9,13 @@ except ModuleNotFoundError as e:
 from pathlib import Path
 from typing import TextIO
 
+from ...data import TaxonSet
 from ...rng import RNG
 from ..parameters import Tree
 
 
 def trees_to_newick(
-    names: list[str],
+    names: TaxonSet,
     trace_path: str,
     dest: str | Path | TextIO,
     *,

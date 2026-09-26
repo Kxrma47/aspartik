@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 from aspartik.b3 import Operator, Proposal
 from aspartik.b3.parameters import Tree
+from aspartik.data import TaxonSet
 from aspartik.data.msa import MSA
 from aspartik.rng import RNG
 
@@ -18,7 +19,7 @@ def random_integer(lower: int, upper: int, num: int = 100) -> list[int]:
 
 def check_tree_operator(factory: Callable[[Tree], Operator]) -> None:
     rng = RNG(4)
-    tree = Tree([str(i) for i in range(100)], rng)
+    tree = Tree(TaxonSet.ranged_ints(100), rng)
 
     operator = factory(tree)
 
@@ -34,7 +35,7 @@ def check_tree_operator(factory: Callable[[Tree], Operator]) -> None:
 
 def random_tree(rng, lower: int, upper: int):
     len = rng.random_int(lower, upper)
-    return Tree([str(i) for i in range(len)], rng)
+    return Tree(TaxonSet.ranged_ints(len), rng)
 
 
 def random_trees(lower: int, upper: int, num: int = 1000):
@@ -46,10 +47,9 @@ def random_trees(lower: int, upper: int, num: int = 1000):
 def random_msa(rng: RNG, lower: int, upper: int):
     num_sites = rng.random_int(lower, upper)
     num_sequences = rng.random_int(lower, upper)
+    names = TaxonSet.ranged_ints(num_sequences)
 
-    return MSA.random(
-        num_sequences, num_sites, [str(i) for i in range(num_sequences)], rng
-    )
+    return MSA.random(num_sequences, num_sites, names, rng)
 
 
 def random_msas(lower: int, upper: int, num: int):
