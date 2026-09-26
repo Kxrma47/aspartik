@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::AddAssign};
 
 use computare_core::{Num, Zero};
 
@@ -68,7 +68,7 @@ pub fn mul<T, const N: usize, const M: usize, const K: usize>(
 	b: &[[T; K]; M],
 ) -> [[T; K]; N]
 where
-	T: Num + Copy,
+	T: Num + Copy + AddAssign,
 {
 	// Initialize the output matrix with T::zero()
 	let mut result = [[T::zero(); K]; N];
