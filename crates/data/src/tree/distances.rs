@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 
 use super::{BinaryTree, Node};
 
-#[derive(Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct CladeHash {
 	first: u64,
 	second: u64,
@@ -83,11 +83,13 @@ fn clade_hash(
 	}
 }
 
-/// Computes all rooted Robinson-Foulds distances by indexing shared clades.
+/// Computes all rooted [Robinson-Foulds distances][rf] by indexing shared
+/// clades
 ///
-/// Expected time is O(kn + sum(f_c^2)) for k trees with n leaves, where f_c
-/// is the number of trees containing clade c. See
-/// <https://doi.org/10.1016/0025-5564(81)90043-2>.
+/// Expected time is `O(kn + sum(f_c^2))` for `k` trees with `n` leaves, where
+/// `f_c` is the number of trees containing clade `c`.
+///
+/// [rf]: https://doi.org/10.1016/0025-5564(81)90043-2
 pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
 	let Some(first_tree) = trees.first() else {
 		return Ok(Vec::new());
@@ -107,36 +109,27 @@ pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
 	}
 
 	let num_clades = usize::try_from(num_leaves - 2)?;
-	let capacity = trees.len().checked_mul(num_clades).unwrap_or(0);
-	let mut clades =
-		HashTable::<(CladeHash, SmallVec<[usize; 2]>)>::with_capacity(
-			capacity,
-		);
-	let mut hashes =
-		vec![CladeHash::default(); first_tree.num_nodes() as usize];
+	let num_nodes = first_tree.num_nodes() as usize;
+	let capacity = trees.len() * num_clades;
+
+	let mut clades = Vec::with_capacity(capacity);
+	let mut hashes = vec![CladeHash::default(); num_nodes];
 
 	for (tree_index, tree) in trees.iter().enumerate() {
+		if hashes.len() < num_nodes {
+			hashes.resize(num_nodes, CladeHash::default());
+		}
 		for node in tree.postorder() {
 			let hash = clade_hash(tree, &hashes, node);
 			hashes[node.usize()] = hash;
 			if node != tree.root().into() && tree.is_internal(node)
 			{
-				let mut entry = clades
-					.entry(
-						hash.first,
-						|entry| entry.0 == hash,
-						|entry| entry.0.first,
-					)
-					.or_insert_with(|| {
-						(hash, SmallVec::new())
-					});
-				let tree_indices = &mut entry.get_mut().1;
-				if tree_indices.last() != Some(&tree_index) {
-					tree_indices.push(tree_index);
-				}
+				clades.push((hash, tree_index));
 			}
 		}
 	}
+
+	clades.sort_unstable();
 
 	let max_distance = (num_leaves - 2) * 2;
 	let mut distances = vec![vec![max_distance; trees.len()]; trees.len()];
@@ -144,13 +137,34 @@ pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
 		row[index] = 0;
 	}
 
-	for (_, tree_indices) in clades.iter() {
-		for (offset, &first) in tree_indices.iter().enumerate() {
-			for &second in &tree_indices[offset + 1..] {
+	let mut slice_start = 0;
+	while slice_start < clades.len() {
+		let current_hash = clades[slice_start].0;
+		let mut slice_end = slice_start + 1;
+		while slice_end < clades.len()
+			&& clades[slice_end].0 == current_hash
+		{
+			slice_end += 1;
+		}
+
+		// This is faster than collecting `clades` and then doing a
+		// `dedup` on `distinct_trees`.
+		let group = &clades[slice_start..slice_end];
+		let mut distinct_trees: SmallVec<[usize; 8]> = SmallVec::new();
+		for &(_, tree_idx) in group {
+			if distinct_trees.last() != Some(&tree_idx) {
+				distinct_trees.push(tree_idx);
+			}
+		}
+
+		for (offset, &first) in distinct_trees.iter().enumerate() {
+			for &second in &distinct_trees[offset + 1..] {
 				distances[first][second] -= 2;
 				distances[second][first] -= 2;
 			}
 		}
+
+		slice_start = slice_end;
 	}
 
 	Ok(distances)
