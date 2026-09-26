@@ -29,7 +29,8 @@ fn validate_num_leaves(num_leaves: u32) -> Result<()> {
 	);
 	ensure!(
 		num_leaves <= u32::MAX / 2,
-		"A tree cannot have more than 2 billion trees, got {num_leaves}"
+		"A tree cannot have more than {} leaves, got {num_leaves}",
+		u32::MAX / 2
 	);
 	Ok(())
 }
