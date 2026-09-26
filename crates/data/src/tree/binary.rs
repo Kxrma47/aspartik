@@ -8,6 +8,7 @@ use std::{
 };
 
 use super::{Internal, Leaf, Node, ROOT_PARENT};
+use crate::TaxonSet;
 use buffer::Buffer;
 
 #[derive(Debug)]
@@ -17,7 +18,8 @@ pub struct BinaryTree {
 	children: Buffer<u32>,
 	parents: Buffer<u32>,
 	edge_lengths: Buffer<f64>,
-	node_names: ArrayUtf8<Nullable>,
+	taxa: TaxonSet,
+	internal_names: ArrayUtf8<Nullable>,
 	node_metadata: ArrayUtf8<Nullable>,
 	edge_metadata: ArrayUtf8<Nullable>,
 }
@@ -91,11 +93,17 @@ impl BinaryTree {
 			}
 		}
 
-		let mut node_names = ArrayUtf8::<Nullable>::new();
+		let taxa = TaxonSet::from_iter(std::iter::repeat_n(
+			"",
+			num_leaves as usize,
+		));
 		let mut node_metadata = ArrayUtf8::<Nullable>::new();
 		for _ in 0..num_nodes_usize {
-			node_names.push(None)?;
 			node_metadata.push(None)?;
+		}
+		let mut internal_names = ArrayUtf8::<Nullable>::new();
+		for _ in 0..num_internals {
+			internal_names.push(None)?;
 		}
 		let mut edge_metadata = ArrayUtf8::<Nullable>::new();
 		for _ in 0..num_edges_usize {
@@ -109,7 +117,8 @@ impl BinaryTree {
 			children,
 			parents,
 			edge_lengths,
-			node_names,
+			taxa,
+			internal_names,
 			node_metadata,
 			edge_metadata,
 		})
@@ -122,7 +131,8 @@ impl BinaryTree {
 		children: Buffer<u32>,
 		parents: Buffer<u32>,
 		edge_lengths: Buffer<f64>,
-		node_names: ArrayUtf8<Nullable>,
+		taxa: TaxonSet,
+		internal_names: ArrayUtf8<Nullable>,
 		node_metadata: ArrayUtf8<Nullable>,
 		edge_metadata: ArrayUtf8<Nullable>,
 	) -> Result<Self> {
@@ -132,26 +142,28 @@ impl BinaryTree {
 			children,
 			parents,
 			edge_lengths,
-			node_names,
+			taxa,
+			internal_names,
 			node_metadata,
 			edge_metadata,
 		};
 		tree.validate()?;
-		tree.node_names.shrink_to_fit();
+		tree.internal_names.shrink_to_fit();
 		tree.node_metadata.shrink_to_fit();
 		tree.edge_metadata.shrink_to_fit();
 		Ok(tree)
 	}
 
 	pub fn from_children(
-		num_leaves: u32,
 		root: u32,
 		children: Buffer<u32>,
 		edge_lengths: Buffer<f64>,
-		node_names: ArrayUtf8<Nullable>,
+		taxa: TaxonSet,
+		internal_names: ArrayUtf8<Nullable>,
 		node_metadata: ArrayUtf8<Nullable>,
 		edge_metadata: ArrayUtf8<Nullable>,
 	) -> Result<Self> {
+		let num_leaves = u32::try_from(taxa.len())?;
 		validate_num_leaves(num_leaves)?;
 		let num_nodes = num_leaves * 2 - 1;
 		ensure!(
@@ -188,7 +200,8 @@ impl BinaryTree {
 			children,
 			parents,
 			edge_lengths,
-			node_names,
+			taxa,
+			internal_names,
 			node_metadata,
 			edge_metadata,
 		)?;
@@ -221,12 +234,14 @@ impl BinaryTree {
 			}
 		}
 		let mut lengths = Buffer::repeat(0.0, num_edges);
-		let mut names = ArrayUtf8::<Nullable>::new();
+		let mut internal_names = ArrayUtf8::<Nullable>::new();
 		let mut node_metadata = ArrayUtf8::<Nullable>::new();
 		let mut edge_metadata = ArrayUtf8::<Nullable>::new();
 		for (new, &old) in order.iter().enumerate() {
 			let old = Node(old);
-			names.push(tree.name(old))?;
+			if new >= num_leaves as usize {
+				internal_names.push(tree.name(old))?;
+			}
 			node_metadata.push(tree.node_metadata(old))?;
 			if new < num_edges as usize {
 				lengths[new] = tree.edge_length(old).unwrap();
@@ -239,7 +254,8 @@ impl BinaryTree {
 			children,
 			parents,
 			lengths,
-			names,
+			tree.taxa.clone(),
+			internal_names,
 			node_metadata,
 			edge_metadata,
 		)
@@ -332,8 +348,11 @@ impl BinaryTree {
 		}
 
 		let mut lengths = Buffer::repeat(0.0, num_edges);
-		let mut names = ArrayUtf8::<Nullable>::with_capacity(
-			num_nodes as usize,
+		let taxa = TaxonSet::from_iter(
+			leaves.iter().map(|&(name, _)| name),
+		);
+		let mut internal_names = ArrayUtf8::<Nullable>::with_capacity(
+			(num_leaves - 1) as usize,
 		);
 		let mut node_metadata = ArrayUtf8::<Nullable>::with_capacity(
 			num_nodes as usize,
@@ -343,7 +362,9 @@ impl BinaryTree {
 		);
 		for (index, &old) in order.iter().enumerate() {
 			let old = Node(old);
-			names.push(self.name(old))?;
+			if index >= num_leaves as usize {
+				internal_names.push(self.name(old))?;
+			}
 			node_metadata.push(self.node_metadata(old))?;
 			if index < num_edges as usize {
 				lengths[index] = self.edge_length(old).unwrap();
@@ -356,7 +377,8 @@ impl BinaryTree {
 			children,
 			parents,
 			lengths,
-			names,
+			taxa,
+			internal_names,
 			node_metadata,
 			edge_metadata,
 		)
@@ -391,9 +413,15 @@ impl BinaryTree {
 			self.edge_lengths.len()
 		);
 		ensure!(
-			self.node_names.len() == num_nodes_usize,
-			"Expected {num_nodes} node names, got {}",
-			self.node_names.len()
+			self.taxa.len() == num_leaves as usize,
+			"Expected {num_leaves} taxa, got {}",
+			self.taxa.len()
+		);
+		ensure!(
+			self.internal_names.len() == (num_leaves - 1) as usize,
+			"Expected {} internal names, got {}",
+			num_leaves - 1,
+			self.internal_names.len()
 		);
 		ensure!(
 			self.node_metadata.len() == num_nodes_usize,
@@ -539,8 +567,22 @@ impl BinaryTree {
 		self.edge_index(child).map(|index| self.edge_lengths[index])
 	}
 
+	pub fn taxa(&self) -> &TaxonSet {
+		&self.taxa
+	}
+
 	pub fn name(&self, node: Node) -> Option<&str> {
-		self.node_names.get(node.usize())
+		if node.0 < self.num_leaves {
+			let name = self.taxa.get(node.usize());
+			(!name.is_empty()).then_some(name)
+		} else {
+			let index = node.usize() - self.num_leaves as usize;
+			if index < self.internal_names.len() {
+				self.internal_names.get(index)
+			} else {
+				None
+			}
+		}
 	}
 
 	pub fn node_metadata(&self, node: Node) -> Option<&str> {
@@ -559,9 +601,11 @@ impl BinaryTree {
 	}
 
 	pub fn leaf_by_name(&self, name: &str) -> Option<Leaf> {
-		self.leaves().find(|leaf| {
-			self.node_names.get(leaf.0 as usize) == Some(name)
-		})
+		if name.is_empty() {
+			return None;
+		}
+		self.leaves()
+			.find(|leaf| self.taxa.get(leaf.usize()) == name)
 	}
 
 	pub fn mrca(&self, first: Node, second: Node) -> Node {
@@ -668,7 +712,7 @@ impl BinaryTree {
 
 	/// Returns `true` if the children have the same names and ids
 	pub fn identical_children(&self, other: &BinaryTree) -> bool {
-		self.node_names == other.node_names
+		self.taxa == other.taxa
 	}
 }
 

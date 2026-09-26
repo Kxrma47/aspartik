@@ -2,8 +2,9 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 
 use std::collections::HashMap;
 
+use crate::TaxonSet;
 use crate::tree::{
-	Node,
+	BinaryTree, Node,
 	builder::{EdgeData, NodeData, TreeBuilder},
 };
 
@@ -258,6 +259,15 @@ pub fn parse(input: &str) -> Result<TreeBuilder> {
 impl TreeBuilder {
 	pub fn parse_newick(input: &str) -> Result<Self> {
 		parse(input)
+	}
+}
+
+impl BinaryTree {
+	pub fn parse_newick_with_taxa(
+		input: &str,
+		taxa: TaxonSet,
+	) -> Result<Self> {
+		TreeBuilder::parse_newick(input)?.into_binary_with_taxa(taxa)
 	}
 }
 

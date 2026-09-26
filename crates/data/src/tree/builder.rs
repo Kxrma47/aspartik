@@ -1,11 +1,15 @@
 use anyhow::{Result, anyhow, bail, ensure};
 use buffer::Buffer;
-use picoarrow::array::{ArrayUtf8, Nullable};
+use picoarrow::array::{Array, ArrayUtf8, Nullable};
 use smallvec::SmallVec;
 
-use std::{collections::VecDeque, mem};
+use std::{
+	collections::{HashMap, VecDeque},
+	mem,
+};
 
 use super::{BinaryTree, Node, ROOT_PARENT};
+use crate::TaxonSet;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NodeData {
@@ -472,6 +476,13 @@ impl TreeBuilder {
 		BinaryTree::try_from(self)
 	}
 
+	pub fn into_binary_with_taxa(
+		self,
+		taxa: TaxonSet,
+	) -> Result<BinaryTree> {
+		BinaryTree::from_builder(self, Some(taxa))
+	}
+
 	fn ensure_valid_node(&self, node: Node) -> Result<()> {
 		ensure!(self.contains(node), "Node {} is out of range", node.0);
 		Ok(())
@@ -500,6 +511,15 @@ impl TryFrom<TreeBuilder> for BinaryTree {
 	type Error = anyhow::Error;
 
 	fn try_from(builder: TreeBuilder) -> Result<Self> {
+		Self::from_builder(builder, None)
+	}
+}
+
+impl BinaryTree {
+	fn from_builder(
+		builder: TreeBuilder,
+		taxa: Option<TaxonSet>,
+	) -> Result<Self> {
 		builder.validate()?;
 		ensure!(builder.is_binary(), "The tree is not binary");
 
@@ -517,7 +537,54 @@ impl TryFrom<TreeBuilder> for BinaryTree {
 			.filter(|&node| !builder.is_leaf(node))
 			.collect::<Vec<_>>();
 		let num_leaves = u32::try_from(leaves.len())?;
-		let mut order = leaves;
+		let (taxa, mut order) = if let Some(taxa) = taxa {
+			ensure!(
+				taxa.len() == leaves.len(),
+				"Expected {} taxa, got {}",
+				leaves.len(),
+				taxa.len()
+			);
+			let mut indices = HashMap::with_capacity(taxa.len());
+			for (index, name) in taxa.iter().enumerate() {
+				ensure!(
+					!name.is_empty(),
+					"Taxon set contains an empty name"
+				);
+				ensure!(
+					indices.insert(name, index).is_none(),
+					"Duplicate taxon name: {name}"
+				);
+			}
+			let mut sorted = vec![None; leaves.len()];
+			for leaf in leaves {
+				let name = &builder.nodes[leaf.usize()].name;
+				let index = indices
+					.get(name.as_str())
+					.ok_or_else(|| {
+						anyhow!("Unknown taxon: {name}")
+					})?;
+				ensure!(
+					sorted[*index].replace(leaf).is_none(),
+					"Duplicate leaf name: {name}"
+				);
+			}
+			let order = sorted
+				.into_iter()
+				.collect::<Option<Vec<_>>>()
+				.ok_or_else(|| {
+					anyhow!("Missing taxon in tree")
+				})?;
+			(taxa, order)
+		} else {
+			let taxa = TaxonSet::from_iter(leaves.iter().map(
+				|leaf| {
+					builder.nodes[leaf.usize()]
+						.name
+						.as_str()
+				},
+			));
+			(taxa, leaves)
+		};
 		order.extend(internals);
 		let mut mapping = vec![0_u32; builder.nodes.len()];
 		for (new, old) in order.iter().copied().enumerate() {
@@ -546,10 +613,14 @@ impl TryFrom<TreeBuilder> for BinaryTree {
 			edge_attributes[index] = nonempty(&edge.attributes);
 		}
 
-		let mut names = ArrayUtf8::<Nullable>::new();
+		let mut internal_names = ArrayUtf8::<Nullable>::new();
 		let mut node_attributes = ArrayUtf8::<Nullable>::new();
-		for &old in &order {
-			names.push(nonempty(&builder.nodes[old.usize()].name))?;
+		for (index, &old) in order.iter().enumerate() {
+			if index >= num_leaves as usize {
+				internal_names.push(nonempty(
+					&builder.nodes[old.usize()].name,
+				))?;
+			}
 			node_attributes.push(nonempty(
 				&builder.nodes[old.usize()].attributes,
 			))?;
@@ -560,11 +631,11 @@ impl TryFrom<TreeBuilder> for BinaryTree {
 		}
 
 		Self::from_children(
-			num_leaves,
 			root,
 			Buffer::from_slice(&children),
 			Buffer::from_slice(&edge_lengths),
-			names,
+			taxa,
+			internal_names,
 			node_attributes,
 			edge_metadata,
 		)
