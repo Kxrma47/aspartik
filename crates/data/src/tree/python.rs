@@ -2,6 +2,7 @@ use anyhow::{Result, anyhow, ensure};
 use parking_lot::{Mutex, MutexGuard};
 use pyo3::{basic::CompareOp, prelude::*, types::PyType};
 
+use crate::PyTaxonSet;
 use crate::tree::{
 	BinaryTree, Internal, Leaf, Node, SvgOptions as TreeSvgOptions,
 	TreeLayout, branch_score, branch_score_matrix,
@@ -438,14 +439,28 @@ impl PyBinaryTree {
 	}
 
 	#[classmethod]
+	#[pyo3(signature = (newick, taxa = None))]
 	fn from_newick(
 		_class: &Bound<'_, PyType>,
 		newick: &str,
+		taxa: Option<PyRef<'_, PyTaxonSet>>,
 	) -> Result<Self> {
 		Ok(Self {
-			inner: TreeBuilder::parse_newick(newick)?
-				.into_binary()?,
+			inner: if let Some(taxa) = taxa {
+				BinaryTree::parse_newick_with_taxa(
+					newick,
+					taxa.0.clone(),
+				)?
+			} else {
+				TreeBuilder::parse_newick(newick)?
+					.into_binary()?
+			},
 		})
+	}
+
+	#[getter]
+	fn taxa(&self) -> PyTaxonSet {
+		PyTaxonSet(self.inner.taxa().clone())
 	}
 
 	#[getter]

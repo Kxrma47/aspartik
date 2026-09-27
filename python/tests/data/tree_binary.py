@@ -5,6 +5,7 @@ from utils import random_integer
 
 from array import array
 
+from aspartik.data import TaxonSet
 from aspartik.data.tree import (
     BinaryTree,
     TreeBuilder,
@@ -77,6 +78,28 @@ def test_branch_score():
     assert first.branch_score(first) == 0.0
     assert first.branch_score(second) == pytest.approx(5.0**0.5)
     assert second.branch_score(first) == pytest.approx(5.0**0.5)
+
+
+def test_shared_taxa_newick():
+    taxa = TaxonSet(["A", "B", "C", "D"])
+    trees = [
+        BinaryTree.from_newick("((B:2,A:1):3,(D:4,C:5):6);", taxa),
+        BinaryTree.from_newick("((C:5,D:4)R:6,(A:1,B:2)L:3)top;", taxa),
+    ]
+    assert all(tree.taxa == taxa for tree in trees)
+    assert [[tree.name(leaf) for leaf in tree.leaves()] for tree in trees] == [
+        ["A", "B", "C", "D"],
+        ["A", "B", "C", "D"],
+    ]
+    assert trees[0].branch_score(trees[1]) == 0.0
+    assert list(branch_score_matrix(trees)) == [0.0] * 4
+
+
+def test_shared_taxa_newick_rejects_mismatch():
+    with pytest.raises(RuntimeError, match="Unknown taxon"):
+        BinaryTree.from_newick("(A:1,C:2);", TaxonSet(["A", "B"]))
+    with pytest.raises(RuntimeError, match="Duplicate leaf name"):
+        BinaryTree.from_newick("(A:1,A:2);", TaxonSet(["A", "B"]))
 
 
 def test_branch_score_matrix():

@@ -3,12 +3,13 @@ use arbitrary::Unstructured;
 use arbtest::arbtest;
 use buffer::Buffer;
 use computare_core::assert_almost_eq;
-use picoarrow::array::{ArrayUtf8, Nullable};
+use picoarrow::array::{Array, ArrayUtf8, Nullable};
 use rand::SeedableRng;
 use rand_pcg::Pcg64;
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use data::TaxonSet;
 use data::tree::{
 	BinaryTree, Internal, Node, SvgOptions, branch_score,
 	branch_score_matrix, parse_newick, robinson_foulds_matrix,
@@ -44,6 +45,66 @@ fn nulls(len: usize) -> ArrayUtf8<Nullable> {
 	nullable_values((0..len).map(|_| None))
 }
 
+fn split_names(
+	num_leaves: u32,
+	names: ArrayUtf8<Nullable>,
+) -> (TaxonSet, ArrayUtf8<Nullable>) {
+	let leaf_count = (num_leaves as usize).min(names.len());
+	let taxa = TaxonSet::from_iter(
+		(0..leaf_count).map(|index| names.get(index).unwrap_or("")),
+	);
+	let internal_names = nullable_values(
+		(leaf_count..names.len()).map(|index| names.get(index)),
+	);
+	(taxa, internal_names)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn new_tree(
+	num_leaves: u32,
+	root: u32,
+	children: Buffer<u32>,
+	parents: Buffer<u32>,
+	edge_lengths: Buffer<f64>,
+	names: ArrayUtf8<Nullable>,
+	node_metadata: ArrayUtf8<Nullable>,
+	edge_metadata: ArrayUtf8<Nullable>,
+) -> Result<BinaryTree> {
+	let (taxa, internal_names) = split_names(num_leaves, names);
+	BinaryTree::new(
+		num_leaves,
+		root,
+		children,
+		parents,
+		edge_lengths,
+		taxa,
+		internal_names,
+		node_metadata,
+		edge_metadata,
+	)
+}
+
+fn from_children(
+	num_leaves: u32,
+	root: u32,
+	children: Buffer<u32>,
+	edge_lengths: Buffer<f64>,
+	names: ArrayUtf8<Nullable>,
+	node_metadata: ArrayUtf8<Nullable>,
+	edge_metadata: ArrayUtf8<Nullable>,
+) -> Result<BinaryTree> {
+	let (taxa, internal_names) = split_names(num_leaves, names);
+	BinaryTree::from_children(
+		root,
+		children,
+		edge_lengths,
+		taxa,
+		internal_names,
+		node_metadata,
+		edge_metadata,
+	)
+}
+
 fn tree(
 	num_leaves: u32,
 	children: Vec<u32>,
@@ -73,7 +134,7 @@ fn tree_with_root(
 			parents[child as usize] = num_leaves + offset as u32;
 		}
 	}
-	BinaryTree::new(
+	new_tree(
 		num_leaves,
 		root,
 		Buffer::from_slice(&children),
@@ -102,6 +163,7 @@ fn assert_random_tree(tree: &BinaryTree, num_leaves: u32) {
 	assert_eq!(tree.root().u32(), num_leaves * 2 - 2);
 	assert_eq!(tree.preorder().count(), tree.num_nodes() as usize);
 	assert_eq!(tree.postorder().count(), tree.num_nodes() as usize);
+	assert!(tree.leaf_by_name("").is_none());
 
 	let mut seen = vec![false; tree.num_nodes() as usize];
 	for node in tree.preorder() {
@@ -473,7 +535,7 @@ fn two_leaf_tree() -> Result<()> {
 fn constructor_accepts_owned_buffers() -> Result<()> {
 	let children = Buffer::from_slice(&[1, 0]);
 	let edge_lengths = Buffer::from_slice(&[1.0, 2.0]);
-	let tree = BinaryTree::new(
+	let tree = new_tree(
 		2,
 		2,
 		children,
@@ -493,7 +555,7 @@ fn constructor_accepts_owned_buffers() -> Result<()> {
 
 #[test]
 fn canonical_constructor_relabels_internals() -> Result<()> {
-	let tree = BinaryTree::from_children(
+	let tree = from_children(
 		4,
 		4,
 		Buffer::from_slice(&[5, 6, 0, 1, 2, 3]),
@@ -585,6 +647,69 @@ fn canonical_names_and_topology() -> Result<()> {
 		vec![4, 5, 6]
 	);
 	Ok(())
+}
+
+#[test]
+fn newick_trees_share_taxa() -> Result<()> {
+	let taxa = TaxonSet::from_iter(["A", "B", "C", "D"]);
+	let first = BinaryTree::parse_newick_with_taxa(
+		"((B:2,A:1)left:3,(D:4,C:5)right:6)root;",
+		taxa.clone(),
+	)?;
+	let second = BinaryTree::parse_newick_with_taxa(
+		"((C:5,D:4)R:6,(A:1,B:2)L:3)top;",
+		taxa.clone(),
+	)?;
+	for tree in [&first, &second] {
+		assert_eq!(tree.taxa(), &taxa);
+		assert_eq!(
+			tree.leaves()
+				.map(|leaf| tree.name(leaf.into()).unwrap())
+				.collect::<Vec<_>>(),
+			["A", "B", "C", "D"]
+		);
+		assert_eq!(
+			tree.edge_length(
+				tree.leaf_by_name("B").unwrap().into()
+			),
+			Some(2.0)
+		);
+	}
+	assert!(std::ptr::eq(first.taxa().get(0), second.taxa().get(0)));
+	assert!(first.identical_children(&second));
+	assert_eq!(first.robinson_foulds(&second), 0);
+	assert_eq!(branch_score(&first, &second)?, 0.0);
+	assert_eq!(
+		robinson_foulds_matrix(&[&first, &second])?,
+		[[0, 0], [0, 0]]
+	);
+	assert_eq!(
+		first.to_newick()?,
+		"((B:2,A:1)left:3,(D:4,C:5)right:6)root;"
+	);
+	Ok(())
+}
+
+#[test]
+fn newick_taxa_must_match_leaves() {
+	let tree = "((A:1,B:2):3,C:4);";
+	for names in [
+		vec!["A", "B"],
+		vec!["A", "B", "D"],
+		vec!["A", "A", "C"],
+		vec!["A", "", "C"],
+	] {
+		assert!(BinaryTree::parse_newick_with_taxa(
+			tree,
+			TaxonSet::from_iter(names),
+		)
+		.is_err());
+	}
+	assert!(BinaryTree::parse_newick_with_taxa(
+		"((A:1,A:2):3,C:4);",
+		TaxonSet::from_iter(["A", "B", "C"]),
+	)
+	.is_err());
 }
 
 #[test]
@@ -715,7 +840,7 @@ fn random_canonical_constructor() {
 					.to_owned()
 			})
 			.collect::<Vec<_>>();
-		let canonical = BinaryTree::from_children(
+		let canonical = from_children(
 			num_leaves,
 			original.root().u32(),
 			Buffer::from_slice(&children),
@@ -746,7 +871,7 @@ fn random_canonical_constructor() {
 #[test]
 fn constructor_rejects_inconsistent_parents() {
 	for parents in [[u32::MAX, 2, u32::MAX], [2, 2, 0], [2, 2, 2]] {
-		assert!(BinaryTree::new(
+		assert!(new_tree(
 			2,
 			2,
 			Buffer::from_slice(&[0, 1]),
@@ -790,7 +915,7 @@ fn balanced_and_ladder_traversals() -> Result<()> {
 
 #[test]
 fn explicit_nonterminal_root() -> Result<()> {
-	let tree = BinaryTree::new(
+	let tree = new_tree(
 		4,
 		4,
 		Buffer::from_slice(&[5, 6, 0, 1, 2, 3]),
@@ -893,7 +1018,7 @@ fn metadata_roundtrip() -> Result<()> {
 
 #[test]
 fn constructor_rejects_invalid_layouts() {
-	assert!(BinaryTree::from_children(
+	assert!(from_children(
 		1,
 		0,
 		Buffer::from_slice(&[]),
@@ -909,7 +1034,7 @@ fn constructor_rejects_invalid_layouts() {
 		(vec![0, 1], vec![1.0], vec!["A", "B", ""]),
 		(vec![0, 1], vec![1.0, 1.0], vec!["A", "B"]),
 	] {
-		assert!(BinaryTree::from_children(
+		assert!(from_children(
 			2,
 			2,
 			Buffer::from_slice(&children),
@@ -921,7 +1046,7 @@ fn constructor_rejects_invalid_layouts() {
 		.is_err());
 	}
 
-	assert!(BinaryTree::from_children(
+	assert!(from_children(
 		2,
 		0,
 		Buffer::from_slice(&[0, 1]),
@@ -931,7 +1056,7 @@ fn constructor_rejects_invalid_layouts() {
 		nulls(2),
 	)
 	.is_err());
-	assert!(BinaryTree::from_children(
+	assert!(from_children(
 		2,
 		3,
 		Buffer::from_slice(&[0, 1]),
@@ -941,7 +1066,7 @@ fn constructor_rejects_invalid_layouts() {
 		nulls(2),
 	)
 	.is_err());
-	assert!(BinaryTree::from_children(
+	assert!(from_children(
 		2,
 		2,
 		Buffer::from_slice(&[0, 1]),
@@ -951,7 +1076,7 @@ fn constructor_rejects_invalid_layouts() {
 		nulls(2),
 	)
 	.is_err());
-	assert!(BinaryTree::from_children(
+	assert!(from_children(
 		2,
 		2,
 		Buffer::from_slice(&[0, 1]),
@@ -965,7 +1090,7 @@ fn constructor_rejects_invalid_layouts() {
 	for children in [vec![0, 3], vec![0, 2], vec![0, 0], vec![0, 3, 1, 2]] {
 		let num_leaves = if children.len() == 2 { 2 } else { 3 };
 		let num_nodes = num_leaves * 2 - 1;
-		assert!(BinaryTree::from_children(
+		assert!(from_children(
 			num_leaves,
 			num_nodes - 1,
 			Buffer::from_slice(&children),
@@ -979,17 +1104,20 @@ fn constructor_rejects_invalid_layouts() {
 }
 
 #[test]
-fn from_children_rejects_oversized_leaf_count() {
-	assert!(BinaryTree::from_children(
+fn constructor_rejects_oversized_leaf_count() {
+	let error = BinaryTree::new(
 		u32::MAX / 2 + 1,
 		0,
 		Buffer::from_slice(&[]),
 		Buffer::from_slice(&[]),
+		Buffer::from_slice(&[]),
+		TaxonSet::from_iter(std::iter::empty::<&str>()),
 		nulls(0),
 		nulls(0),
 		nulls(0),
 	)
-	.is_err());
+	.unwrap_err();
+	assert!(error.to_string().contains("cannot have more than"));
 }
 
 #[test]
@@ -1772,7 +1900,7 @@ fn layout_rejects_invalid_values() -> Result<()> {
 
 #[test]
 fn svg_rendering() -> Result<()> {
-	let tree = BinaryTree::new(
+	let tree = new_tree(
 		2,
 		2,
 		Buffer::from_slice(&[0, 1]),
