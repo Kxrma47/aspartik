@@ -38,7 +38,8 @@ def indexed_tree(topology):
 
 
 def test_random_tree():
-    tree = BinaryTree.random(100, RNG(4))
+    taxa = TaxonSet.ranged_ints(100)
+    tree = BinaryTree.random(taxa, RNG(4))
 
     assert tree.num_leaves == 100
     assert tree.num_nodes == 199
@@ -46,29 +47,33 @@ def test_random_tree():
     assert len(tree.preorder()) == tree.num_nodes
     assert tree.preorder()[0] == tree.root
     assert sorted(tree.postorder()) == tree.nodes()
-    assert all(tree.name(node) is None for node in tree.nodes())
+    assert tree.taxa == taxa
+    assert [tree.name(leaf) for leaf in tree.leaves()] == list(taxa)
+    assert all(tree.name(node) is None for node in tree.internals())
     assert all(tree.node_metadata(node) is None for node in tree.nodes())
     assert all(tree.edge_length(child) == 1.0 for child in tree.edges())
     assert all(tree.edge_metadata(child) is None for child in tree.edges())
 
 
 def test_random_tree_is_deterministic():
-    first = BinaryTree.random(100, RNG(4))
-    second = BinaryTree.random(100, RNG(4))
+    taxa = TaxonSet.ranged_ints(100)
+    first = BinaryTree.random(taxa, RNG(4))
+    second = BinaryTree.random(taxa, RNG(4))
     assert topology(first) == topology(second)
 
 
 def test_random_tree_advances_rng():
     rng = RNG(4)
-    first = BinaryTree.random(100, rng)
-    second = BinaryTree.random(100, rng)
+    taxa = TaxonSet.ranged_ints(100)
+    first = BinaryTree.random(taxa, rng)
+    second = BinaryTree.random(taxa, rng)
     assert topology(first) != topology(second)
 
 
-@pytest.mark.parametrize("num_leaves", [0, 1, 2**32])
+@pytest.mark.parametrize("num_leaves", [0, 1])
 def test_random_tree_rejects_invalid_sizes(num_leaves):
-    with pytest.raises((OverflowError, RuntimeError)):
-        BinaryTree.random(num_leaves, RNG(4))
+    with pytest.raises(RuntimeError):
+        BinaryTree.random(TaxonSet.ranged_ints(num_leaves), RNG(4))
 
 
 def test_branch_score():
@@ -138,8 +143,8 @@ def test_triplet_distance():
 
 
 def test_triplet_distance_rejects_leaf_count_mismatch():
-    first = BinaryTree.random(10, RNG(4))
-    second = BinaryTree.random(11, RNG(5))
+    first = BinaryTree.random(TaxonSet.ranged_ints(10), RNG(4))
+    second = BinaryTree.random(TaxonSet.ranged_ints(11), RNG(5))
 
     with pytest.raises(RuntimeError, match="Expected both trees"):
         first.triplet_distance(second)
@@ -161,7 +166,10 @@ def test_triplet_distance_matrix():
 
 
 def test_triplet_distance_matrix_rejects_leaf_count_mismatch():
-    trees = [BinaryTree.random(10, RNG(4)), BinaryTree.random(11, RNG(5))]
+    trees = [
+        BinaryTree.random(TaxonSet.ranged_ints(10), RNG(4)),
+        BinaryTree.random(TaxonSet.ranged_ints(11), RNG(5)),
+    ]
     with pytest.raises(RuntimeError, match="Expected every tree to have 10 leaves"):
         triplet_distance_matrix(trees)
 
@@ -196,12 +204,15 @@ def test_robinson_foulds_matrix():
 
 def test_robinson_foulds_matrix_empty_and_single():
     assert robinson_foulds_matrix([]) == array("I", [])
-    tree = BinaryTree.random(10, RNG(4))
+    tree = BinaryTree.random(TaxonSet.ranged_ints(10), RNG(4))
     assert robinson_foulds_matrix([tree]) == array("I", [0])
 
 
 def test_robinson_foulds_matrix_rejects_leaf_count_mismatch():
-    trees = [BinaryTree.random(10, RNG(4)), BinaryTree.random(11, RNG(5))]
+    trees = [
+        BinaryTree.random(TaxonSet.ranged_ints(10), RNG(4)),
+        BinaryTree.random(TaxonSet.ranged_ints(11), RNG(5)),
+    ]
     with pytest.raises(RuntimeError, match="Expected every tree to have 10 leaves"):
         robinson_foulds_matrix(trees)
 
@@ -274,8 +285,9 @@ def test_robinson_foulds(rng: RNG):
 @pytest.mark.skip("Needs leaf labels")
 @pytest.mark.parametrize("size", random_integer(3, 1_000))
 def test_robinson_foulds_sim(size: int, rng: RNG):
-    a = BinaryTree.random(size, rng)
-    b = BinaryTree.random(size, rng)
+    taxa = TaxonSet.ranged_ints(size)
+    a = BinaryTree.random(taxa, rng)
+    b = BinaryTree.random(taxa, rng)
 
     def dendropy_distance(a, b):
         tns = dendropy.TaxonNamespace()
