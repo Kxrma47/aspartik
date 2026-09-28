@@ -156,8 +156,10 @@ fn topology(tree: &BinaryTree) -> Vec<[u32; 2]> {
 		.collect()
 }
 
-fn assert_random_tree(tree: &BinaryTree, num_leaves: u32) {
+fn assert_random_tree(tree: &BinaryTree, taxa: &TaxonSet) {
+	let num_leaves = u32::try_from(taxa.len()).unwrap();
 	assert_eq!(tree.num_leaves(), num_leaves);
+	assert_eq!(tree.taxa(), taxa);
 	assert_eq!(tree.num_nodes(), num_leaves * 2 - 1);
 	assert_eq!(tree.num_edges(), num_leaves * 2 - 2);
 	assert_eq!(tree.root().u32(), num_leaves * 2 - 2);
@@ -169,7 +171,14 @@ fn assert_random_tree(tree: &BinaryTree, num_leaves: u32) {
 	for node in tree.preorder() {
 		assert!(!seen[node.usize()]);
 		seen[node.usize()] = true;
-		assert_eq!(tree.name(node), None);
+		if let Some(leaf) = tree.as_leaf(node) {
+			assert_eq!(
+				tree.name(node),
+				Some(taxa.get(leaf.usize()))
+			);
+		} else {
+			assert_eq!(tree.name(node), None);
+		}
 		assert_eq!(tree.node_metadata(node), None);
 
 		if let Some(internal) = tree.as_internal(node) {
@@ -714,7 +723,10 @@ fn newick_taxa_must_match_leaves() {
 
 #[test]
 fn canonical_rejects_missing_and_duplicate_names() -> Result<()> {
-	let unnamed = BinaryTree::random(3, &mut Pcg64::seed_from_u64(4))?;
+	let unnamed = BinaryTree::random(
+		TaxonSet::from_iter(["", "", ""]),
+		&mut Pcg64::seed_from_u64(4),
+	)?;
 	assert!(unnamed.canonical().is_err());
 	for labels in [["A", "", "root"], ["A", "A", "root"]] {
 		let tree = tree(
@@ -1178,8 +1190,9 @@ fn deep_ladder_uses_iterative_traversal() -> Result<()> {
 fn random_binary_tree() -> Result<()> {
 	let mut rng = Pcg64::seed_from_u64(0);
 	for num_leaves in [2, 3, 10, 100, 1_000] {
-		let tree = BinaryTree::random(num_leaves, &mut rng)?;
-		assert_random_tree(&tree, num_leaves);
+		let taxa = TaxonSet::ranged_ints(num_leaves as usize);
+		let tree = BinaryTree::random(taxa.clone(), &mut rng)?;
+		assert_random_tree(&tree, &taxa);
 	}
 
 	Ok(())
@@ -1189,8 +1202,9 @@ fn random_binary_tree() -> Result<()> {
 fn random_binary_tree_is_deterministic() -> Result<()> {
 	let mut first_rng = Pcg64::seed_from_u64(0);
 	let mut second_rng = Pcg64::seed_from_u64(0);
-	let first = BinaryTree::random(100, &mut first_rng)?;
-	let second = BinaryTree::random(100, &mut second_rng)?;
+	let taxa = TaxonSet::ranged_ints(100);
+	let first = BinaryTree::random(taxa.clone(), &mut first_rng)?;
+	let second = BinaryTree::random(taxa, &mut second_rng)?;
 
 	assert_eq!(topology(&first), topology(&second));
 
@@ -1200,11 +1214,9 @@ fn random_binary_tree_is_deterministic() -> Result<()> {
 #[test]
 fn random_binary_tree_leaf_count_bounds() {
 	let mut rng = Pcg64::seed_from_u64(0);
-	assert!(BinaryTree::random(0, &mut rng).is_err());
-	assert!(BinaryTree::random(1, &mut rng).is_err());
-	assert!(BinaryTree::random(2, &mut rng).is_ok());
-	assert!(BinaryTree::random(u32::MAX / 2 + 1, &mut rng).is_err());
-	assert!(BinaryTree::random(u32::MAX, &mut rng).is_err());
+	assert!(BinaryTree::random(TaxonSet::ranged_ints(0), &mut rng).is_err());
+	assert!(BinaryTree::random(TaxonSet::ranged_ints(1), &mut rng).is_err());
+	assert!(BinaryTree::random(TaxonSet::ranged_ints(2), &mut rng).is_ok());
 }
 
 #[test]
@@ -1213,18 +1225,21 @@ fn random_binary_tree_many_seeds_and_large() -> Result<()> {
 	for seed in 0..128 {
 		let mut rng = Pcg64::seed_from_u64(seed);
 		for num_leaves in 2..=12 {
-			let tree = BinaryTree::random(num_leaves, &mut rng)?;
-			assert_random_tree(&tree, num_leaves);
+			let taxa = TaxonSet::ranged_ints(num_leaves as usize);
+			let tree = BinaryTree::random(taxa.clone(), &mut rng)?;
+			assert_random_tree(&tree, &taxa);
 		}
-		let tree = BinaryTree::random(64, &mut rng)?;
-		assert_random_tree(&tree, 64);
+		let taxa = TaxonSet::ranged_ints(64);
+		let tree = BinaryTree::random(taxa.clone(), &mut rng)?;
+		assert_random_tree(&tree, &taxa);
 		topologies.insert(topology(&tree));
 	}
 	assert!(topologies.len() > 120);
 
 	let mut rng = Pcg64::seed_from_u64(0);
-	let tree = BinaryTree::random(20_000, &mut rng)?;
-	assert_random_tree(&tree, 20_000);
+	let taxa = TaxonSet::ranged_ints(20_000);
+	let tree = BinaryTree::random(taxa.clone(), &mut rng)?;
+	assert_random_tree(&tree, &taxa);
 
 	Ok(())
 }

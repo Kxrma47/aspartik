@@ -38,7 +38,8 @@ fn validate_num_leaves(num_leaves: u32) -> Result<()> {
 }
 
 impl BinaryTree {
-	pub fn random<R: Rng>(num_leaves: u32, rng: &mut R) -> Result<Self> {
+	pub fn random<R: Rng>(taxa: TaxonSet, rng: &mut R) -> Result<Self> {
+		let num_leaves = u32::try_from(taxa.len())?;
 		validate_num_leaves(num_leaves)?;
 		let num_nodes = num_leaves * 2 - 1;
 		let num_internals = num_leaves - 1;
@@ -93,10 +94,6 @@ impl BinaryTree {
 			}
 		}
 
-		let taxa = TaxonSet::from_iter(std::iter::repeat_n(
-			"",
-			num_leaves as usize,
-		));
 		let mut node_metadata = ArrayUtf8::<Nullable>::new();
 		for _ in 0..num_nodes_usize {
 			node_metadata.push(None)?;

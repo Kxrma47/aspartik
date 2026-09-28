@@ -427,12 +427,12 @@ impl PyBinaryTree {
 	#[classmethod]
 	fn random(
 		_class: &Bound<'_, PyType>,
-		num_leaves: u32,
+		taxa: PyTaxonSet,
 		rng: Py<PyRng>,
 	) -> Result<Self> {
 		Ok(Self {
 			inner: BinaryTree::random(
-				num_leaves,
+				taxa.0.clone(),
 				&mut rng.get().inner(),
 			)?,
 		})

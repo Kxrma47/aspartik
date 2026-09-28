@@ -2,6 +2,7 @@ import argparse
 from time import perf_counter
 from typing import Literal, get_args
 
+from aspartik.data import TaxonSet
 from aspartik.data.tree import (
     BinaryTree,
     branch_score_matrix,
@@ -47,7 +48,8 @@ def random_trees(
         raise ValueError("expected at least one tree")
     if leaf_count < 2:
         raise ValueError("expected at least two leaves")
-    return [BinaryTree.random(leaf_count, rng) for _ in range(tree_count)]
+    taxa = TaxonSet.ranged_ints(leaf_count)
+    return [BinaryTree.random(taxa, rng) for _ in range(tree_count)]
 
 
 def run_benchmark(tree_count, leaf_count: int, seed: int, metric: Metric) -> float:
