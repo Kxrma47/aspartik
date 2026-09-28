@@ -427,7 +427,7 @@ impl PyBinaryTree {
 	#[classmethod]
 	fn random(
 		_class: &Bound<'_, PyType>,
-		taxa: PyRef<'_, PyTaxonSet>,
+		taxa: PyTaxonSet,
 		rng: Py<PyRng>,
 	) -> Result<Self> {
 		Ok(Self {
