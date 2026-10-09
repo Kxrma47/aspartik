@@ -1,4 +1,4 @@
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, anyhow, ensure};
 
 use std::{collections::HashSet, io::BufRead};
 
@@ -14,9 +14,8 @@ enum Block {
 struct NexusParser {
 	block: Block,
 	translation: Option<(TaxonSet, TaxonSet)>,
+	pending_translation: Option<Vec<(String, String)>>,
 	saw_tree: bool,
-	quote: Option<u8>,
-	comment_depth: usize,
 }
 
 impl Default for NexusParser {
@@ -24,250 +23,111 @@ impl Default for NexusParser {
 		Self {
 			block: Block::Outside,
 			translation: None,
+			pending_translation: None,
 			saw_tree: false,
-			quote: None,
-			comment_depth: 0,
 		}
 	}
 }
 
-fn update_comment_depth(depth: &mut usize, byte: u8) {
-	match byte {
-		b'[' => *depth += 1,
-		b']' => *depth -= 1,
-		_ => {}
+fn after_keyword<'a>(line: &'a str, keyword: &str) -> Option<&'a str> {
+	let head = line.get(..keyword.len())?;
+	let rest = &line[keyword.len()..];
+	(head.eq_ignore_ascii_case(keyword)
+		&& rest.chars().next().is_none_or(char::is_whitespace))
+	.then_some(rest.trim_start())
+}
+
+fn translation_entry(
+	pairs: &mut Vec<(String, String)>,
+	line: &str,
+) -> Result<bool> {
+	let finished = line.ends_with(';');
+	ensure!(
+		finished || line.ends_with(','),
+		"Expected ',' or ';' in TRANSLATE"
+	);
+	let entry = line[..line.len() - 1].trim();
+	let split = entry
+		.find(char::is_whitespace)
+		.ok_or_else(|| anyhow!("Expected a taxon name in TRANSLATE"))?;
+	let alias = &entry[..split];
+	let name = entry[split..].trim();
+	ensure!(
+		!alias.is_empty() && !name.is_empty(),
+		"Expected a TRANSLATE pair"
+	);
+	ensure!(
+		!alias.contains(['[', ']']) && !name.contains(['[', ']']),
+		"Comments inside TRANSLATE entries are unsupported"
+	);
+	let name = if name.starts_with('\'') {
+		ensure!(
+			name.len() > 1 && name.ends_with('\''),
+			"Unterminated quoted taxon name"
+		);
+		name[1..name.len() - 1].replace("''", "'")
+	} else {
+		ensure!(
+			!name.chars().any(char::is_whitespace),
+			"Unquoted taxon name contains whitespace"
+		);
+		name.to_owned()
+	};
+	pairs.push((alias.to_owned(), name));
+	Ok(finished)
+}
+
+fn translation_sets(
+	mut pairs: Vec<(String, String)>,
+) -> Result<(TaxonSet, TaxonSet)> {
+	ensure!(!pairs.is_empty(), "Empty TRANSLATE command");
+	let mut aliases = HashSet::new();
+	let mut taxa = HashSet::new();
+	for (alias, name) in &pairs {
+		ensure!(
+			aliases.insert(alias),
+			"Duplicate translation key: {alias}"
+		);
+		ensure!(taxa.insert(name), "Duplicate taxon name: {name}");
 	}
+	pairs.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+	Ok((
+		TaxonSet::from_iter(pairs.iter().map(|(alias, _)| alias)),
+		TaxonSet::from_iter(pairs.iter().map(|(_, name)| name)),
+	))
 }
 
 impl NexusParser {
-	fn find(&mut self, input: &str, target: u8) -> Option<usize> {
-		let bytes = input.as_bytes();
-		let mut index = 0;
-		while index < bytes.len() {
-			let current = bytes[index];
-			if self.comment_depth != 0 {
-				update_comment_depth(
-					&mut self.comment_depth,
-					current,
-				);
-			} else if let Some(quote) = self.quote {
-				if current == quote {
-					if bytes.get(index + 1) == Some(&quote)
-					{
-						index += 1;
-					} else {
-						self.quote = None;
-					}
-				}
-			} else {
-				match current {
-					b'[' => update_comment_depth(
-						&mut self.comment_depth,
-						current,
-					),
-					b'\'' | b'"' => {
-						self.quote = Some(current)
-					}
-					_ if current == target => {
-						return Some(index);
-					}
-					_ => {}
-				}
-			}
-			index += 1;
-		}
-		None
-	}
-
-	fn consume_comment<'a>(&mut self, input: &'a str) -> &'a str {
-		let mut end = 0;
-		for (index, byte) in input.bytes().enumerate() {
-			update_comment_depth(&mut self.comment_depth, byte);
-			end = index + 1;
-			if self.comment_depth == 0 {
-				break;
-			}
-		}
-		&input[end..]
-	}
-
-	fn skip_trivia<'a>(&mut self, mut input: &'a str) -> &'a str {
-		loop {
-			if self.comment_depth == 0 {
-				input = input.trim_start();
-			}
-			if self.comment_depth == 0 && !input.starts_with('[') {
-				return input;
-			}
-			input = self.consume_comment(input);
-			if self.comment_depth != 0 {
-				return input;
-			}
-		}
-	}
-
-	fn after_keyword<'a>(
-		&mut self,
-		input: &'a str,
-		keyword: &str,
-	) -> Option<&'a str> {
-		let input = self.skip_trivia(input);
-		let word = input.get(..keyword.len())?;
-		if !word.eq_ignore_ascii_case(keyword) {
-			return None;
-		}
-		let rest = &input[keyword.len()..];
-		if rest.chars().next().is_some_and(|character| {
-			!character.is_whitespace()
-				&& !matches!(character, ';' | '[' | '*')
-		}) {
-			return None;
-		}
-		Some(rest)
-	}
-
-	fn word(&mut self, input: &mut &str) -> Result<Option<String>> {
-		*input = self.skip_trivia(input);
-		let mut value = String::new();
-		while let Some(character) = (*input).chars().next() {
-			if character.is_whitespace()
-				|| matches!(character, ',' | ';')
-			{
-				break;
-			}
-			if character == '[' {
-				*input = self.consume_comment(input);
-				ensure!(
-					self.comment_depth == 0,
-					"Unterminated comment"
-				);
-				continue;
-			}
-			if matches!(character, '\'' | '"') {
-				*input = &(*input)[1..];
-				loop {
-					let next = (*input)
-						.chars()
-						.next()
-						.ok_or_else(|| {
-							anyhow::anyhow!(
-								"Unterminated quoted name"
-							)
-						})?;
-					*input = &(*input)[next.len_utf8()..];
-					if next == character {
-						if (*input)
-							.starts_with(character)
-						{
-							*input = &(*input)[1..];
-							value.push(character);
-						} else {
-							break;
-						}
-					} else {
-						value.push(next);
-					}
-				}
-				continue;
-			}
-			ensure!(
-				character != ']',
-				"Unexpected ']' in TRANSLATE"
-			);
-			value.push(character);
-			*input = &(*input)[character.len_utf8()..];
-		}
-		Ok((!value.is_empty()).then_some(value))
-	}
-
-	fn required_word(
-		&mut self,
-		input: &mut &str,
-		expected: &str,
-	) -> Result<String> {
-		self.word(input)?
-			.ok_or_else(|| anyhow::anyhow!("Expected {expected}"))
-	}
-
-	fn parse_translation(
-		&mut self,
-		mut input: &str,
-	) -> Result<(TaxonSet, TaxonSet)> {
-		let mut pairs = Vec::new();
-		let mut aliases = HashSet::new();
-		let mut taxa = HashSet::new();
-		loop {
-			let alias = self.required_word(
-				&mut input,
-				"a translation key",
-			)?;
-			let name =
-				self.required_word(&mut input, "a taxon name")?;
-			ensure!(
-				aliases.insert(alias.clone()),
-				"Duplicate translation key: {alias}"
-			);
-			ensure!(
-				taxa.insert(name.clone()),
-				"Duplicate taxon name: {name}"
-			);
-			pairs.push((alias, name));
-			input = self.skip_trivia(input);
-			let delimiter =
-				input.as_bytes().first().copied().ok_or_else(
-					|| {
-						anyhow::anyhow!(
-							"Expected ',' or ';' after a translation entry"
-						)
-					},
-				)?;
-			ensure!(
-				matches!(delimiter, b',' | b';'),
-				"Expected ',' or ';' after a translation entry"
-			);
-			input = &input[1..];
-			if delimiter == b';' {
-				break;
-			}
-		}
-		ensure!(
-			self.skip_trivia(input).is_empty(),
-			"Unexpected input after TRANSLATE"
-		);
-		pairs.sort_unstable_by(|first, second| first.1.cmp(&second.1));
-		Ok((
-			TaxonSet::from_iter(
-				pairs.iter().map(|(alias, _)| alias.as_str()),
-			),
-			TaxonSet::from_iter(
-				pairs.iter().map(|(_, name)| name.as_str()),
-			),
-		))
-	}
-
-	fn process<F>(
-		&mut self,
-		statement: &str,
-		callback: &mut F,
-	) -> Result<()>
+	fn line<F>(&mut self, text: &str, callback: &mut F) -> Result<()>
 	where
 		F: FnMut(&str, Option<(&TaxonSet, &TaxonSet)>) -> Result<()>,
 	{
-		let mut statement = self.skip_trivia(statement);
-		if let Some(rest) = self.after_keyword(statement, "#NEXUS") {
-			statement = self.skip_trivia(rest);
+		if text.is_empty()
+			|| text.starts_with('[')
+			|| text.eq_ignore_ascii_case("#NEXUS")
+		{
+			return Ok(());
 		}
-		if statement.is_empty() {
+		if let Some(pairs) = self.pending_translation.as_mut() {
+			if translation_entry(pairs, text)? {
+				self.translation = Some(translation_sets(
+					self.pending_translation
+						.take()
+						.unwrap(),
+				)?);
+			}
 			return Ok(());
 		}
 		if self.block == Block::Outside {
-			if let Some(rest) =
-				self.after_keyword(statement, "BEGIN")
-			{
-				self.block = if self
-					.after_keyword(rest, "TREES")
-					.is_some()
-				{
+			if let Some(rest) = after_keyword(text, "BEGIN") {
+				self.block = if rest
+					.strip_suffix(';')
+					.is_some_and(|name| {
+						name.trim()
+							.eq_ignore_ascii_case(
+								"TREES",
+							)
+					}) {
 					Block::Trees
 				} else {
 					Block::Other
@@ -277,53 +137,71 @@ impl NexusParser {
 			}
 			return Ok(());
 		}
-		if self.after_keyword(statement, "END").is_some()
-			|| self.after_keyword(statement, "ENDBLOCK").is_some()
+		if text.eq_ignore_ascii_case("END;")
+			|| text.eq_ignore_ascii_case("ENDBLOCK;")
 		{
 			self.block = Block::Outside;
 			self.translation = None;
-			self.saw_tree = false;
 			return Ok(());
 		}
 		if self.block == Block::Other {
 			return Ok(());
 		}
-		if let Some(rest) = self.after_keyword(statement, "TRANSLATE") {
+		if let Some(rest) = after_keyword(text, "TRANSLATE") {
 			ensure!(
-				!self.saw_tree,
-				"TRANSLATE must precede TREE commands"
+				!self.saw_tree && self.translation.is_none(),
+				"Unexpected TRANSLATE command"
 			);
-			ensure!(
-				self.translation.is_none(),
-				"A TREES block has more than one TRANSLATE command"
-			);
-			self.translation = Some(self.parse_translation(rest)?);
+			let mut pairs = Vec::new();
+			if !rest.is_empty()
+				&& translation_entry(&mut pairs, rest)?
+			{
+				self.translation =
+					Some(translation_sets(pairs)?);
+			} else {
+				self.pending_translation = Some(pairs);
+			}
 			return Ok(());
 		}
-		let Some(rest) = self
-			.after_keyword(statement, "TREE")
-			.or_else(|| self.after_keyword(statement, "UTREE"))
-		else {
-			return Ok(());
-		};
-		let rest = self.skip_trivia(rest);
-		let rest = self
-			.skip_trivia(rest.strip_prefix('*').unwrap_or(rest));
-		let equal = self.find(rest, b'=').ok_or_else(|| {
-			anyhow::anyhow!("Expected '=' in TREE command")
-		})?;
+		if let Some(rest) = after_keyword(text, "TREE")
+			.or_else(|| after_keyword(text, "UTREE"))
+		{
+			let rest = rest
+				.strip_prefix('*')
+				.unwrap_or(rest)
+				.trim_start();
+			let (name, newick) =
+				rest.split_once('=').ok_or_else(|| {
+					anyhow!("Expected '=' in TREE command")
+				})?;
+			let newick = newick.trim();
+			ensure!(
+				!name.trim().is_empty(),
+				"Expected a tree name"
+			);
+			ensure!(
+				newick.ends_with(';'),
+				"Unterminated TREE command"
+			);
+			self.saw_tree = true;
+			callback(
+				newick,
+				self.translation.as_ref().map(|(a, t)| (a, t)),
+			)?;
+		}
+		Ok(())
+	}
+
+	fn finish(self) -> Result<()> {
 		ensure!(
-			!rest[..equal].trim().is_empty(),
-			"Expected a tree name"
+			self.pending_translation.is_none(),
+			"Unterminated TRANSLATE command"
 		);
-		let newick = rest[equal + 1..].trim();
-		self.saw_tree = true;
-		callback(
-			newick,
-			self.translation
-				.as_ref()
-				.map(|(aliases, taxa)| (aliases, taxa)),
-		)
+		ensure!(
+			self.block == Block::Outside,
+			"Unterminated NEXUS block"
+		);
+		Ok(())
 	}
 }
 
@@ -334,41 +212,9 @@ where
 {
 	let mut parser = NexusParser::default();
 	let mut line = String::new();
-	let mut pending = String::new();
 	while reader.read_line(&mut line)? != 0 {
-		let mut rest = line.as_str();
-		while !rest.is_empty() {
-			if let Some(end) = parser.find(rest, b';') {
-				let (part, tail) = rest.split_at(end + 1);
-				if pending.is_empty() {
-					parser.process(part, &mut callback)?;
-				} else {
-					pending.push_str(part);
-					parser.process(
-						&pending,
-						&mut callback,
-					)?;
-					pending.clear();
-				}
-				rest = tail;
-			} else {
-				pending.push_str(rest);
-				break;
-			}
-		}
+		parser.line(line.trim(), &mut callback)?;
 		line.clear();
 	}
-	if parser.quote.is_some() {
-		bail!("Unterminated quote in NEXUS input");
-	}
-	if parser.comment_depth != 0 {
-		bail!("Unterminated comment in NEXUS input");
-	}
-	ensure!(
-		pending.trim().is_empty()
-			|| pending.trim().eq_ignore_ascii_case("#NEXUS"),
-		"Unterminated NEXUS command"
-	);
-	ensure!(parser.block == Block::Outside, "Unterminated NEXUS block");
-	Ok(())
+	parser.finish()
 }
