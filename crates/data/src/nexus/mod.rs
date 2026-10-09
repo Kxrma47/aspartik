@@ -2,11 +2,31 @@ use anyhow::{Result, bail, ensure};
 
 use std::io::BufRead;
 
+use crate::TaxonSet;
+
+mod translate;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Block {
 	Outside,
 	Trees,
 	Other,
+}
+
+struct ReaderState {
+	block: Block,
+	translation: Option<(TaxonSet, TaxonSet)>,
+	saw_tree: bool,
+}
+
+impl Default for ReaderState {
+	fn default() -> Self {
+		Self {
+			block: Block::Outside,
+			translation: None,
+			saw_tree: false,
+		}
+	}
 }
 
 #[derive(Default)]
@@ -105,11 +125,11 @@ fn after_keyword<'a>(input: &'a str, keyword: &str) -> Option<&'a str> {
 
 fn process<F>(
 	statement: &str,
-	block: &mut Block,
+	state: &mut ReaderState,
 	callback: &mut F,
 ) -> Result<()>
 where
-	F: FnMut(&str) -> Result<()>,
+	F: FnMut(&str, Option<(&TaxonSet, &TaxonSet)>) -> Result<()>,
 {
 	let mut comment_depth = 0;
 	let mut statement = skip_trivia(statement, &mut comment_depth);
@@ -119,23 +139,40 @@ where
 	if statement.is_empty() {
 		return Ok(());
 	}
-	if *block == Block::Outside {
+	if state.block == Block::Outside {
 		if let Some(rest) = after_keyword(statement, "BEGIN") {
-			*block = if after_keyword(rest, "TREES").is_some() {
+			state.block = if after_keyword(rest, "TREES").is_some()
+			{
 				Block::Trees
 			} else {
 				Block::Other
 			};
+			state.translation = None;
+			state.saw_tree = false;
 		}
 		return Ok(());
 	}
 	if after_keyword(statement, "END").is_some()
 		|| after_keyword(statement, "ENDBLOCK").is_some()
 	{
-		*block = Block::Outside;
+		state.block = Block::Outside;
+		state.translation = None;
+		state.saw_tree = false;
 		return Ok(());
 	}
-	if *block == Block::Other {
+	if state.block == Block::Other {
+		return Ok(());
+	}
+	if after_keyword(statement, "TRANSLATE").is_some() {
+		ensure!(
+			!state.saw_tree,
+			"TRANSLATE must precede TREE commands"
+		);
+		ensure!(
+			state.translation.is_none(),
+			"A TREES block has more than one TRANSLATE command"
+		);
+		state.translation = Some(translate::parse(statement)?);
 		return Ok(());
 	}
 	let Some(rest) = after_keyword(statement, "TREE")
@@ -153,15 +190,21 @@ where
 	})?;
 	ensure!(!rest[..equal].trim().is_empty(), "Expected a tree name");
 	let newick = rest[equal + 1..].trim();
-	callback(newick)
+	state.saw_tree = true;
+	callback(
+		newick,
+		state.translation
+			.as_ref()
+			.map(|(aliases, taxa)| (aliases, taxa)),
+	)
 }
 
 pub fn for_each_tree<R, F>(mut reader: R, mut callback: F) -> Result<()>
 where
 	R: BufRead,
-	F: FnMut(&str) -> Result<()>,
+	F: FnMut(&str, Option<(&TaxonSet, &TaxonSet)>) -> Result<()>,
 {
-	let mut block = Block::Outside;
+	let mut state = ReaderState::default();
 	let mut line = String::new();
 	let mut pending = String::new();
 	let mut scanner = Scanner::default();
@@ -173,14 +216,14 @@ where
 				if pending.is_empty() {
 					process(
 						part,
-						&mut block,
+						&mut state,
 						&mut callback,
 					)?;
 				} else {
 					pending.push_str(part);
 					process(
 						&pending,
-						&mut block,
+						&mut state,
 						&mut callback,
 					)?;
 					pending.clear();
@@ -204,6 +247,6 @@ where
 			|| pending.trim().eq_ignore_ascii_case("#NEXUS"),
 		"Unterminated NEXUS command"
 	);
-	ensure!(block == Block::Outside, "Unterminated NEXUS block");
+	ensure!(state.block == Block::Outside, "Unterminated NEXUS block");
 	Ok(())
 }
