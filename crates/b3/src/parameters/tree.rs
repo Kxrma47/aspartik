@@ -1,3 +1,5 @@
+#![allow(clippy::clone_on_copy)]
+
 use anyhow::{Context, Result, bail, ensure};
 use bytemuck::{Pod, Zeroable, allocation::cast_vec};
 use parking_lot::Mutex;

@@ -1,3 +1,5 @@
+#![allow(clippy::clone_on_copy)]
+
 mod binary;
 pub mod builder;
 mod distances;
