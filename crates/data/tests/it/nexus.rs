@@ -4,9 +4,13 @@ use arbtest::arbtest;
 
 use std::io::{BufReader, Cursor};
 
-use data::{TaxonSet, nexus::for_each_tree, tree::BinaryTree};
+use data::{
+	TaxonSet,
+	nexus::for_each_tree,
+	tree::{BinaryTree, builder::TreeBuilder},
+};
 
-const BEAST: &str = "#NEXUS\nBEGIN TAXA; TAXLABELS A B 'C C'; END;\nBEGIN TREES;\nTRANSLATE 2 B, 3 'C C', 1 A;\nTREE STATE_0 = [&R] ((1[&date=2020]:0.1[&rate=0.5],2:0.2)[&posterior=0.9]:0.3,3:0.4);\nTREE STATE_10000 = [&R] (1:0.2,(2:0.3,3:0.4):0.5);\nEND;";
+const BEAST: &str = "#NEXUS\nBEGIN TAXA;\nTAXLABELS A B 'C C';\nEND;\nBEGIN TREES;\nTRANSLATE\n2 B,\n3 'C C',\n1 A;\nTREE STATE_0 = [&R] ((1[&date=2020]:0.1[&rate=0.5],2:0.2)[&posterior=0.9]:0.3,3:0.4);\nTREE STATE_10000 = [&R] (1:0.2,(2:0.3,3:0.4):0.5);\nEND;\n";
 
 #[test]
 fn translated_trees_share_taxa() -> Result<()> {
@@ -35,7 +39,7 @@ fn translated_trees_share_taxa() -> Result<()> {
 #[test]
 fn untranslated_trees_can_use_an_existing_taxon_set() -> Result<()> {
 	let taxa = TaxonSet::from_iter(["A", "B", "C"]);
-	let source = "#NEXUS\nBEGIN TREES; TREE first = ((B:2,A:1):3,C:4); TREE second = ((A:1,B:2):3,C:4); END;";
+	let source = "#NEXUS\nBEGIN TREES;\nTREE first = ((B:2,A:1):3,C:4);\nTREE second = ((A:1,B:2):3,C:4);\nEND;\n";
 	let mut trees = Vec::new();
 	for_each_tree(Cursor::new(source), |newick, translation| {
 		assert!(translation.is_none());
@@ -75,7 +79,7 @@ fn works_with_small_reader_buffers() -> Result<()> {
 fn streams_ten_thousand_trees() -> Result<()> {
 	const COUNT: usize = 10_000;
 	let mut source =
-		String::from("#NEXUS\nBEGIN TREES; TRANSLATE 2 B, 1 A;\n");
+		String::from("#NEXUS\nBEGIN TREES;\nTRANSLATE\n2 B,\n1 A;\n");
 	for index in 0..COUNT {
 		source.push_str(&format!("TREE STATE_{index} = (1:1,2:2);\n"));
 	}
@@ -98,7 +102,7 @@ fn streams_ten_thousand_trees() -> Result<()> {
 
 #[test]
 fn reports_unknown_translated_leaf() {
-	let source = "#NEXUS\nBEGIN TREES; TRANSLATE 1 A, 2 B; TREE bad = (1:1,3:2); END;";
+	let source = "#NEXUS\nBEGIN TREES;\nTRANSLATE\n1 A,\n2 B;\nTREE bad = (1:1,3:2);\nEND;\n";
 	let error =
 		for_each_tree(Cursor::new(source), |newick, translation| {
 			let (aliases, taxa) = translation.unwrap();
@@ -114,15 +118,40 @@ fn reports_unknown_translated_leaf() {
 }
 
 #[test]
+fn reads_mrbayes_unrooted_tree_into_builder() -> Result<()> {
+	let source = "#NEXUS\n[ID: 0184438524]\n[Param: tree]\nbegin trees;\ntranslate\n1 A,\n2 B,\n3 C;\ntree gen.0 = [&U] (1:2.0e-02,2:2.0e-02,3:2.0e-02);\nend;\n";
+	let mut count = 0;
+	for_each_tree(Cursor::new(source), |newick, translation| {
+		let (aliases, taxa) = translation.unwrap();
+		assert_eq!(aliases.iter().collect::<Vec<_>>(), ["1", "2", "3"]);
+		assert_eq!(taxa.iter().collect::<Vec<_>>(), ["A", "B", "C"]);
+		let tree = TreeBuilder::parse_newick(newick)?;
+		assert_eq!(tree.children_of(tree.root()).len(), 3);
+		assert!(!tree.is_binary());
+		count += 1;
+		Ok(())
+	})?;
+	assert_eq!(count, 1);
+	Ok(())
+}
+
+#[test]
 fn arbitrary_input_does_not_panic() {
 	arbtest(|u: &mut Unstructured<'_>| {
 		let len = u.int_in_range(0_usize..=1024)?;
 		let bytes = u.bytes(len)?;
-		let mut source = String::from("#NEXUS\n");
-		source.extend(bytes
+		let payload: String = bytes
 			.iter()
-			.map(|byte| char::from(32 + byte % 95)));
-		let _ = for_each_tree(Cursor::new(source), |_, _| Ok(()));
+			.map(|byte| char::from(10 + byte % 85))
+			.collect();
+		for prefix in ["TRANSLATE\n", "TREE x = "] {
+			let source = format!(
+				"#NEXUS\nBEGIN TREES;\n{prefix}{payload}\nEND;\n"
+			);
+			let _ = for_each_tree(Cursor::new(source), |_, _| {
+				Ok(())
+			});
+		}
 		Ok(())
 	})
 	.size_min(2_u32.pow(18));
