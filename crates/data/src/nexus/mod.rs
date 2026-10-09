@@ -11,10 +11,17 @@ enum Block {
 	Other,
 }
 
+enum TranslationDelimiter {
+	Comma,
+	Semicolon,
+	NextLine,
+}
+
 struct NexusParser {
 	block: Block,
 	translation: Option<(TaxonSet, TaxonSet)>,
 	pending_translation: Option<Vec<(String, String)>>,
+	awaiting_translation_semicolon: bool,
 	saw_tree: bool,
 }
 
@@ -24,6 +31,7 @@ impl Default for NexusParser {
 			block: Block::Outside,
 			translation: None,
 			pending_translation: None,
+			awaiting_translation_semicolon: false,
 			saw_tree: false,
 		}
 	}
@@ -40,13 +48,18 @@ fn after_keyword<'a>(line: &'a str, keyword: &str) -> Option<&'a str> {
 fn translation_entry(
 	pairs: &mut Vec<(String, String)>,
 	line: &str,
-) -> Result<bool> {
-	let finished = line.ends_with(';');
-	ensure!(
-		finished || line.ends_with(','),
-		"Expected ',' or ';' in TRANSLATE"
-	);
-	let entry = line[..line.len() - 1].trim();
+) -> Result<TranslationDelimiter> {
+	let (entry, delimiter) = match line.as_bytes().last() {
+		Some(b',') => {
+			(&line[..line.len() - 1], TranslationDelimiter::Comma)
+		}
+		Some(b';') => (
+			&line[..line.len() - 1],
+			TranslationDelimiter::Semicolon,
+		),
+		_ => (line, TranslationDelimiter::NextLine),
+	};
+	let entry = entry.trim();
 	let split = entry
 		.find(char::is_whitespace)
 		.ok_or_else(|| anyhow!("Expected a taxon name in TRANSLATE"))?;
@@ -74,7 +87,7 @@ fn translation_entry(
 		name.to_owned()
 	};
 	pairs.push((alias.to_owned(), name));
-	Ok(finished)
+	Ok(delimiter)
 }
 
 fn translation_sets(
@@ -98,6 +111,35 @@ fn translation_sets(
 }
 
 impl NexusParser {
+	fn translation_line(&mut self, text: &str) -> Result<()> {
+		if self.awaiting_translation_semicolon {
+			ensure!(
+				text == ";",
+				"Expected ';' after TRANSLATE entries"
+			);
+			self.awaiting_translation_semicolon = false;
+			self.translation = Some(translation_sets(
+				self.pending_translation.take().unwrap(),
+			)?);
+			return Ok(());
+		}
+		let pairs = self.pending_translation.as_mut().unwrap();
+		match translation_entry(pairs, text)? {
+			TranslationDelimiter::Comma => {}
+			TranslationDelimiter::Semicolon => {
+				self.translation = Some(translation_sets(
+					self.pending_translation
+						.take()
+						.unwrap(),
+				)?);
+			}
+			TranslationDelimiter::NextLine => {
+				self.awaiting_translation_semicolon = true;
+			}
+		}
+		Ok(())
+	}
+
 	fn line<F>(&mut self, text: &str, callback: &mut F) -> Result<()>
 	where
 		F: FnMut(&str, Option<(&TaxonSet, &TaxonSet)>) -> Result<()>,
@@ -108,15 +150,8 @@ impl NexusParser {
 		{
 			return Ok(());
 		}
-		if let Some(pairs) = self.pending_translation.as_mut() {
-			if translation_entry(pairs, text)? {
-				self.translation = Some(translation_sets(
-					self.pending_translation
-						.take()
-						.unwrap(),
-				)?);
-			}
-			return Ok(());
+		if self.pending_translation.is_some() {
+			return self.translation_line(text);
 		}
 		if self.block == Block::Outside {
 			if let Some(rest) = after_keyword(text, "BEGIN") {
@@ -152,14 +187,9 @@ impl NexusParser {
 				!self.saw_tree && self.translation.is_none(),
 				"Unexpected TRANSLATE command"
 			);
-			let mut pairs = Vec::new();
-			if !rest.is_empty()
-				&& translation_entry(&mut pairs, rest)?
-			{
-				self.translation =
-					Some(translation_sets(pairs)?);
-			} else {
-				self.pending_translation = Some(pairs);
+			self.pending_translation = Some(Vec::new());
+			if !rest.is_empty() {
+				self.translation_line(rest)?;
 			}
 			return Ok(());
 		}

@@ -72,6 +72,22 @@ fn reads_mrbayes_trees() -> Result<()> {
 }
 
 #[test]
+fn reads_beast_translation_terminated_on_the_next_line() -> Result<()> {
+	let source = "#NEXUS\nBegin trees;\nTranslate\n1 A,\n2 B\n;\ntree STATE_0 = (1:0.1,2:0.2);\nEnd;\n";
+	let mut count = 0;
+	for_each_tree(Cursor::new(source), |tree, translation| {
+		let (aliases, taxa) = translation.unwrap();
+		assert_eq!(aliases.iter().collect::<Vec<_>>(), ["1", "2"]);
+		assert_eq!(taxa.iter().collect::<Vec<_>>(), ["A", "B"]);
+		assert_eq!(tree, "(1:0.1,2:0.2);");
+		count += 1;
+		Ok(())
+	})?;
+	assert_eq!(count, 1);
+	Ok(())
+}
+
+#[test]
 fn ignores_other_blocks_and_resets_translation() -> Result<()> {
 	let source = concat!(
 		"#NEXUS\n",
@@ -109,6 +125,7 @@ fn rejects_invalid_translation() {
 		"1 A,\n2 A;",
 		"1 A,\n2;",
 		"1 A,\n2 B,",
+		"1 A\n2 B;",
 		"1[inline] A;",
 		"1 A[inline];",
 	] {
