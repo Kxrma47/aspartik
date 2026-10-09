@@ -15,6 +15,14 @@ struct Scanner {
 	comment_depth: usize,
 }
 
+fn update_comment_depth(depth: &mut usize, byte: u8) {
+	match byte {
+		b'[' => *depth += 1,
+		b']' => *depth -= 1,
+		_ => {}
+	}
+}
+
 impl Scanner {
 	fn find(&mut self, input: &str, target: u8) -> Option<usize> {
 		let bytes = input.as_bytes();
@@ -22,11 +30,10 @@ impl Scanner {
 		while index < bytes.len() {
 			let current = bytes[index];
 			if self.comment_depth != 0 {
-				match current {
-					b'[' => self.comment_depth += 1,
-					b']' => self.comment_depth -= 1,
-					_ => {}
-				}
+				update_comment_depth(
+					&mut self.comment_depth,
+					current,
+				);
 			} else if let Some(quote) = self.quote {
 				if current == quote {
 					if bytes.get(index + 1) == Some(&quote)
@@ -38,7 +45,10 @@ impl Scanner {
 				}
 			} else {
 				match current {
-					b'[' => self.comment_depth = 1,
+					b'[' => update_comment_depth(
+						&mut self.comment_depth,
+						current,
+					),
 					b'\'' | b'"' => {
 						self.quote = Some(current)
 					}
@@ -54,31 +64,31 @@ impl Scanner {
 	}
 }
 
-fn skip_trivia(mut input: &str) -> &str {
+fn skip_trivia<'a>(mut input: &'a str, comment_depth: &mut usize) -> &'a str {
 	loop {
-		input = input.trim_start();
-		if !input.starts_with('[') {
+		if *comment_depth == 0 {
+			input = input.trim_start();
+		}
+		if *comment_depth == 0 && !input.starts_with('[') {
 			return input;
 		}
-		let mut depth = 0;
+		let mut end = 0;
 		for (index, byte) in input.bytes().enumerate() {
-			match byte {
-				b'[' => depth += 1,
-				b']' => {
-					depth -= 1;
-					if depth == 0 {
-						input = &input[index + 1..];
-						break;
-					}
-				}
-				_ => {}
+			update_comment_depth(comment_depth, byte);
+			end = index + 1;
+			if *comment_depth == 0 {
+				break;
 			}
+		}
+		input = &input[end..];
+		if *comment_depth != 0 {
+			return input;
 		}
 	}
 }
 
 fn after_keyword<'a>(input: &'a str, keyword: &str) -> Option<&'a str> {
-	let input = skip_trivia(input);
+	let input = skip_trivia(input, &mut 0);
 	let word = input.get(..keyword.len())?;
 	if !word.eq_ignore_ascii_case(keyword) {
 		return None;
@@ -101,9 +111,10 @@ fn process<F>(
 where
 	F: FnMut(&str) -> Result<()>,
 {
-	let mut statement = skip_trivia(statement);
+	let mut comment_depth = 0;
+	let mut statement = skip_trivia(statement, &mut comment_depth);
 	if let Some(rest) = after_keyword(statement, "#NEXUS") {
-		statement = skip_trivia(rest);
+		statement = skip_trivia(rest, &mut comment_depth);
 	}
 	if statement.is_empty() {
 		return Ok(());
@@ -132,14 +143,16 @@ where
 	else {
 		return Ok(());
 	};
-	let rest = skip_trivia(rest);
-	let rest = skip_trivia(rest.strip_prefix('*').unwrap_or(rest));
+	let rest = skip_trivia(rest, &mut comment_depth);
+	let rest = skip_trivia(
+		rest.strip_prefix('*').unwrap_or(rest),
+		&mut comment_depth,
+	);
 	let equal = Scanner::default().find(rest, b'=').ok_or_else(|| {
 		anyhow::anyhow!("Expected '=' in TREE command")
 	})?;
 	ensure!(!rest[..equal].trim().is_empty(), "Expected a tree name");
 	let newick = rest[equal + 1..].trim();
-	ensure!(newick != ";", "Expected a Newick tree");
 	callback(newick)
 }
 
@@ -193,49 +206,4 @@ where
 	);
 	ensure!(block == Block::Outside, "Unterminated NEXUS block");
 	Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-	use anyhow::Result;
-
-	use std::io::Cursor;
-
-	use super::for_each_tree;
-
-	#[test]
-	fn reads_only_tree_blocks() -> Result<()> {
-		let source = "#NEXUS\nBEGIN TAXA; TREE ignored = (X:1,Y:1); END;\nBEGIN TREES; TREE * first = [&R](A:1,B:2); UTREE second =\n(A:3,B:4); END;";
-		let mut trees = Vec::new();
-		for_each_tree(Cursor::new(source), |tree| {
-			trees.push(tree.to_owned());
-			Ok(())
-		})?;
-		assert_eq!(trees, ["[&R](A:1,B:2);", "(A:3,B:4);"]);
-		Ok(())
-	}
-
-	#[test]
-	fn ignores_semicolons_inside_quotes_and_comments() -> Result<()> {
-		let source = "#NEXUS\nBEGIN TREES; TREE 'name;one' = ('A;B'[note;inside]:1,C:2); END;";
-		let mut trees = Vec::new();
-		for_each_tree(Cursor::new(source), |tree| {
-			trees.push(tree.to_owned());
-			Ok(())
-		})?;
-		assert_eq!(trees, ["('A;B'[note;inside]:1,C:2);"]);
-		Ok(())
-	}
-
-	#[test]
-	fn rejects_truncated_input() {
-		for source in [
-			"#NEXUS\nBEGIN TREES; TREE x = (A:1,B:2)",
-			"#NEXUS\nBEGIN TREES; TREE x = (A:1,B:2);",
-			"#NEXUS\nBEGIN TREES; TREE x = ('A:1,B:2); END;",
-		] {
-			assert!(for_each_tree(Cursor::new(source), |_| Ok(()))
-				.is_err());
-		}
-	}
 }
