@@ -101,6 +101,22 @@ fn passes_translations_and_resets_them() -> Result<()> {
 }
 
 #[test]
+fn parses_comments_and_quoted_names_in_translation() -> Result<()> {
+	let source = "#NEXUS\nBEGIN TREES;\nTRANSLATE [outer\n[inner;]\n] 2 'B;B', 1[inline] 'A A';\nTREE first = (1:1,2:2); END;";
+	let mut count = 0;
+	for_each_tree(Cursor::new(source), |tree, translation| {
+		let (aliases, taxa) = translation.unwrap();
+		assert_eq!(aliases.iter().collect::<Vec<_>>(), ["1", "2"]);
+		assert_eq!(taxa.iter().collect::<Vec<_>>(), ["A A", "B;B"]);
+		assert_eq!(tree, "(1:1,2:2);");
+		count += 1;
+		Ok(())
+	})?;
+	assert_eq!(count, 1);
+	Ok(())
+}
+
+#[test]
 fn rejects_invalid_translation() {
 	for source in [
 		"#NEXUS\nBEGIN TREES; TRANSLATE 1 A, 1 B; END;",
