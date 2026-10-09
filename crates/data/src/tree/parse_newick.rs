@@ -269,6 +269,15 @@ impl BinaryTree {
 	) -> Result<Self> {
 		TreeBuilder::parse_newick(input)?.into_binary_with_taxa(taxa)
 	}
+
+	pub fn parse_newick_with_translation(
+		input: &str,
+		aliases: &TaxonSet,
+		taxa: TaxonSet,
+	) -> Result<Self> {
+		TreeBuilder::parse_newick(input)?
+			.into_binary_with_translation(aliases, taxa)
+	}
 }
 
 fn parse_child(

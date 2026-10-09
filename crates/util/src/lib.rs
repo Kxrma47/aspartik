@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[macro_export]
 macro_rules! py_bail {
 	($type:ident, $($arg:tt)*) => {
-		return Err($type::new_err(format!($($arg)*)).into());
+		return Err($type::new_err(format!($($arg)*)).into())
 	}
 }
 

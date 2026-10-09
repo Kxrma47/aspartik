@@ -722,6 +722,53 @@ fn newick_taxa_must_match_leaves() {
 }
 
 #[test]
+fn newick_translation_matches_shared_taxa() -> Result<()> {
+	let aliases = TaxonSet::from_iter(["2", "1", "3"]);
+	let taxa = TaxonSet::from_iter(["B", "A", "C"]);
+	let translated = BinaryTree::parse_newick_with_translation(
+		"((1:1,2:2):3,3:4);",
+		&aliases,
+		taxa.clone(),
+	)?;
+	let named = BinaryTree::parse_newick_with_taxa(
+		"((A:1,B:2):3,C:4);",
+		taxa.clone(),
+	)?;
+	assert_eq!(translated.taxa(), &taxa);
+	assert!(std::ptr::eq(translated.taxa().get(0), taxa.get(0)));
+	assert!(translated.identical_children(&named));
+	assert_eq!(branch_score(&translated, &named)?, 0.0);
+	assert_eq!(translated.to_newick()?, "((A:1,B:2):3,C:4);");
+	Ok(())
+}
+
+#[test]
+fn newick_translation_rejects_invalid_taxa() {
+	let tree = "((1:1,2:2):3,3:4);";
+	for (aliases, taxa) in [
+		(vec!["1", "2"], vec!["A", "B"]),
+		(vec!["1", "2", "2"], vec!["A", "B", "C"]),
+		(vec!["1", "", "3"], vec!["A", "B", "C"]),
+		(vec!["1", "2", "3"], vec!["A", "A", "C"]),
+		(vec!["1", "2", "3"], vec!["A", "", "C"]),
+		(vec!["1", "2", "4"], vec!["A", "B", "C"]),
+	] {
+		assert!(BinaryTree::parse_newick_with_translation(
+			tree,
+			&TaxonSet::from_iter(aliases),
+			TaxonSet::from_iter(taxa),
+		)
+		.is_err());
+	}
+	assert!(BinaryTree::parse_newick_with_translation(
+		"((1:1,1:2):3,3:4);",
+		&TaxonSet::from_iter(["1", "2", "3"]),
+		TaxonSet::from_iter(["A", "B", "C"]),
+	)
+	.is_err());
+}
+
+#[test]
 fn canonical_rejects_missing_and_duplicate_names() -> Result<()> {
 	let unnamed = BinaryTree::random(
 		TaxonSet::from_iter(["", "", ""]),

@@ -4,7 +4,7 @@ use picoarrow::array::{Array, ArrayUtf8, Nullable};
 use smallvec::SmallVec;
 
 use std::{
-	collections::{HashMap, VecDeque},
+	collections::{HashMap, HashSet, VecDeque},
 	mem,
 };
 
@@ -480,7 +480,15 @@ impl TreeBuilder {
 		self,
 		taxa: TaxonSet,
 	) -> Result<BinaryTree> {
-		BinaryTree::from_builder(self, Some(taxa))
+		BinaryTree::from_builder(self, Some(taxa), None)
+	}
+
+	pub fn into_binary_with_translation(
+		self,
+		aliases: &TaxonSet,
+		taxa: TaxonSet,
+	) -> Result<BinaryTree> {
+		BinaryTree::from_builder(self, Some(taxa), Some(aliases))
 	}
 
 	fn ensure_valid_node(&self, node: Node) -> Result<()> {
@@ -511,7 +519,7 @@ impl TryFrom<TreeBuilder> for BinaryTree {
 	type Error = anyhow::Error;
 
 	fn try_from(builder: TreeBuilder) -> Result<Self> {
-		Self::from_builder(builder, None)
+		Self::from_builder(builder, None, None)
 	}
 }
 
@@ -519,6 +527,7 @@ impl BinaryTree {
 	fn from_builder(
 		builder: TreeBuilder,
 		taxa: Option<TaxonSet>,
+		aliases: Option<&TaxonSet>,
 	) -> Result<Self> {
 		builder.validate()?;
 		ensure!(builder.is_binary(), "The tree is not binary");
@@ -538,21 +547,42 @@ impl BinaryTree {
 			.collect::<Vec<_>>();
 		let num_leaves = u32::try_from(leaves.len())?;
 		let (taxa, mut order) = if let Some(taxa) = taxa {
+			let labels = aliases.unwrap_or(&taxa);
 			ensure!(
 				taxa.len() == leaves.len(),
 				"Expected {} taxa, got {}",
 				leaves.len(),
 				taxa.len()
 			);
-			let mut indices = HashMap::with_capacity(taxa.len());
-			for (index, name) in taxa.iter().enumerate() {
+			ensure!(
+				labels.len() == taxa.len(),
+				"Expected {} aliases, got {}",
+				taxa.len(),
+				labels.len()
+			);
+			if aliases.is_some() {
+				let mut names =
+					HashSet::with_capacity(taxa.len());
+				for name in taxa.iter() {
+					ensure!(
+						!name.is_empty(),
+						"Taxon set contains an empty name"
+					);
+					ensure!(
+						names.insert(name),
+						"Duplicate taxon name: {name}"
+					);
+				}
+			}
+			let mut indices = HashMap::with_capacity(labels.len());
+			for (index, name) in labels.iter().enumerate() {
 				ensure!(
 					!name.is_empty(),
-					"Taxon set contains an empty name"
+					"Alias set contains an empty name"
 				);
 				ensure!(
 					indices.insert(name, index).is_none(),
-					"Duplicate taxon name: {name}"
+					"Duplicate alias: {name}"
 				);
 			}
 			let mut sorted = vec![None; leaves.len()];
