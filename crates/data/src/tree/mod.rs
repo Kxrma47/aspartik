@@ -52,6 +52,10 @@ impl Node {
 	pub fn usize(self) -> usize {
 		self.0 as usize
 	}
+
+	pub fn tombstone() -> Self {
+		Self(0x544f4f52)
+	}
 }
 
 impl Leaf {
