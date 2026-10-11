@@ -32,7 +32,7 @@ impl TreeBuilder {
 
 	fn add_dummy_node(&mut self) -> Node {
 		let idx = self.parents.len() as u32;
-		self.parents.push(Node::tombstone());
+		self.parents.push(Node::TOMBSTONE);
 		self.children.push(SmallVec::new());
 		self.node_names.push(String::new());
 		self.node_attributes.push(String::new());
