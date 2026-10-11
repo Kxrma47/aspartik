@@ -4,8 +4,6 @@ use anyhow::{Result, anyhow, bail};
 use logos::{Lexer, Logos};
 use smallvec::SmallVec;
 
-use std::iter::Peekable;
-
 use super::Node;
 
 #[derive(Debug, Clone)]
@@ -63,6 +61,10 @@ impl TreeBuilder {
 		self.children[parent.usize()].push(new);
 
 		new
+	}
+
+	fn set_root(&mut self, node: Node) {
+		self.root = Some(node);
 	}
 
 	// Node setters
@@ -147,125 +149,94 @@ enum Token<'a> {
 	Attribute(&'a str),
 }
 
-fn peek<'a>(lexer: &mut Peekable<Lexer<'a, Token<'a>>>) -> Result<Token<'a>> {
-	let Some(token) = lexer.peek() else {
-		bail!("Unexpected end of input");
-	};
-	let Ok(token) = token else {
-		bail!("Couldn't read next token");
-	};
-	Ok(*token)
-}
-
-fn advance<'a>(
-	lexer: &mut Peekable<Lexer<'a, Token<'a>>>,
-	token: &mut Token<'a>,
-) -> Result<()> {
-	lexer.next();
-	*token = peek(lexer)?;
-	println!("advance to {token:?}");
-	Ok(())
-}
-
-fn parse_node<'a>(
-	lexer: &mut Peekable<Lexer<'a, Token<'a>>>,
-	token: &mut Token<'a>,
-	tree: &mut TreeBuilder,
-	node: Node,
-) -> Result<Node> {
-	if let Token::Ident(name) | Token::Quoted(name) = token {
-		tree.set_node_name(node, name);
-		advance(lexer, token);
-	}
-
-	if let Token::Attribute(attr) = token {
-		tree.set_node_attribute(node, attr);
-		advance(lexer, token);
-	}
-
-	if let Token::Colon = token {
-		advance(lexer, token);
-		if let Token::Ident(s) = token {
-			tree.set_edge_length(node, s.parse::<f64>()?);
-			advance(lexer, token);
-		}
-
-		if let Token::Attribute(attr) = token {
-			tree.set_edge_attribute(node, attr);
-			advance(lexer, token);
-		}
-	}
-
-	Ok(node)
-}
-
-fn parse_newick(newick: &str) -> Result<TreeBuilder> {
-	let mut lexer = Token::lexer(newick).peekable();
+fn parse_newick<'a>(newick: &'a str) -> Result<TreeBuilder> {
+	let mut lexer = Token::lexer(newick);
 	let mut tree = TreeBuilder::new();
 
-	let mut token = peek(&mut lexer)?;
+	let mut next = |lexer: &mut Lexer<'a, Token<'a>>| -> Result<Token<'a>> {
+		match lexer.next() {
+			Some(Ok(t)) => Ok(t),
+			Some(Err(_)) => bail!("Lexing error"),
+			None => bail!("Unexpected end of input"),
+		}
+	};
 
+	let mut token = next(&mut lexer)?;
 	if token != Token::Open {
-		bail!("TODO error");
+		bail!("Expected a Newick tree to start with '('");
 	}
 
-	let mut children = Vec::<SmallVec<[Node; 2]>>::new();
-	let mut parents = Vec::<Node>::new();
+	let mut parents = Vec::new();
+	let mut children = Vec::new();
+
+	let root = tree.add_dummy_node();
+	parents.push(root);
+	children.push(Vec::new());
+	let mut node = tree.add_dummy_node();
 
 	loop {
+		if let Token::Ident(name) | Token::Quoted(name) = token {
+			tree.set_node_name(node, name);
+			token = next(&mut lexer)?;
+		};
+
+		if let Token::Attribute(attr) = token {
+			tree.set_node_attribute(node, attr);
+			token = next(&mut lexer)?;
+		}
+
+		if token == Token::Colon {
+			token = next(&mut lexer)?;
+			if let Token::Ident(s) = token {
+				tree.set_edge_length(node, s.parse::<f64>()?);
+				token = next(&mut lexer)?;
+			} else {
+				bail!("Expected edge length");
+			}
+
+			if let Token::Attribute(attr) = token {
+				tree.set_edge_attribute(node, attr);
+				token = next(&mut lexer)?;
+			}
+		}
+
 		match token {
 			Token::Open => {
-				advance(&mut lexer, &mut token);
-
-				parents.push(tree.add_dummy_node());
-				children.push(SmallVec::new());
-				let node = tree.add_dummy_node();
-				parse_node(
-					&mut lexer, &mut token, &mut tree, node,
-				);
-				children.last_mut().unwrap().push(node);
+				parents.push(node);
+				children.push(Vec::new());
+				token = next(&mut lexer)?;
+				node = tree.add_dummy_node();
 			}
 			Token::Comma => {
-				advance(&mut lexer, &mut token);
-
-				if token == Token::Open {
-					continue;
-				}
-				let node = tree.add_dummy_node();
-				parse_node(
-					&mut lexer, &mut token, &mut tree, node,
-				);
 				children.last_mut().unwrap().push(node);
+				token = next(&mut lexer)?;
+				node = tree.add_dummy_node();
 			}
 			Token::Close => {
-				advance(&mut lexer, &mut token);
-
+				children.last_mut().unwrap().push(node);
 				let parent = parents.pop().unwrap();
-				parse_node(
-					&mut lexer, &mut token, &mut tree,
-					parent,
-				);
-				let children = children.pop().unwrap();
-				tree.set_node_children(parent, &children);
-				for child in children {
+				let node_children = children.pop().unwrap();
+				tree.set_node_children(parent, &node_children);
+				for &child in &node_children {
 					tree.set_node_parent(child, parent);
 				}
+				node = parent;
+				token = next(&mut lexer)?;
 			}
 			Token::Semicolon => {
-				advance(&mut lexer, &mut token);
-
 				if !parents.is_empty() {
-					bail!("early termination");
+					bail!("Unclosed parentheses");
 				}
-				if !lexer.next().is_none() {
-					bail!("trailing characters");
+				if lexer.next().is_some() {
+					bail!("Trailing characters");
 				}
 				break;
 			}
-
 			t => bail!("Unexpected token: {t:?}"),
 		}
 	}
+
+	tree.set_root(root);
 
 	Ok(tree)
 }
