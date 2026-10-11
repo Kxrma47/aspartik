@@ -95,17 +95,11 @@ impl BinaryTree {
 		}
 
 		let mut node_metadata = ArrayUtf8::<Nullable>::new();
-		for _ in 0..num_nodes_usize {
-			node_metadata.push(None)?;
-		}
+		node_metadata.push_nulls(num_nodes_usize);
 		let mut internal_names = ArrayUtf8::<Nullable>::new();
-		for _ in 0..num_internals {
-			internal_names.push(None)?;
-		}
+		internal_names.push_nulls(num_internals as usize);
 		let mut edge_metadata = ArrayUtf8::<Nullable>::new();
-		for _ in 0..num_edges_usize {
-			edge_metadata.push(None)?;
-		}
+		edge_metadata.push_nulls(num_edges_usize);
 		let edge_lengths = Buffer::repeat(1.0, num_edges);
 
 		Ok(Self {
