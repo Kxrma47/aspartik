@@ -22,18 +22,22 @@ def topology(tree):
 
 def indexed_tree(topology):
     tree = TreeBuilder()
-    leaves = [tree.add_node(tree.root, str(index), 0.0) for index in range(4)]
+    root = tree.add_dummy_node()
+    tree.set_root(root)
+    leaves = [tree.add_node(root, str(index), 0.0) for index in range(4)]
+    tree.set_node_children(root, [])
 
     def attach(clade, parent):
         if isinstance(clade, int):
-            tree.replace_parent(leaves[clade], parent)
-        else:
-            internal = tree.add_node(parent, length=0.0)
-            for child in clade:
-                attach(child, internal)
+            leaf = leaves[clade]
+            tree.set_node_parent(leaf, parent)
+            return leaf
+        internal = tree.add_node(parent, length=0.0)
+        children = [attach(child, internal) for child in clade]
+        tree.set_node_children(internal, children)
+        return internal
 
-    for child in topology:
-        attach(child, tree.root)
+    tree.set_node_children(root, [attach(child, root) for child in topology])
     return tree.to_binary()
 
 

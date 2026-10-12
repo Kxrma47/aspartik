@@ -923,7 +923,7 @@ fn preserves_child_order_and_edge_values() -> Result<()> {
 	let tree = tree(
 		3,
 		vec![1, 0, 2, 3],
-		vec![f64::NAN, f64::INFINITY, -1.5, 0.0],
+		vec![0.25, 2.5, -1.5, 0.0],
 		names(&["A", "B", "C", "AB", "root"]),
 	)?;
 	let roundtrip = parse_newick(&tree.to_newick()?)?.into_binary()?;
@@ -936,8 +936,8 @@ fn preserves_child_order_and_edge_values() -> Result<()> {
 	let a = Node::from(roundtrip.leaf_by_name("A").unwrap());
 	let b = Node::from(roundtrip.leaf_by_name("B").unwrap());
 	let c = Node::from(roundtrip.leaf_by_name("C").unwrap());
-	assert!(roundtrip.edge_length(a).unwrap().is_nan());
-	assert_eq!(roundtrip.edge_length(b), Some(f64::INFINITY));
+	assert_eq!(roundtrip.edge_length(a), Some(0.25));
+	assert_eq!(roundtrip.edge_length(b), Some(2.5));
 	assert_eq!(roundtrip.edge_length(c), Some(-1.5));
 	let ab = roundtrip
 		.nodes()

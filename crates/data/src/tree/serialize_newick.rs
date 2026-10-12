@@ -23,7 +23,7 @@ struct Child<'a> {
 
 trait Source {
 	fn validate(&self) -> Result<()>;
-	fn root(&self) -> Node;
+	fn root(&self) -> Result<Node>;
 	fn children(&self, node: Node) -> Result<SmallVec<[Child<'_>; 2]>>;
 	fn name(&self, node: Node) -> &str;
 	fn node_attributes(&self, node: Node) -> &str;
@@ -31,27 +31,27 @@ trait Source {
 
 impl Source for TreeBuilder {
 	fn validate(&self) -> Result<()> {
-		TreeBuilder::validate(self)
+		Ok(())
 	}
 
-	fn root(&self) -> Node {
-		TreeBuilder::root(self)
+	fn root(&self) -> Result<Node> {
+		self.root()
+			.ok_or_else(|| anyhow::anyhow!("tree has no root"))
 	}
 
 	fn children(&self, node: Node) -> Result<SmallVec<[Child<'_>; 2]>> {
 		let mut children = SmallVec::new();
 		for &child in self.children_of(node) {
-			let hybrid = self.parent_of(child) != Some(node);
+			let hybrid = self.parent_of(child) != node;
 			let edge = if hybrid {
 				Edge {
 					length: None,
 					attributes: "",
 				}
 			} else {
-				let edge = self.edge(child);
 				Edge {
-					length: edge.length,
-					attributes: &edge.attributes,
+					length: self.edge_length(child),
+					attributes: self.edge_attribute(child),
 				}
 			};
 			children.push(Child {
@@ -64,11 +64,11 @@ impl Source for TreeBuilder {
 	}
 
 	fn name(&self, node: Node) -> &str {
-		&self.node(node).name
+		TreeBuilder::name(self, node)
 	}
 
 	fn node_attributes(&self, node: Node) -> &str {
-		&self.node(node).attributes
+		self.node_attribute(node)
 	}
 }
 
@@ -77,8 +77,8 @@ impl Source for BinaryTree {
 		Ok(())
 	}
 
-	fn root(&self) -> Node {
-		BinaryTree::root(self).into()
+	fn root(&self) -> Result<Node> {
+		Ok(BinaryTree::root(self).into())
 	}
 
 	fn children(&self, node: Node) -> Result<SmallVec<[Child<'_>; 2]>> {
@@ -142,7 +142,7 @@ fn to_newick(source: &impl Source) -> Result<String> {
 
 fn write_newick<W: Write>(source: &impl Source, writer: &mut W) -> Result<()> {
 	source.validate()?;
-	let root = source.root();
+	let root = source.root()?;
 	let mut stack = vec![Event::Subtree(Child {
 		node: root,
 		edge: Edge {

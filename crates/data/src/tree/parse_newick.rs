@@ -3,10 +3,7 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use std::collections::HashMap;
 
 use crate::TaxonSet;
-use crate::tree::{
-	BinaryTree, Node,
-	builder::{EdgeData, NodeData, TreeBuilder},
-};
+use crate::tree::{BinaryTree, Node, builder::TreeBuilder};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Token {
@@ -134,8 +131,10 @@ impl<'a> Tokenizer<'a> {
 
 #[derive(Debug)]
 struct ParsedNode {
-	data: NodeData,
-	edge: EdgeData,
+	name: String,
+	node_attributes: String,
+	edge_attributes: String,
+	length: Option<f64>,
 	hybrid: Option<String>,
 }
 
@@ -164,17 +163,21 @@ pub fn parse(input: &str) -> Result<TreeBuilder> {
 		}
 	};
 	let mut tree = TreeBuilder::new();
+	let root = tree.add_dummy_node();
+	tree.set_root(root);
 	let mut hybrids = HashMap::<String, Node>::new();
 
 	if first != Token::Open {
 		let (mut parsed, delimiter) =
 			parse_node(first, &mut tokenizer)?;
-		parsed.data.attributes.insert_str(0, &leading_attributes);
+		parsed.node_attributes.insert_str(0, &leading_attributes);
 		ensure!(
 			delimiter == Delimiter::Semicolon,
 			"Expected ';' after root node"
 		);
-		let root = tree.root();
+		let root = tree
+			.root()
+			.context("The parser did not create a root node")?;
 		set_node(&mut tree, root, parsed, true, &mut hybrids)?;
 		ensure!(
 			tokenizer.next()?.is_none(),
@@ -184,7 +187,7 @@ pub fn parse(input: &str) -> Result<TreeBuilder> {
 	}
 
 	let mut stack = vec![Frame {
-		node: tree.root(),
+		node: root,
 		children: 0,
 	}];
 	let mut delimiter = None;
@@ -213,8 +216,7 @@ pub fn parse(input: &str) -> Result<TreeBuilder> {
 						)?;
 					let is_root = stack.is_empty();
 					if is_root {
-						parsed.data
-							.attributes
+						parsed.node_attributes
 							.insert_str(
 							0,
 							&leading_attributes,
@@ -291,11 +293,7 @@ fn parse_child(
 		stack.last().context("Unexpected subtree after root")?.node;
 	match token {
 		Token::Open => {
-			let child = tree.add_node(
-				parent,
-				NodeData::unnamed(),
-				EdgeData::without_distance(),
-			)?;
+			let child = tree.add_node("", f64::NAN, parent);
 			stack.last_mut().unwrap().children += 1;
 			stack.push(Frame {
 				node: child,
@@ -434,8 +432,10 @@ fn finish_node(
 	let hybrid = hybrid_identifier(&name)?;
 	Ok((
 		ParsedNode {
-			data: NodeData::new(name, node_attributes),
-			edge: EdgeData::new(length, edge_attributes),
+			name,
+			node_attributes,
+			edge_attributes,
+			length,
 			hybrid,
 		},
 		delimiter,
@@ -444,8 +444,10 @@ fn finish_node(
 
 fn empty_node() -> ParsedNode {
 	ParsedNode {
-		data: NodeData::unnamed(),
-		edge: EdgeData::without_distance(),
+		name: String::new(),
+		node_attributes: String::new(),
+		edge_attributes: String::new(),
+		length: None,
 		hybrid: None,
 	}
 }
@@ -480,15 +482,28 @@ fn add_leaf(
 		&& let Some(&node) = hybrids.get(identifier)
 	{
 		ensure!(
-			parsed.data.attributes.is_empty(),
+			parsed.node_attributes.is_empty(),
 			"A hybrid reference cannot replace node metadata"
 		);
-		tree.add_hybrid_edge(parent, node)?;
+		ensure!(node != parent, "A node cannot be its own parent");
+		let mut children = tree.children_of(parent).to_vec();
+		ensure!(
+			!children.contains(&node),
+			"The hybrid edge already exists"
+		);
+		children.push(node);
+		tree.set_node_children(parent, &children);
 		return Ok(());
 	}
 
 	let identifier = parsed.hybrid.clone();
-	let node = tree.add_node(parent, parsed.data, parsed.edge)?;
+	let node = tree.add_node(
+		&parsed.name,
+		parsed.length.unwrap_or(f64::NAN),
+		parent,
+	);
+	tree.set_node_attribute(node, &parsed.node_attributes);
+	tree.set_edge_attribute(node, &parsed.edge_attributes);
 	if let Some(identifier) = identifier {
 		hybrids.insert(identifier, node);
 	}
@@ -509,9 +524,11 @@ fn set_node(
 		);
 		hybrids.insert(identifier.clone(), node);
 	}
-	*tree.node_mut(node) = parsed.data;
+	tree.set_node_name(node, &parsed.name);
+	tree.set_node_attribute(node, &parsed.node_attributes);
 	if !is_root {
-		tree.replace_edge(node, parsed.edge)?;
+		tree.set_edge_length(node, parsed.length.unwrap_or(f64::NAN));
+		tree.set_edge_attribute(node, &parsed.edge_attributes);
 	}
 	Ok(())
 }

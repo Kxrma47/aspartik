@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow, bail};
 use logos::{Lexer, Logos};
 use smallvec::SmallVec;
 
-use super::{Node, builder2::TreeBuilder2};
+use super::{Node, builder::TreeBuilder};
 
 fn unquote(s: &str) -> &str {
 	&s[1..s.len() - 1]
@@ -32,9 +32,9 @@ enum Token<'a> {
 	Attribute(&'a str),
 }
 
-fn parse_newick<'a>(newick: &'a str) -> Result<TreeBuilder2> {
+fn parse_newick<'a>(newick: &'a str) -> Result<TreeBuilder> {
 	let mut lexer = Token::lexer(newick);
-	let mut tree = TreeBuilder2::new();
+	let mut tree = TreeBuilder::new();
 
 	let mut next = |lexer: &mut Lexer<'a, Token<'a>>| -> Result<Token<'a>> {
 		match lexer.next() {

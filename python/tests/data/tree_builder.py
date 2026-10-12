@@ -6,7 +6,13 @@ from aspartik.data.tree import BinaryTree, Internal, Leaf, Node, TreeBuilder
 
 
 def test_empty_tree():
-    assert str(TreeBuilder()) == ";"
+    tree = TreeBuilder()
+    with pytest.raises(RuntimeError, match="no root"):
+        str(tree)
+
+    root = tree.add_dummy_node()
+    tree.set_root(root)
+    assert str(tree) == ";"
 
 
 def test_from_newick():
@@ -40,37 +46,6 @@ def test_tree_access_and_traversal():
     assert tree.postorder()[-1] == root
     assert sorted(tree.preorder()) == tree.nodes()
     assert sorted(tree.postorder()) == tree.nodes()
-
-
-def test_rerooting():
-    tree = TreeBuilder.from_newick("((A:1,B:2)left:3,(C:4,D:5)right:6)root;")
-    old_root = tree.root
-    left = node_named(tree, "left")
-
-    tree.set_root(left)
-    assert tree.root == left
-    assert tree.parent_of(old_root) == left
-    assert tree.edge_length(old_root) == 3.0
-    tree.validate()
-
-    tree.set_root(old_root)
-    assert tree.root == old_root
-    assert tree.to_newick() == "((C:4,D:5)right:6,(A:1,B:2)left:3)root;"
-
-
-def test_hybrid_children_and_canonical_traversal():
-    tree = TreeBuilder.from_newick("((A:1,(C:1)X#H1:2)L:1,(X#H1:3,B:1)R:1)root;")
-    hybrid = node_named(tree, "X#H1")
-    additional_parent = node_named(tree, "R")
-
-    assert hybrid in tree.children_of(additional_parent)
-    assert tree.parent_of(hybrid) != additional_parent
-    assert tree.preorder().count(hybrid) == 1
-    assert tree.postorder().count(hybrid) == 1
-    tree.remove_hybrid_edge(additional_parent, hybrid)
-    assert hybrid not in tree.children_of(additional_parent)
-    tree.add_hybrid_edge(additional_parent, hybrid)
-    tree.validate()
 
 
 def test_binary_tree_access():
@@ -125,16 +100,10 @@ def test_nonbinary_and_missing_lengths_do_not_seal():
         lambda tree, node: tree.edge_length(node),
         lambda tree, node: tree.edge_metadata(node),
         lambda tree, node: tree.add_node(node),
-        lambda tree, node: tree.add_edge(tree.root, node),
-        lambda tree, node: tree.remove_edge(tree.root, node),
-        lambda tree, node: tree.replace_parent(node, tree.root),
-        lambda tree, node: tree.set_root(node),
         lambda tree, node: tree.set_name(node, "x"),
         lambda tree, node: tree.set_node_metadata(node, "x"),
         lambda tree, node: tree.set_edge_length(node, 1.0),
         lambda tree, node: tree.set_edge_metadata(node, "x"),
-        lambda tree, node: tree.add_hybrid_edge(tree.root, node),
-        lambda tree, node: tree.remove_hybrid_edge(tree.root, node),
     ],
 )
 def test_tree_rejects_invalid_node_ids(operation):

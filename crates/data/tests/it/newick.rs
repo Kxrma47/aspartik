@@ -8,16 +8,10 @@ use std::{
 	path::PathBuf,
 };
 
-use data::tree::{
-	BinaryTree, Node,
-	builder::{EdgeData, NodeData, TreeBuilder},
-	parse_newick,
-};
+use data::tree::{BinaryTree, Node, builder::TreeBuilder, parse_newick};
 
 fn node_named(tree: &TreeBuilder, name: &str) -> Node {
-	tree.nodes()
-		.find(|&node| tree.node(node).name == name)
-		.unwrap()
+	tree.nodes().find(|&node| tree.name(node) == name).unwrap()
 }
 
 #[test]
@@ -35,7 +29,7 @@ fn labels_lengths_and_empty_fields() -> Result<()> {
 	}
 
 	let tree = parse_newick("(A,B:1);")?;
-	assert_eq!(tree.edge(node_named(&tree, "A")).length, None);
+	assert_eq!(tree.edge_length(node_named(&tree, "A")), None);
 	assert!(tree.into_binary().is_err());
 
 	Ok(())
@@ -50,7 +44,7 @@ fn quoted_labels() -> Result<()> {
 		tree.to_newick()?,
 		"('with spaces':0.1,'O''Brien':0.2,'comma,name':0.3);"
 	);
-	assert_eq!(tree.node(node_named(&tree, "O'Brien")).name, "O'Brien");
+	assert_eq!(tree.name(node_named(&tree, "O'Brien")), "O'Brien");
 
 	let double_quoted =
 		parse_newick("(\"with quotes!\":0.1,\"another one\":0.2);")?;
@@ -68,42 +62,26 @@ fn multifurcating_roundtrip() -> Result<()> {
 	let builder = parse_newick(source)?;
 	assert!(!builder.is_binary());
 	assert!(builder.clone().into_binary().is_err());
-	assert_eq!(builder.children_of(builder.root()).len(), 4);
+	assert_eq!(builder.children_of(builder.root().unwrap()).len(), 4);
 	assert_eq!(builder.to_newick()?, source);
 
 	Ok(())
 }
 
 #[test]
-fn hybrid_definition_follows_additional_parent() -> Result<()> {
-	let mut tree = TreeBuilder::with_root(NodeData::named("root"));
-	let additional_parent = tree.add_node(
-		tree.root(),
-		NodeData::named("additional"),
-		EdgeData::from_distance(1.0),
-	)?;
-	let canonical_parent = tree.add_node(
-		tree.root(),
-		NodeData::named("canonical"),
-		EdgeData::from_distance(2.0),
-	)?;
-	let hybrid = tree.add_node(
-		canonical_parent,
-		NodeData::new("x#H1".to_owned(), "[&kind=donor]".to_owned()),
-		EdgeData::from_distance(3.0),
-	)?;
-	tree.add_node(
-		hybrid,
-		NodeData::named("leaf"),
-		EdgeData::from_distance(4.0),
-	)?;
-	tree.add_hybrid_edge(additional_parent, hybrid)?;
+fn attributes_are_preserved() -> Result<()> {
+	let mut tree = TreeBuilder::new();
+	let root = tree.add_dummy_node();
+	tree.set_root(root);
+	tree.set_node_attribute(root, "[&root=1]");
+	let child = tree.add_node("A", 1.0, root);
+	tree.set_edge_attribute(child, "[&rate=0.5]");
 
 	let output = tree.to_newick()?;
-	assert_eq!(output.matches("[&kind=donor]").count(), 1);
+	assert_eq!(output, "(A:1[&rate=0.5])[&root=1];");
 	let reparsed = parse_newick(&output)?;
-	assert_eq!(reparsed.num_nodes(), tree.num_nodes());
-	assert_eq!(reparsed.hybrid_edges().count(), 1);
+	assert_eq!(reparsed.node_attribute(root), "[&root=1]");
+	assert_eq!(reparsed.edge_attribute(child), "[&rate=0.5]");
 
 	Ok(())
 }
@@ -146,7 +124,7 @@ fn nested_tree(depth: usize) -> String {
 fn eight_million_nested_tree_does_not_exhaust_the_stack() -> Result<()> {
 	const DEPTH: usize = 8_000_000;
 	let tree = parse_newick(&nested_tree(DEPTH))?;
-	assert_eq!(tree.num_nodes(), u32::try_from(DEPTH + 1)?);
+	assert_eq!(tree.num_nodes(), (DEPTH + 1));
 
 	Ok(())
 }
@@ -166,7 +144,7 @@ fn deep_ladder_parse_and_write() -> Result<()> {
 	source.push(';');
 
 	let tree = parse_newick(&source)?;
-	assert_eq!(tree.num_nodes(), (NUM_LEAVES * 2 - 1) as u32);
+	assert_eq!(tree.num_nodes(), NUM_LEAVES * 2 - 1);
 	let output = tree.to_newick()?;
 	let reparsed = parse_newick(&output)?;
 	assert_eq!(reparsed.num_nodes(), tree.num_nodes());
@@ -179,26 +157,27 @@ fn arbitrary_builder(
 	u: &mut Unstructured<'_>,
 	num_leaves: u32,
 ) -> arbitrary::Result<TreeBuilder> {
-	let mut tree = TreeBuilder::with_root(NodeData::named("root"));
-	let mut leaves = vec![tree.root()];
+	let mut tree = TreeBuilder::new();
+	let root = tree.add_dummy_node();
+	tree.set_root(root);
+	tree.set_node_name(root, "root");
+	tree.set_node_attribute(root, "[&id=0]");
+	let mut leaves = vec![root];
 	while leaves.len() < num_leaves as usize {
 		let index = u.int_in_range(0..=leaves.len() - 1)?;
 		let parent = leaves.swap_remove(index);
 		for _ in 0..2 {
-			let id = tree.num_nodes();
-			let child = tree
-				.add_node(
-					parent,
-					NodeData::new(
-						format!("node {id}"),
-						format!("[&id={id}]"),
-					),
-					EdgeData::new(
-						Some(f64::from(id) / 10.0),
-						format!("[&edge={id}]"),
-					),
-				)
-				.unwrap();
+			let id = tree.num_nodes() as u32;
+			let child = tree.add_node(
+				&format!("node {id}"),
+				f64::from(id) / 10.0,
+				parent,
+			);
+			tree.set_node_attribute(child, &format!("[&id={id}]"));
+			tree.set_edge_attribute(
+				child,
+				&format!("[&edge={id}]"),
+			);
 			leaves.push(child);
 		}
 	}

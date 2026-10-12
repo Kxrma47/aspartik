@@ -24,8 +24,7 @@ use bitmap::Bitmap;
 use data::{
 	PyTaxonSet, TaxonSet,
 	tree::{
-		Node as DataNode,
-		builder::{EdgeData, NodeData, TreeBuilder},
+		Node as DataNode, builder::TreeBuilder,
 		python::PyTreeBuilder as PyNewickTree,
 	},
 };
@@ -960,9 +959,11 @@ impl Tree {
 		} else {
 			String::new()
 		};
-		let mut tree =
-			TreeBuilder::with_root(NodeData::named(root_name));
-		let mut stack = vec![(root, tree.root())];
+		let mut tree = TreeBuilder::new();
+		let builder_root = tree.add_dummy_node();
+		tree.set_root(builder_root);
+		tree.set_node_name(builder_root, &root_name);
+		let mut stack = vec![(root, builder_root)];
 		while let Some((source, target)) = stack.pop() {
 			let Some(source) = self.as_internal(source) else {
 				continue;
@@ -979,11 +980,8 @@ impl Tree {
 				};
 				let length = self.edge_length(child.0)
 					* clock_rate(child.0);
-				let child_target = tree.add_node(
-					target,
-					NodeData::named(name),
-					EdgeData::from_distance(length),
-				)?;
+				let child_target =
+					tree.add_node(&name, length, target);
 				next.push((child, child_target));
 			}
 			stack.extend(next.into_iter().rev());

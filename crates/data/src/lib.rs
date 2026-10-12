@@ -38,8 +38,8 @@ pub mod pymodule {
 		seq::python::PyDnaSeq,
 		tree::python::{
 			PyBinaryTree, PySvgOptions, PyTreeBuilder,
-			PyTreeBuilder2, py_branch_score_matrix,
-			py_robinson_foulds_matrix, py_triplet_distance_matrix,
+			py_branch_score_matrix, py_robinson_foulds_matrix,
+			py_triplet_distance_matrix,
 		},
 		tree::{Internal, Leaf, Node},
 	};
