@@ -533,34 +533,12 @@ impl PyBinaryTree {
 		Ok(self.inner.name(self.node(node)?))
 	}
 
-	fn node_metadata(
-		&self,
-		node: &Bound<'_, PyAny>,
-	) -> Result<Option<&str>> {
-		Ok(self.inner.node_metadata(self.node(node)?))
-	}
-
 	fn edge_length(&self, child: &Bound<'_, PyAny>) -> Result<Option<f64>> {
 		Ok(self.inner.edge_length(self.node(child)?))
 	}
 
-	fn edge_metadata(
-		&self,
-		child: &Bound<'_, PyAny>,
-	) -> Result<Option<&str>> {
-		Ok(self.inner.edge_metadata(self.node(child)?))
-	}
-
 	fn leaf_by_name(&self, name: &str) -> Option<Leaf> {
 		self.inner.leaf_by_name(name)
-	}
-
-	fn nhx(
-		&self,
-		node: &Bound<'_, PyAny>,
-		key: &str,
-	) -> Result<Option<&str>> {
-		Ok(self.inner.nhx(self.node(node)?, key))
 	}
 
 	fn preorder(&self) -> Vec<Node> {

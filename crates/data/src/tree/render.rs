@@ -307,11 +307,6 @@ impl BinaryTree {
 			}
 			write_escaped(&mut output, color.as_ref())?;
 			output.push_str("\">");
-			if let Some(metadata) = self.edge_metadata(child) {
-				output.push_str("<title>");
-				write_escaped(&mut output, metadata)?;
-				output.push_str("</title>");
-			}
 			match layout.kind {
 				LayoutKind::Rectangular | LayoutKind::Tidy => {
 					output.push_str("</path>")
@@ -334,23 +329,12 @@ impl BinaryTree {
 			)?;
 			write_escaped(&mut output, color.as_ref())?;
 			output.push_str("\">");
-			if (options.show_names && self.name(node).is_some())
-				|| self.node_metadata(node).is_some()
-			{
+			if options.show_names && self.name(node).is_some() {
 				output.push_str("<title>");
 				if options.show_names
 					&& let Some(name) = self.name(node)
 				{
 					write_escaped(&mut output, name)?;
-				}
-				if let Some(metadata) = self.node_metadata(node)
-				{
-					if options.show_names
-						&& self.name(node).is_some()
-					{
-						output.push(' ');
-					}
-					write_escaped(&mut output, metadata)?;
 				}
 				output.push_str("</title>");
 			}

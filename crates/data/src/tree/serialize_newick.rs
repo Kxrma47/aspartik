@@ -90,9 +90,7 @@ impl Source for BinaryTree {
 					node: child,
 					edge: Edge {
 						length: self.edge_length(child),
-						attributes: self
-							.edge_metadata(child)
-							.unwrap_or_default(),
+						attributes: "",
 					},
 					hybrid: false,
 				});
@@ -105,8 +103,8 @@ impl Source for BinaryTree {
 		BinaryTree::name(self, node).unwrap_or("")
 	}
 
-	fn node_attributes(&self, node: Node) -> &str {
-		self.node_metadata(node).unwrap_or("")
+	fn node_attributes(&self, _node: Node) -> &str {
+		""
 	}
 }
 

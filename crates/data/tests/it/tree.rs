@@ -58,8 +58,6 @@ fn new_tree(
 	parents: Buffer<u32>,
 	edge_lengths: Buffer<f64>,
 	names: ArrayUtf8<Nullable>,
-	node_metadata: ArrayUtf8<Nullable>,
-	edge_metadata: ArrayUtf8<Nullable>,
 ) -> Result<BinaryTree> {
 	let (taxa, internal_names) = split_names(num_leaves, names);
 	BinaryTree::new(
@@ -70,8 +68,6 @@ fn new_tree(
 		edge_lengths,
 		taxa,
 		internal_names,
-		node_metadata,
-		edge_metadata,
 	)
 }
 
@@ -81,8 +77,6 @@ fn from_children(
 	children: Buffer<u32>,
 	edge_lengths: Buffer<f64>,
 	names: ArrayUtf8<Nullable>,
-	node_metadata: ArrayUtf8<Nullable>,
-	edge_metadata: ArrayUtf8<Nullable>,
 ) -> Result<BinaryTree> {
 	let (taxa, internal_names) = split_names(num_leaves, names);
 	BinaryTree::from_children(
@@ -91,8 +85,6 @@ fn from_children(
 		edge_lengths,
 		taxa,
 		internal_names,
-		node_metadata,
-		edge_metadata,
 	)
 }
 
@@ -132,8 +124,6 @@ fn tree_with_root(
 		Buffer::from_slice(&parents),
 		Buffer::from_slice(&edge_lengths),
 		node_names,
-		nulls(num_nodes),
-		nulls(num_nodes - 1),
 	)
 }
 
@@ -170,7 +160,6 @@ fn assert_random_tree(tree: &BinaryTree, taxa: &TaxonSet) {
 		} else {
 			assert_eq!(tree.name(node), None);
 		}
-		assert_eq!(tree.node_metadata(node), None);
 
 		if let Some(internal) = tree.as_internal(node) {
 			for child in tree.children_of(internal) {
@@ -187,7 +176,6 @@ fn assert_random_tree(tree: &BinaryTree, taxa: &TaxonSet) {
 		} else {
 			assert_eq!(tree.edge_length(node), Some(1.0));
 		}
-		assert_eq!(tree.edge_metadata(node), None);
 	}
 	assert!(seen.into_iter().all(|value| value));
 }
@@ -537,9 +525,6 @@ fn two_leaf_tree() -> Result<()> {
 	assert_eq!(tree.edge_length(node(&tree, 2)), None);
 	assert_eq!(tree.name(node(&tree, 0)), Some("A"));
 	assert_eq!(tree.name(node(&tree, 2)), Some("root"));
-	assert_eq!(tree.node_metadata(node(&tree, 0)), None);
-	assert_eq!(tree.edge_metadata(node(&tree, 0)), None);
-	assert_eq!(tree.edge_metadata(node(&tree, 2)), None);
 	assert_eq!(tree.leaf_by_name("B").unwrap().u32(), 1);
 	assert_eq!(indices(tree.preorder()), vec![2, 0, 1]);
 	assert_eq!(indices(tree.postorder()), vec![0, 1, 2]);
@@ -558,8 +543,6 @@ fn constructor_accepts_owned_buffers() -> Result<()> {
 		Buffer::from_slice(&[2, 2, u32::MAX]),
 		edge_lengths,
 		names(&["A", "B", "root"]),
-		nulls(3),
-		nulls(2),
 	)?;
 
 	assert_eq!(tree.children_of(tree.root()).map(Node::u32), [1, 0]);
@@ -577,23 +560,6 @@ fn canonical_constructor_relabels_internals() -> Result<()> {
 		Buffer::from_slice(&[5, 6, 0, 1, 2, 3]),
 		Buffer::from_slice(&[0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
 		names(&["A", "B", "C", "D", "ROOT", "AB", "CD"]),
-		nullable_values([
-			None,
-			None,
-			None,
-			None,
-			Some("[&node=root]"),
-			Some("[&node=AB]"),
-			Some("[&node=CD]"),
-		]),
-		nullable_values([
-			None,
-			None,
-			None,
-			None,
-			Some("[&edge=AB]"),
-			Some("[&edge=CD]"),
-		]),
 	)?;
 
 	tree.validate()?;
@@ -602,15 +568,11 @@ fn canonical_constructor_relabels_internals() -> Result<()> {
 	assert_eq!(tree.name(node(&tree, 4)), Some("AB"));
 	assert_eq!(tree.name(node(&tree, 5)), Some("CD"));
 	assert_eq!(tree.name(node(&tree, 6)), Some("ROOT"));
-	assert_eq!(tree.node_metadata(node(&tree, 4)), Some("[&node=AB]"));
-	assert_eq!(tree.node_metadata(node(&tree, 6)), Some("[&node=root]"));
-	assert_eq!(tree.edge_metadata(node(&tree, 4)), Some("[&edge=AB]"));
-	assert_eq!(tree.edge_metadata(node(&tree, 5)), Some("[&edge=CD]"));
 	assert_eq!(tree.edge_length(node(&tree, 4)), Some(0.5));
 	assert_eq!(tree.edge_length(node(&tree, 5)), Some(0.6));
 	assert_eq!(
 		tree.to_newick()?,
-		"((A:0.1,B:0.2)AB[&node=AB]:0.5[&edge=AB],(C:0.3,D:0.4)CD[&node=CD]:0.6[&edge=CD])ROOT[&node=root];"
+		"((A:0.1,B:0.2)AB:0.5,(C:0.3,D:0.4)CD:0.6)ROOT;"
 	);
 	Ok(())
 }
@@ -640,14 +602,6 @@ fn canonical_names_and_topology() -> Result<()> {
 	assert_eq!(
 		first.edge_length(first.leaf_by_name("B").unwrap().into()),
 		Some(2.0)
-	);
-	assert_eq!(
-		first.edge_metadata(first.leaf_by_name("B").unwrap().into()),
-		Some("[&edge=B]")
-	);
-	assert_eq!(
-		first.node_metadata(first.leaf_by_name("A").unwrap().into()),
-		Some("[&node=A]")
 	);
 	assert_eq!(internal_indices(&first), vec![4, 5, 6]);
 	Ok(())
@@ -895,8 +849,6 @@ fn random_canonical_constructor() {
 			Buffer::from_slice(&children),
 			Buffer::from_slice(&lengths),
 			names(&labels),
-			nulls(original.num_nodes() as usize),
-			nulls(original.num_edges() as usize),
 		)
 		.unwrap();
 
@@ -950,8 +902,6 @@ fn explicit_nonterminal_root() -> Result<()> {
 		Buffer::from_slice(&[5, 5, 6, 6, u32::MAX, 4, 4]),
 		Buffer::from_slice(&[0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
 		names(&["A", "B", "C", "D", "ROOT", "AB", "CD"]),
-		nulls(7),
-		nulls(6),
 	)?;
 
 	assert_eq!(tree.root().u32(), 4);
@@ -1022,24 +972,6 @@ fn newick_roundtrip() -> Result<()> {
 		.any(|node| named_tree.name(node) == Some("CD")));
 	assert_eq!(named_tree.name(named_tree.root().into()), Some("ROOT"));
 	assert_eq!(named_tree.to_newick()?, named_source);
-
-	Ok(())
-}
-
-#[test]
-fn metadata_roundtrip() -> Result<()> {
-	let source = "(A[&country=SE]:0.1[&rate=fast],B:0.2)ROOT[&source=hcv];";
-	let tree = parse_newick(source)?.into_binary()?;
-	let a = Node::from(tree.leaf_by_name("A").unwrap());
-	assert_eq!(tree.node_metadata(a), Some("[&country=SE]"));
-	assert_eq!(tree.edge_metadata(a), Some("[&rate=fast]"));
-	assert_eq!(
-		tree.node_metadata(tree.root().into()),
-		Some("[&source=hcv]")
-	);
-	assert_eq!(tree.edge_metadata(tree.root().into()), None);
-
-	assert_eq!(tree.to_newick()?, source);
 
 	Ok(())
 }
@@ -1797,8 +1729,6 @@ fn svg_rendering() -> Result<()> {
 		Buffer::from_slice(&[2, 2, u32::MAX]),
 		Buffer::from_slice(&[1.0, 2.0]),
 		names(&["A<&\"'", "B", "root"]),
-		nullable_values([Some("node<&\"'"), None, Some("root data")]),
-		nullable_values([Some("edge<&\"'"), None]),
 	)?;
 	let layout = tree.rectangular_layout(1.0)?;
 	let options = SvgOptions {
@@ -1813,8 +1743,6 @@ fn svg_rendering() -> Result<()> {
 	assert_eq!(svg.matches("<path ").count(), tree.num_edges() as usize);
 	assert_eq!(svg.matches("<circle ").count(), tree.num_nodes() as usize);
 	assert!(svg.contains("A&lt;&amp;&quot;&apos;"));
-	assert!(svg.contains("node&lt;&amp;&quot;&apos;"));
-	assert!(svg.contains("edge&lt;&amp;&quot;&apos;"));
 	assert!(svg.contains("fill=\"#123&quot;456\""));
 	assert!(svg.contains("width=\"122.87\""));
 	assert!(svg.contains("H 53.33\""));
@@ -1834,7 +1762,6 @@ fn svg_rendering() -> Result<()> {
 	)?;
 	assert!(!unnamed.contains("<text"));
 	assert!(!unnamed.contains("A&lt;&amp;&quot;&apos;"));
-	assert!(unnamed.contains("node&lt;&amp;&quot;&apos;"));
 	assert!(unnamed.contains("width=\"106.67\""));
 	let slanted = tree.to_svg(
 		&tree.slanted_layout(1.0)?,

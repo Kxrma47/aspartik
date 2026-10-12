@@ -42,34 +42,6 @@ def test_tree_access_and_traversal():
     assert sorted(tree.postorder()) == tree.nodes()
 
 
-def test_tree_mutation_and_sealing():
-    tree = TreeBuilder()
-    tree.set_name(tree.root, "root")
-    left = tree.add_node(tree.root, "left", 1.0)
-    tree.add_node(tree.root, "right", 2.0)
-    a = tree.add_node(left, "A", 3.0)
-    b = tree.add_node(left, "B", 4.0)
-
-    tree.set_node_metadata(a, "[&date=2020]")
-    tree.set_edge_metadata(a, "[&rate=0.5]")
-    tree.set_edge_length(a, 3.5)
-    assert tree.node_metadata(a) == "[&date=2020]"
-    assert tree.edge_metadata(a) == "[&rate=0.5]"
-    assert tree.edge_length(a) == 3.5
-
-    tree.replace_parent(b, tree.root)
-    assert not tree.is_binary()
-    tree.replace_parent(b, left)
-    length, metadata = tree.remove_edge(left, b)
-    assert (length, metadata) == (4.0, None)
-    tree.add_edge(left, b, length, metadata)
-    tree.validate()
-
-    binary = tree.to_binary()
-    assert isinstance(binary, BinaryTree)
-    assert str(binary) == "((A[&date=2020]:3.5[&rate=0.5],B:4)left:1,right:2)root;"
-
-
 def test_rerooting():
     tree = TreeBuilder.from_newick("((A:1,B:2)left:3,(C:4,D:5)right:6)root;")
     old_root = tree.root
@@ -129,9 +101,6 @@ def test_binary_tree_access():
     assert tree.parent_of(root) is None
     assert a in tree.children_of(left)
     assert tree.edge_length(a) == 1.0
-    assert tree.edge_metadata(a) == "[&rate=0.5]"
-    assert tree.nhx(a, "S") == "human"
-    assert tree.nhx(a, "missing") is None
     assert tree.preorder()[0] == root
     assert tree.postorder()[-1] == root
     assert tree.to_newick() == str(tree)
@@ -186,10 +155,7 @@ def test_tree_rejects_invalid_node_ids(operation):
         lambda tree, node: tree.children_of(node),
         lambda tree, node: tree.parent_of(node),
         lambda tree, node: tree.name(node),
-        lambda tree, node: tree.node_metadata(node),
         lambda tree, node: tree.edge_length(node),
-        lambda tree, node: tree.edge_metadata(node),
-        lambda tree, node: tree.nhx(node, "S"),
     ],
 )
 def test_binary_tree_rejects_invalid_node_ids(operation):

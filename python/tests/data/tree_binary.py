@@ -50,9 +50,7 @@ def test_random_tree():
     assert tree.taxa == taxa
     assert [tree.name(leaf) for leaf in tree.leaves()] == list(taxa)
     assert all(tree.name(node) is None for node in tree.internals())
-    assert all(tree.node_metadata(node) is None for node in tree.nodes())
     assert all(tree.edge_length(child) == 1.0 for child in tree.edges())
-    assert all(tree.edge_metadata(child) is None for child in tree.edges())
 
 
 def test_random_tree_is_deterministic():

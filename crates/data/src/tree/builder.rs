@@ -644,20 +644,12 @@ impl BinaryTree {
 		}
 
 		let mut internal_names = ArrayUtf8::<Nullable>::new();
-		let mut node_attributes = ArrayUtf8::<Nullable>::new();
 		for (index, &old) in order.iter().enumerate() {
 			if index >= num_leaves as usize {
 				internal_names.push(nonempty(
 					&builder.nodes[old.usize()].name,
 				))?;
 			}
-			node_attributes.push(nonempty(
-				&builder.nodes[old.usize()].attributes,
-			))?;
-		}
-		let mut edge_metadata = ArrayUtf8::<Nullable>::new();
-		for attributes in edge_attributes {
-			edge_metadata.push(attributes)?;
 		}
 
 		Self::from_children(
@@ -666,8 +658,6 @@ impl BinaryTree {
 			Buffer::from_slice(&edge_lengths),
 			taxa,
 			internal_names,
-			node_attributes,
-			edge_metadata,
 		)
 	}
 }

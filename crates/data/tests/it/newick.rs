@@ -63,26 +63,6 @@ fn quoted_labels() -> Result<()> {
 }
 
 #[test]
-fn beast_metadata_and_nhx() -> Result<()> {
-	let source = "[&R](A[&date=2020]:1e-2[&rate=0.5],B:0.02)ROOT[&&NHX:S=human:broken:D=N][&posterior=0.99];";
-	let expected = "(A[&date=2020]:0.01[&rate=0.5],B:0.02)ROOT[&R][&&NHX:S=human:broken:D=N][&posterior=0.99];";
-	let builder = parse_newick(source)?;
-	let a = node_named(&builder, "A");
-	assert_eq!(builder.node(a).attributes, "[&date=2020]");
-	assert_eq!(builder.edge(a).attributes, "[&rate=0.5]");
-	assert_eq!(builder.to_newick()?, expected);
-
-	let tree = builder.into_binary()?;
-	let root = Node::from(tree.root());
-	assert_eq!(tree.nhx(root, "S"), Some("human"));
-	assert_eq!(tree.nhx(root, "D"), Some("N"));
-	assert_eq!(tree.nhx(root, "missing"), None);
-	assert_eq!(tree.to_newick()?, expected);
-
-	Ok(())
-}
-
-#[test]
 fn multifurcating_roundtrip() -> Result<()> {
 	let source = "(A:1,B:2,C:3,D:4)ROOT;";
 	let builder = parse_newick(source)?;
@@ -90,19 +70,6 @@ fn multifurcating_roundtrip() -> Result<()> {
 	assert!(builder.clone().into_binary().is_err());
 	assert_eq!(builder.children_of(builder.root()).len(), 4);
 	assert_eq!(builder.to_newick()?, source);
-
-	Ok(())
-}
-
-#[test]
-fn extended_newick_hybrid_roundtrip() -> Result<()> {
-	let source = "(A:1,B:1,((C:1,(Y:1)x#H1[&kind=donor]:1)c:1,(x#H1:2[&&NHX:gamma=0.3],D:1)d:1)e:1)f;";
-	let builder = parse_newick(source)?;
-	assert_eq!(builder.hybrid_edges().count(), 1);
-	let output = builder.to_newick()?;
-	let reparsed = parse_newick(&output)?;
-	assert_eq!(reparsed.hybrid_edges().count(), 1);
-	assert_eq!(reparsed.num_nodes(), builder.num_nodes());
 
 	Ok(())
 }

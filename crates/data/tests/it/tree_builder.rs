@@ -173,11 +173,7 @@ fn binary_sealing_preserves_node_and_edge_data() -> Result<()> {
 	let expected = tree
 		.nodes()
 		.map(|node| {
-			(
-				tree.node(node).name.clone(),
-				tree.node(node).attributes.clone(),
-				tree.edge(node).clone(),
-			)
+			(tree.node(node).name.clone(), tree.edge(node).clone())
 		})
 		.collect::<Vec<_>>();
 	let binary = tree.into_binary()?;
@@ -186,17 +182,9 @@ fn binary_sealing_preserves_node_and_edge_data() -> Result<()> {
 		binary.name(binary.root().into()),
 		Some(expected_root_name.as_str())
 	);
-	for (name, node_attributes, edge) in expected {
+	for (name, edge) in expected {
 		let node = binary_node_by_name(&binary, &name);
-		assert_eq!(
-			binary.node_metadata(node),
-			Some(node_attributes.as_str())
-		);
 		assert_eq!(binary.edge_length(node), edge.length);
-		assert_eq!(
-			binary.edge_metadata(node).unwrap_or(""),
-			edge.attributes.as_str()
-		);
 	}
 
 	Ok(())
@@ -329,16 +317,8 @@ fn random_binary_builder_roundtrips() {
 		for source in builder.nodes() {
 			let name = &builder.node(source).name;
 			let target = binary_node_by_name(&binary, name);
-			assert_eq!(
-				binary.node_metadata(target),
-				Some(builder.node(source).attributes.as_str())
-			);
 			let edge = builder.edge(source);
 			assert_eq!(binary.edge_length(target), edge.length);
-			assert_eq!(
-				binary.edge_metadata(target).unwrap_or(""),
-				edge.attributes.as_str()
-			);
 			if source == builder.root() {
 				continue;
 			}
