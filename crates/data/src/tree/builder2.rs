@@ -1,6 +1,10 @@
+use anyhow::{Result, anyhow};
+use picoarrow::array::{Array, ArrayUtf8, Nullable};
 use smallvec::SmallVec;
 
-use super::Node;
+use super::{BinaryTree, Node};
+use crate::TaxonSet;
+use buffer::Buffer;
 
 #[derive(Debug, Clone, Default)]
 pub struct TreeBuilder2 {
@@ -124,4 +128,93 @@ impl TreeBuilder2 {
 	pub fn root(&self) -> Option<Node> {
 		self.root
 	}
+
+	pub fn is_binary(&self) -> bool {
+		self.children
+			.iter()
+			.all(|children| matches!(children.len(), 0 | 2))
+	}
+
+	pub fn to_binary(&self, taxon_set: TaxonSet) -> Result<BinaryTree> {
+		to_binary(self, taxon_set)
+	}
+}
+
+fn to_binary(
+	builder: &TreeBuilder2,
+	taxon_set: TaxonSet,
+) -> Result<BinaryTree> {
+	let root = builder.root().ok_or_else(|| anyhow!("tree has no root"))?;
+	let num_nodes = builder.num_nodes() as u32;
+	let num_leaves = taxon_set.len() as u32;
+
+	let unmapped = u32::MAX;
+	let mut mapping = vec![unmapped; num_nodes as usize];
+	for node in (0..num_nodes).map(Node) {
+		if builder.children_of(node).is_empty() {
+			let name = builder.name(node);
+			let taxon = taxon_set
+				.iter()
+				.position(|taxon| taxon == name)
+				.ok_or_else(|| {
+					anyhow!("unknown leaf name: {name:?}")
+				})?;
+			mapping[node.usize()] = taxon as u32;
+		}
+	}
+
+	let mut children =
+		Buffer::repeat(0_u32, num_nodes.checked_sub(1).unwrap());
+	let mut lengths = Buffer::repeat(f64::NAN, num_nodes);
+	let mut internal_names = ArrayUtf8::<Nullable>::new();
+	let mut next_internal = num_leaves;
+	let mut internals =
+		Vec::with_capacity(num_nodes as usize - num_leaves as usize);
+
+	let mut stack = vec![(root, false)];
+	while let Some((node, expanded)) = stack.pop() {
+		if !expanded {
+			if !builder.children_of(node).is_empty() {
+				stack.push((node, true));
+				stack.extend(builder
+					.children_of(node)
+					.iter()
+					.rev()
+					.map(|&child| (child, false)));
+			}
+			continue;
+		}
+
+		if node != root {
+			mapping[node.usize()] = next_internal;
+			next_internal += 1;
+			internals.push(node);
+			internal_names.push(Some(builder.name(node)))?;
+		}
+	}
+
+	let new_root = num_nodes - 1;
+	mapping[root.usize()] = new_root;
+	internals.push(root);
+	for node in (0..num_nodes).map(Node) {
+		let new = mapping[node.usize()];
+		if new != new_root {
+			lengths[new as usize] =
+				builder.edge_length(node).unwrap();
+		}
+	}
+	for (offset, &old) in internals.iter().enumerate() {
+		for (slot, child) in builder.children_of(old).iter().enumerate()
+		{
+			children[offset * 2 + slot] = mapping[child.usize()];
+		}
+	}
+
+	BinaryTree::from_children(
+		new_root,
+		children,
+		lengths,
+		taxon_set,
+		internal_names,
+	)
 }
