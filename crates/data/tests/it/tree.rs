@@ -65,7 +65,7 @@ fn new_tree(
 		root,
 		children,
 		parents,
-		edge_lengths,
+		Buffer::from_slice(&edge_lengths),
 		taxa,
 		internal_names,
 	)
@@ -110,18 +110,10 @@ fn tree_with_root(
 	edge_lengths: Vec<f64>,
 	node_names: ArrayUtf8<Nullable>,
 ) -> Result<BinaryTree> {
-	let num_nodes = num_leaves as usize * 2 - 1;
-	let mut parents = vec![u32::MAX; num_nodes];
-	for (offset, pair) in children.as_chunks::<2>().0.iter().enumerate() {
-		for &child in pair {
-			parents[child as usize] = num_leaves + offset as u32;
-		}
-	}
-	new_tree(
+	from_children(
 		num_leaves,
 		root,
 		Buffer::from_slice(&children),
-		Buffer::from_slice(&parents),
 		Buffer::from_slice(&edge_lengths),
 		node_names,
 	)
@@ -535,7 +527,7 @@ fn two_leaf_tree() -> Result<()> {
 #[test]
 fn constructor_accepts_owned_buffers() -> Result<()> {
 	let children = Buffer::from_slice(&[1, 0]);
-	let edge_lengths = Buffer::from_slice(&[1.0, 2.0]);
+	let edge_lengths = Buffer::from_slice(&[1.0, 2.0, f64::NAN]);
 	let tree = new_tree(
 		2,
 		2,
@@ -900,7 +892,7 @@ fn explicit_nonterminal_root() -> Result<()> {
 		4,
 		Buffer::from_slice(&[5, 6, 0, 1, 2, 3]),
 		Buffer::from_slice(&[5, 5, 6, 6, u32::MAX, 4, 4]),
-		Buffer::from_slice(&[0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
+		Buffer::from_slice(&[0.1, 0.2, 0.3, 0.4, f64::NAN, 0.5, 0.6]),
 		names(&["A", "B", "C", "D", "ROOT", "AB", "CD"]),
 	)?;
 
@@ -1727,7 +1719,7 @@ fn svg_rendering() -> Result<()> {
 		2,
 		Buffer::from_slice(&[0, 1]),
 		Buffer::from_slice(&[2, 2, u32::MAX]),
-		Buffer::from_slice(&[1.0, 2.0]),
+		Buffer::from_slice(&[1.0, 2.0, f64::NAN]),
 		names(&["A<&\"'", "B", "root"]),
 	)?;
 	let layout = tree.rectangular_layout(1.0)?;

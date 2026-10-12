@@ -94,7 +94,7 @@ impl BinaryTree {
 
 		let mut internal_names = ArrayUtf8::<Nullable>::new();
 		internal_names.push_nulls(num_internals as usize);
-		let edge_lengths = Buffer::repeat(1.0, num_edges);
+		let edge_lengths = Buffer::repeat(1.0, num_nodes);
 
 		Ok(Self {
 			num_leaves,
@@ -168,12 +168,23 @@ impl BinaryTree {
 				*slot = parent;
 			}
 		}
+		ensure!(
+			edge_lengths.len() == num_nodes - 1,
+			"Expected {} edge lengths, got {}",
+			num_nodes - 1,
+			edge_lengths.len()
+		);
+		let mut lengths = Buffer::repeat(f64::NAN, num_nodes);
+		let root = root as usize;
+		lengths[..root].copy_from_slice(&edge_lengths[..root]);
+		lengths[root + 1..].copy_from_slice(&edge_lengths[root..]);
+		let root = root as u32;
 		let tree = Self::new(
 			num_leaves,
 			root,
 			children,
 			parents,
-			edge_lengths,
+			lengths,
 			taxa,
 			internal_names,
 		)?;
@@ -205,14 +216,14 @@ impl BinaryTree {
 				parents[child as usize] = parent;
 			}
 		}
-		let mut lengths = Buffer::repeat(0.0, num_edges);
+		let mut lengths = Buffer::repeat(f64::NAN, num_nodes);
 		let mut internal_names = ArrayUtf8::<Nullable>::new();
 		for (new, &old) in order.iter().enumerate() {
 			let old = Node(old);
 			if new >= num_leaves as usize {
 				internal_names.push(tree.name(old))?;
 			}
-			if new < num_edges as usize {
+			if new < num_nodes as usize - 1 {
 				lengths[new] = tree.edge_length(old).unwrap();
 			}
 		}
@@ -313,7 +324,7 @@ impl BinaryTree {
 			}
 		}
 
-		let mut lengths = Buffer::repeat(0.0, num_edges);
+		let mut lengths = Buffer::repeat(f64::NAN, num_nodes);
 		let taxa = TaxonSet::from_iter(
 			leaves.iter().map(|&(name, _)| name),
 		);
@@ -325,7 +336,7 @@ impl BinaryTree {
 			if index >= num_leaves as usize {
 				internal_names.push(self.name(old))?;
 			}
-			if index < num_edges as usize {
+			if index < num_nodes as usize - 1 {
 				lengths[index] = self.edge_length(old).unwrap();
 			}
 		}
@@ -363,8 +374,8 @@ impl BinaryTree {
 			self.parents.len()
 		);
 		ensure!(
-			self.edge_lengths.len() == num_edges,
-			"Expected {num_edges} edge lengths, got {}",
+			self.edge_lengths.len() == num_nodes,
+			"Expected {num_nodes} edge lengths, got {}",
 			self.edge_lengths.len()
 		);
 		ensure!(
@@ -509,7 +520,11 @@ impl BinaryTree {
 	}
 
 	pub fn edge_length(&self, child: Node) -> Option<f64> {
-		self.edge_index(child).map(|index| self.edge_lengths[index])
+		if child.0 == self.root {
+			None
+		} else {
+			Some(self.edge_lengths[child.usize()])
+		}
 	}
 
 	pub fn taxa(&self) -> &TaxonSet {
@@ -528,12 +543,6 @@ impl BinaryTree {
 				None
 			}
 		}
-	}
-
-	fn edge_index(&self, child: Node) -> Option<usize> {
-		(child.0 < self.num_nodes() && child.0 != self.root).then(
-			|| (child.0 - u32::from(child.0 > self.root)) as usize,
-		)
 	}
 
 	pub fn leaf_by_name(&self, name: &str) -> Option<Leaf> {
