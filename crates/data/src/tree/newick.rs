@@ -63,6 +63,17 @@ impl TreeBuilder {
 		new
 	}
 
+	/// Delete all nodes leaving the buffers for reuse
+	fn clear(&mut self) {
+		self.parents.clear();
+		self.children.clear();
+		self.node_names.clear();
+		self.node_attributes.clear();
+		self.edge_lengths.clear();
+		self.edge_attributes.clear();
+		self.root = None;
+	}
+
 	fn set_root(&mut self, node: Node) {
 		self.root = Some(node);
 	}
