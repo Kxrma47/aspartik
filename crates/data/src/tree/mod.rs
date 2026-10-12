@@ -2,6 +2,7 @@
 
 mod binary;
 pub mod builder;
+pub mod builder2;
 mod distances;
 mod newick;
 mod parse_newick;

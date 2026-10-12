@@ -7,6 +7,7 @@ use crate::tree::{
 	BinaryTree, Internal, Leaf, Node, SvgOptions as TreeSvgOptions,
 	TreeLayout, branch_score, branch_score_matrix,
 	builder::{EdgeData, NodeData, TreeBuilder},
+	builder2::TreeBuilder2,
 	robinson_foulds_matrix, triplet_distance_matrix,
 };
 use rng::PyRng;
@@ -79,6 +80,101 @@ pub struct PyTreeBuilder {
 impl PyTreeBuilder {
 	pub fn inner(&self) -> MutexGuard<'_, TreeBuilder> {
 		self.inner.lock()
+	}
+}
+
+#[derive(Debug)]
+#[pyclass(name = "TreeBuilder2", module = "aspartik.data.tree", frozen)]
+pub struct PyTreeBuilder2 {
+	inner: Mutex<TreeBuilder2>,
+}
+
+#[pymethods]
+impl PyTreeBuilder2 {
+	#[new]
+	fn new() -> Self {
+		Self {
+			inner: Mutex::new(TreeBuilder2::new()),
+		}
+	}
+
+	fn add_dummy_node(&self) -> Node {
+		self.inner.lock().add_dummy_node()
+	}
+
+	#[pyo3(signature = (parent, name = None, length = None))]
+	fn add_node(
+		&self,
+		parent: Node,
+		name: Option<String>,
+		length: Option<f64>,
+	) -> Node {
+		let mut builder = self.inner.lock();
+		builder.add_node(
+			&name.unwrap_or_default(),
+			length.unwrap_or(f64::NAN),
+			parent,
+		)
+	}
+
+	fn clear(&self) {
+		self.inner.lock().clear();
+	}
+
+	fn set_root(&self, node: Node) {
+		self.inner.lock().set_root(node);
+	}
+
+	fn set_node_parent(&self, node: Node, parent: Node) {
+		self.inner.lock().set_node_parent(node, parent);
+	}
+
+	fn set_node_children(&self, node: Node, children: Vec<Node>) {
+		self.inner.lock().set_node_children(node, &children);
+	}
+
+	fn set_node_name(&self, node: Node, name: &str) {
+		self.inner.lock().set_node_name(node, name);
+	}
+
+	fn set_node_attribute(&self, node: Node, attr: &str) {
+		self.inner.lock().set_node_attribute(node, attr);
+	}
+
+	fn set_edge_length(&self, node: Node, length: f64) {
+		self.inner.lock().set_edge_length(node, length);
+	}
+
+	fn set_edge_attribute(&self, node: Node, attr: &str) {
+		self.inner.lock().set_edge_attribute(node, attr);
+	}
+
+	fn parent_of(&self, node: Node) -> Node {
+		self.inner.lock().parent_of(node)
+	}
+
+	fn children_of(&self, node: Node) -> Vec<Node> {
+		self.inner.lock().children_of(node).to_vec()
+	}
+
+	fn name(&self, node: Node) -> String {
+		self.inner.lock().name(node).to_owned()
+	}
+
+	fn node_attribute(&self, node: Node) -> String {
+		self.inner.lock().node_attribute(node).to_owned()
+	}
+
+	fn edge_length(&self, node: Node) -> Option<f64> {
+		self.inner.lock().edge_length(node)
+	}
+
+	fn edge_attribute(&self, node: Node) -> String {
+		self.inner.lock().edge_attribute(node).to_owned()
+	}
+
+	fn root(&self) -> Option<Node> {
+		self.inner.lock().root()
 	}
 }
 
