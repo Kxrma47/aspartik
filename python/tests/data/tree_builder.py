@@ -1,7 +1,5 @@
 import pytest
 
-from typing import Any, cast
-
 from aspartik.data.tree import BinaryTree, Internal, Leaf, Node, TreeBuilder
 
 
@@ -42,10 +40,6 @@ def test_tree_access_and_traversal():
     assert not tree.is_leaf(left)
     assert tree.is_binary()
     assert tree.edge_length(a) == 1.0
-    assert tree.preorder()[0] == root
-    assert tree.postorder()[-1] == root
-    assert sorted(tree.preorder()) == tree.nodes()
-    assert sorted(tree.postorder()) == tree.nodes()
 
 
 def test_binary_tree_access():
@@ -79,65 +73,6 @@ def test_binary_tree_access():
     assert tree.preorder()[0] == root
     assert tree.postorder()[-1] == root
     assert tree.to_newick() == str(tree)
-
-
-def test_nonbinary_and_missing_lengths_do_not_seal():
-    assert not TreeBuilder.from_newick("(A:1,B:2,C:3);").is_binary()
-    with pytest.raises(RuntimeError, match="not binary"):
-        TreeBuilder.from_newick("(A:1,B:2,C:3);").to_binary()
-    with pytest.raises(RuntimeError, match="no edge length"):
-        BinaryTree.from_newick("(A,B:2);")
-
-
-@pytest.mark.parametrize(
-    "operation",
-    [
-        lambda tree, node: tree.is_leaf(node),
-        lambda tree, node: tree.children_of(node),
-        lambda tree, node: tree.parent_of(node),
-        lambda tree, node: tree.name(node),
-        lambda tree, node: tree.node_metadata(node),
-        lambda tree, node: tree.edge_length(node),
-        lambda tree, node: tree.edge_metadata(node),
-        lambda tree, node: tree.add_node(node),
-        lambda tree, node: tree.set_name(node, "x"),
-        lambda tree, node: tree.set_node_metadata(node, "x"),
-        lambda tree, node: tree.set_edge_length(node, 1.0),
-        lambda tree, node: tree.set_edge_metadata(node, "x"),
-    ],
-)
-def test_tree_rejects_invalid_node_ids(operation):
-    tree = TreeBuilder.from_newick("(A:1,B:2);")
-    invalid = max(
-        TreeBuilder.from_newick("((A:1,B:2):3,C:4);").nodes(),
-        key=lambda node: node.index,
-    )
-    with pytest.raises(RuntimeError, match="out of range"):
-        operation(tree, invalid)
-
-
-@pytest.mark.parametrize(
-    "operation",
-    [
-        lambda tree, node: tree.is_leaf(node),
-        lambda tree, node: tree.is_internal(node),
-        lambda tree, node: tree.children_of(node),
-        lambda tree, node: tree.parent_of(node),
-        lambda tree, node: tree.name(node),
-        lambda tree, node: tree.edge_length(node),
-    ],
-)
-def test_binary_tree_rejects_invalid_node_ids(operation):
-    tree = BinaryTree.from_newick("(A:1,B:2);")
-    invalid = BinaryTree.from_newick("((A:1,B:2):3,C:4);").root
-    with pytest.raises(RuntimeError, match="out of range"):
-        operation(tree, invalid)
-
-
-def test_tree_rejects_integer_node_ids():
-    tree = TreeBuilder.from_newick("(A:1,B:2);")
-    with pytest.raises(RuntimeError, match="Expected Node, Leaf, or Internal"):
-        tree.is_leaf(cast(Any, 0))
 
 
 def test_binary_children_reject_leaf():

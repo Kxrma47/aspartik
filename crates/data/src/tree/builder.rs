@@ -104,8 +104,12 @@ impl TreeBuilder {
 	}
 
 	// Node getters
-	pub fn parent_of(&self, node: Node) -> Node {
-		self.parents[node.usize()]
+	pub fn parent_of(&self, node: Node) -> Option<Node> {
+		if self.root.is_some_and(|root| root == node) {
+			None
+		} else {
+			Some(self.parents[node.usize()])
+		}
 	}
 
 	pub fn children_of(&self, node: Node) -> &[Node] {
@@ -131,6 +135,12 @@ impl TreeBuilder {
 
 	pub fn root(&self) -> Option<Node> {
 		self.root
+	}
+
+	// checks
+
+	pub fn is_leaf(&self, node: Node) -> bool {
+		self.children[node.usize()].is_empty()
 	}
 
 	pub fn is_binary(&self) -> bool {
@@ -182,97 +192,68 @@ fn to_binary(builder: &TreeBuilder, taxon_set: TaxonSet) -> Result<BinaryTree> {
 		num_leaves >= 2,
 		"Expected at least two leaves, got {num_leaves}"
 	);
+	ensure!(builder.is_binary(), "The tree must be binary");
 
-	let unmapped = u32::MAX;
+	let unmapped = Node::TOMBSTONE.0;
 	let mut mapping = vec![unmapped; num_nodes as usize];
-	let mut used = vec![false; taxon_set.len()];
+	let mut next_internal = num_leaves;
+	let mut internal_names = ArrayUtf8::<Nullable>::new();
 
-	for node in (0..num_nodes).map(Node) {
+	for node in builder.nodes() {
 		if builder.children_of(node).is_empty() {
 			let name = builder.name(node);
+			// TODO: that's very slow
 			let taxon = taxon_set
 				.iter()
 				.position(|t| t == name)
 				.ok_or_else(|| {
 					anyhow!("Unknown taxon: {name:?}")
 				})?;
-			ensure!(!used[taxon], "Duplicate leaf name: {name:?}");
-			used[taxon] = true;
 			mapping[node.usize()] = taxon as u32;
-		}
-	}
-
-	for node in (0..num_nodes).map(Node) {
-		let n = builder.children_of(node).len();
-		ensure!(n == 0 || n == 2, "The tree is not binary");
-	}
-
-	let mut children =
-		Buffer::repeat(0_u32, num_nodes.checked_sub(1).unwrap());
-	let mut lengths =
-		Buffer::repeat(f64::NAN, num_nodes.checked_sub(1).unwrap());
-	let mut internal_names = ArrayUtf8::<Nullable>::new();
-	let mut next_internal = num_leaves;
-	let mut internals =
-		Vec::with_capacity((num_nodes - num_leaves) as usize);
-
-	let mut stack = vec![(root, false)];
-	while let Some((node, expanded)) = stack.pop() {
-		if !expanded {
-			let kids = builder.children_of(node);
-			if !kids.is_empty() {
-				stack.push((node, true));
-				stack.extend(kids
-					.iter()
-					.rev()
-					.map(|&c| (c, false)));
-			}
-			continue;
-		}
-
-		if node != root {
+		} else {
 			mapping[node.usize()] = next_internal;
 			next_internal += 1;
-			internals.push(node);
-			internal_names.push(Some(builder.name(node)))?;
+			let name = builder.name(node);
+			if name.is_empty() {
+				internal_names.push(None)?;
+			} else {
+				internal_names.push_some(name)?;
+			}
 		}
 	}
-
-	let new_root = num_nodes - 1;
-	mapping[root.usize()] = new_root;
-	internals.push(root);
-	internal_names.push(Some(builder.name(root)))?;
 
 	ensure!(
 		!mapping.contains(&unmapped),
 		"The tree contains unreachable nodes"
 	);
 
-	for node in (0..num_nodes).map(Node) {
-		let new = mapping[node.usize()];
-		if new != new_root {
-			lengths[new as usize] =
-				builder.edge_length(node).ok_or_else(|| {
-					anyhow!(
-						"Node {} has no edge length",
-						node.u32()
-					)
-				})?;
+	let mut children = Buffer::<u32, u32, 0>::repeat(0_u32, num_nodes - 1);
+	let mut parents = Buffer::<u32, u32, 0>::repeat(unmapped, num_nodes);
+	let mut edge_lengths =
+		Buffer::<f64, u32, 0>::repeat(f64::NAN, num_nodes);
+
+	for node in builder.nodes() {
+		let mapped = mapping[node.usize()];
+		if let Some(parent) = builder.parent_of(node) {
+			parents[mapped as usize] = mapping[parent.usize()];
 		}
+		if let [left, right] = builder.children_of(node) {
+			let offset = (mapped - num_leaves) as usize * 2;
+			children[offset] = mapping[left.usize()];
+			children[offset + 1] = mapping[right.usize()];
+		}
+		edge_lengths[mapped as usize] =
+			builder.edge_length(node).unwrap_or(0.0);
 	}
 
-	for (offset, &old) in internals.iter().enumerate() {
-		for (slot, child) in builder.children_of(old).iter().enumerate()
-		{
-			children[offset * 2 + slot] = mapping[child.usize()];
-		}
-	}
-
-	BinaryTree::from_children(
-		new_root,
+	let binary = BinaryTree::new(
+		num_leaves,
+		mapping[root.usize()],
 		children,
-		lengths,
+		parents,
+		edge_lengths,
 		taxon_set,
 		internal_names,
-	)
+	);
+	Ok(binary)
 }

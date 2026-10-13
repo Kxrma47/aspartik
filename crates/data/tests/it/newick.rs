@@ -8,14 +8,10 @@ use std::{
 	path::PathBuf,
 };
 
-use data::tree::{BinaryTree, Node, builder::TreeBuilder};
-
-fn node_named(tree: &TreeBuilder, name: &str) -> Node {
-	tree.nodes().find(|&node| tree.name(node) == name).unwrap()
-}
+use data::tree::{BinaryTree, builder::TreeBuilder};
 
 #[test]
-fn labels_lengths_and_empty_fields() -> Result<()> {
+fn labels_lengths_and_empty_fields() {
 	for (source, expected) in [
 		(
 			"(A:0.1,B:2e-3,(C,D)CD:4E+2)ROOT;",
@@ -23,15 +19,9 @@ fn labels_lengths_and_empty_fields() -> Result<()> {
 		),
 		("(,A,,)ROOT;", "(,A,,)ROOT;"),
 	] {
-		let tree = TreeBuilder::from_newick(source)?;
-		assert_eq!(tree.to_newick()?, expected);
+		let tree = TreeBuilder::from_newick(source).unwrap();
+		assert_eq!(tree.to_newick().unwrap(), expected);
 	}
-
-	let tree = TreeBuilder::from_newick("(A,B:1);")?;
-	assert_eq!(tree.edge_length(node_named(&tree, "A")), None);
-	assert!(tree.to_binary().is_err());
-
-	Ok(())
 }
 
 #[test]

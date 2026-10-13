@@ -52,6 +52,7 @@ where
 	let mut line = String::new();
 	let mut parser = NexusParser::default();
 	let mut translation: Option<(TaxonSet, TaxonSet)> = None;
+	let mut builder = TreeBuilder::new();
 
 	let mut callback = |block: &str, command: &str| {
 		if block != "TREES" {
@@ -69,7 +70,7 @@ where
 		}) {
 			let idx = command.find('(').unwrap();
 			let newick = &command[idx..];
-			let builder = TreeBuilder::from_newick(newick)?;
+			builder.load_newick(newick)?;
 			let tree = if let Some(translation) = &translation {
 				let mut out = builder.to_binary_with_taxa(
 					translation.0.clone(),

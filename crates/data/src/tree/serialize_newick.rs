@@ -42,22 +42,14 @@ impl Source for TreeBuilder {
 	fn children(&self, node: Node) -> Result<SmallVec<[Child<'_>; 2]>> {
 		let mut children = SmallVec::new();
 		for &child in self.children_of(node) {
-			let hybrid = self.parent_of(child) != node;
-			let edge = if hybrid {
-				Edge {
-					length: None,
-					attributes: "",
-				}
-			} else {
-				Edge {
-					length: self.edge_length(child),
-					attributes: self.edge_attribute(child),
-				}
+			let edge = Edge {
+				length: self.edge_length(child),
+				attributes: self.edge_attribute(child),
 			};
 			children.push(Child {
 				node: child,
 				edge,
-				hybrid,
+				hybrid: false,
 			});
 		}
 		Ok(children)

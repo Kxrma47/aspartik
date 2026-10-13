@@ -136,45 +136,24 @@ impl PyTreeBuilder {
 		(0..num_nodes).map(Node).collect()
 	}
 
-	fn is_leaf(&self, node: &Bound<'_, PyAny>) -> Result<bool> {
-		let tree = self.inner();
-		Ok(tree.children_of(checked_node(
-			node,
-			tree.num_nodes() as u32,
-		)?)
-		.is_empty())
-	}
-
 	fn is_binary(&self) -> bool {
 		self.inner().is_binary()
 	}
 
-	fn children_of(&self, node: &Bound<'_, PyAny>) -> Result<Vec<Node>> {
-		let tree = self.inner();
-		let node = checked_node(node, tree.num_nodes() as u32)?;
-		Ok(tree.children_of(node).to_vec())
+	fn children_of(&self, node: Node) -> Vec<Node> {
+		self.inner().children_of(node).to_vec()
 	}
 
-	fn parent_of(&self, node: &Bound<'_, PyAny>) -> Result<Option<Node>> {
-		let tree = self.inner();
-		let node = checked_node(node, tree.num_nodes() as u32)?;
-		let parent = tree.parent_of(node);
-		Ok((parent != Node::TOMBSTONE).then_some(parent))
+	fn parent_of(&self, node: Node) -> Option<Node> {
+		self.inner().parent_of(node)
 	}
 
-	fn name(&self, node: &Bound<'_, PyAny>) -> Result<Option<String>> {
-		let tree = self.inner();
-		let node = checked_node(node, tree.num_nodes() as u32)?;
-		Ok(nonempty(tree.name(node)))
+	fn name(&self, node: Node) -> Option<String> {
+		nonempty(self.inner().name(node))
 	}
 
-	fn node_metadata(
-		&self,
-		node: &Bound<'_, PyAny>,
-	) -> Result<Option<String>> {
-		let tree = self.inner();
-		let node = checked_node(node, tree.num_nodes() as u32)?;
-		Ok(nonempty(tree.node_attribute(node)))
+	fn node_metadata(&self, node: Node) -> Option<String> {
+		nonempty(self.inner().node_attribute(node))
 	}
 
 	fn edge_length(&self, child: &Bound<'_, PyAny>) -> Result<Option<f64>> {
@@ -190,48 +169,6 @@ impl PyTreeBuilder {
 		let tree = self.inner();
 		let child = checked_node(child, tree.num_nodes() as u32)?;
 		Ok(nonempty(tree.edge_attribute(child)))
-	}
-
-	fn preorder(&self) -> Result<Vec<Node>> {
-		let tree = self.inner();
-		let root = tree
-			.root()
-			.ok_or_else(|| anyhow!("tree has no root"))?;
-		let mut output = Vec::with_capacity(tree.num_nodes());
-		let mut stack = vec![root];
-		while let Some(node) = stack.pop() {
-			output.push(node);
-			stack.extend(tree
-				.children_of(node)
-				.iter()
-				.rev()
-				.filter(|&&child| tree.parent_of(child) == node)
-				.copied());
-		}
-		Ok(output)
-	}
-
-	fn postorder(&self) -> Result<Vec<Node>> {
-		let tree = self.inner();
-		let root = tree
-			.root()
-			.ok_or_else(|| anyhow!("tree has no root"))?;
-		let mut output = Vec::with_capacity(tree.num_nodes());
-		let mut stack = vec![(root, false)];
-		while let Some((node, visited)) = stack.pop() {
-			if visited {
-				output.push(node);
-				continue;
-			}
-			stack.push((node, true));
-			stack.extend(tree
-				.children_of(node)
-				.iter()
-				.rev()
-				.filter(|&&child| tree.parent_of(child) == node)
-				.map(|&child| (child, false)));
-		}
-		Ok(output)
 	}
 
 	#[pyo3(signature = (
@@ -300,15 +237,15 @@ impl PyTreeBuilder {
 		Ok(())
 	}
 
-	fn set_edge_metadata(
-		&self,
-		child: &Bound<'_, PyAny>,
-		metadata: Option<String>,
-	) -> Result<()> {
-		let mut tree = self.inner.lock();
-		let child = checked_node(child, tree.num_nodes() as u32)?;
-		tree.set_edge_attribute(child, &metadata.unwrap_or_default());
-		Ok(())
+	fn set_edge_metadata(&self, child: Node, metadata: Option<String>) {
+		self.inner().set_edge_attribute(
+			child,
+			&metadata.unwrap_or_default(),
+		);
+	}
+
+	fn is_leaf(&self, node: Node) -> bool {
+		self.inner().is_leaf(node)
 	}
 
 	#[pyo3(signature = (taxa = None))]

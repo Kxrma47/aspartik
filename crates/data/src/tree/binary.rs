@@ -107,7 +107,6 @@ impl BinaryTree {
 		})
 	}
 
-	#[allow(clippy::too_many_arguments)]
 	pub fn new(
 		num_leaves: u32,
 		root: u32,
@@ -116,7 +115,7 @@ impl BinaryTree {
 		edge_lengths: Buffer<f64>,
 		taxa: TaxonSet,
 		internal_names: ArrayUtf8<Nullable>,
-	) -> Result<Self> {
+	) -> Self {
 		let mut tree = Self {
 			num_leaves,
 			root,
@@ -127,7 +126,7 @@ impl BinaryTree {
 			internal_names,
 		};
 		tree.internal_names.shrink_to_fit();
-		Ok(tree)
+		tree
 	}
 
 	pub fn from_children(
@@ -187,7 +186,7 @@ impl BinaryTree {
 			lengths,
 			taxa,
 			internal_names,
-		)?;
+		);
 		let mut order = (0..num_leaves).collect::<Vec<_>>();
 		order.extend(tree.postorder().filter_map(|node| {
 			tree.is_internal(node).then_some(node.u32())
@@ -227,7 +226,7 @@ impl BinaryTree {
 				lengths[new] = tree.edge_length(old).unwrap();
 			}
 		}
-		Self::new(
+		Ok(Self::new(
 			num_leaves,
 			num_nodes - 1,
 			children,
@@ -235,7 +234,7 @@ impl BinaryTree {
 			lengths,
 			tree.taxa.clone(),
 			internal_names,
-		)
+		))
 	}
 
 	pub fn canonical(&self) -> Result<Self> {
@@ -340,7 +339,7 @@ impl BinaryTree {
 				lengths[index] = self.edge_length(old).unwrap();
 			}
 		}
-		Self::new(
+		Ok(Self::new(
 			num_leaves,
 			num_nodes - 1,
 			children,
@@ -348,7 +347,7 @@ impl BinaryTree {
 			lengths,
 			taxa,
 			internal_names,
-		)
+		))
 	}
 
 	pub fn validate(&self) -> Result<()> {
