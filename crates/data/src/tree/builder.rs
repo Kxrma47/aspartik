@@ -1,10 +1,8 @@
 use anyhow::{Result, anyhow, ensure};
-use picoarrow::array::{Array, ArrayUtf8, Nullable};
+use picoarrow::array::{Array, ArrayUtf8, NonNullable, Nullable};
 use smallvec::SmallVec;
 
-use std::collections::{HashMap, HashSet};
-
-use super::{BinaryTree, Node};
+use super::{BinaryTree, Node, newick::parse_newick};
 use crate::TaxonSet;
 use buffer::Buffer;
 
@@ -141,81 +139,32 @@ impl TreeBuilder {
 			.all(|children| matches!(children.len(), 0 | 2))
 	}
 
-	pub fn to_binary(&self, taxon_set: TaxonSet) -> Result<BinaryTree> {
+	fn make_taxon_set(&self) -> TaxonSet {
+		let mut out = ArrayUtf8::<NonNullable>::new();
+		for node in self.nodes() {
+			if !self.children_of(node).is_empty() {
+				continue;
+			}
+			out.push(&self.node_names[node.usize()]).unwrap();
+		}
+		out.into()
+	}
+
+	pub fn to_binary_with_taxa(
+		&self,
+		taxon_set: TaxonSet,
+	) -> Result<BinaryTree> {
 		to_binary(self, taxon_set)
 	}
 
-	pub fn into_binary(self) -> Result<BinaryTree> {
-		let mut names = Vec::new();
-		for node in (0..self.num_nodes() as u32).map(Node) {
-			if self.children_of(node).is_empty() {
-				names.push(self.name(node).to_owned());
-			}
-		}
-		let taxa =
-			TaxonSet::from_iter(names.iter().map(String::as_str));
-		self.to_binary(taxa)
+	pub fn to_binary(&self) -> Result<BinaryTree> {
+		let taxon_set = self.make_taxon_set();
+		self.to_binary_with_taxa(taxon_set)
 	}
 
-	pub fn into_binary_with_taxa(
-		self,
-		taxa: TaxonSet,
-	) -> Result<BinaryTree> {
-		ensure_valid_taxa(&taxa)?;
-		self.to_binary(taxa)
+	pub fn from_newick(newick: &str) -> Result<Self> {
+		parse_newick(newick)
 	}
-
-	pub fn into_binary_with_translation(
-		&mut self,
-		aliases: &TaxonSet,
-		taxa: TaxonSet,
-	) -> Result<BinaryTree> {
-		ensure!(
-			aliases.len() == taxa.len(),
-			"Expected {} aliases, got {}",
-			taxa.len(),
-			aliases.len()
-		);
-		ensure_valid_taxa(&taxa)?;
-		let indices: HashMap<&str, usize> = aliases
-			.iter()
-			.enumerate()
-			.map(|(index, name)| (name, index))
-			.collect();
-		ensure!(indices.len() == aliases.len(), "Duplicate alias");
-		ensure!(
-			aliases.iter().all(|name| !name.is_empty()),
-			"Alias set contains an empty name"
-		);
-		for node in (0..self.num_nodes() as u32).map(Node) {
-			if self.children_of(node).is_empty() {
-				let name = self.name(node);
-				let index =
-					indices.get(name).ok_or_else(|| {
-						anyhow!("Unknown taxon: {name}")
-					})?;
-				let new_name = taxa
-					.iter()
-					.nth(*index)
-					.unwrap()
-					.to_owned();
-				self.set_node_name(node, &new_name);
-			}
-		}
-		self.to_binary(taxa)
-	}
-}
-
-fn ensure_valid_taxa(taxa: &TaxonSet) -> Result<()> {
-	ensure!(
-		taxa.iter().all(|name| !name.is_empty()),
-		"Taxon set contains an empty name"
-	);
-	let mut seen = HashSet::with_capacity(taxa.len());
-	for name in taxa.iter() {
-		ensure!(seen.insert(name), "Duplicate taxon name: {name}");
-	}
-	Ok(())
 }
 
 fn to_binary(builder: &TreeBuilder, taxon_set: TaxonSet) -> Result<BinaryTree> {

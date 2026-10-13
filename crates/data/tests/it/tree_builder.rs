@@ -42,7 +42,7 @@ fn deterministic_binary_shapes() -> Result<()> {
 
 	for (builder, leaves, nodes) in [(two_tip, 2, 3), (balanced, 3, 5)] {
 		assert!(builder.is_binary());
-		let tree = builder.into_binary()?;
+		let tree = builder.to_binary()?;
 		assert_eq!(tree.num_leaves(), leaves);
 		assert_eq!(tree.num_nodes(), nodes);
 		assert_eq!(tree.preorder().count(), nodes as usize);
@@ -55,7 +55,7 @@ fn deterministic_binary_shapes() -> Result<()> {
 #[test]
 fn binary_sealing_preserves_node_and_edge_data() -> Result<()> {
 	let tree = balanced_builder_4_leaves()?;
-	let binary = tree.clone().into_binary()?;
+	let binary = tree.to_binary()?;
 
 	for node in tree.nodes() {
 		let name = tree.name(node);
@@ -99,7 +99,7 @@ fn random_binary_builder_roundtrips() {
 		let builder = arbitrary_builder(u, num_leaves)?;
 		assert!(builder.is_binary());
 
-		let binary = builder.clone().into_binary().unwrap();
+		let binary = builder.to_binary().unwrap();
 		assert_eq!(binary.num_leaves(), num_leaves);
 		assert_eq!(binary.num_nodes(), builder.num_nodes() as u32);
 		assert_eq!(

@@ -275,7 +275,7 @@ impl Tree {
 	}
 
 	pub fn load_newick(&mut self, newick: &TreeBuilder) -> Result<()> {
-		let tree = newick.clone().into_binary()?;
+		let tree = newick.to_binary()?;
 		ensure!(tree.num_leaves() == self.num_leaves());
 		ensure!(tree.num_nodes() == self.num_nodes());
 

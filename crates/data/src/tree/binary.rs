@@ -531,6 +531,10 @@ impl BinaryTree {
 		&self.taxa
 	}
 
+	pub fn set_taxa(&mut self, taxa: TaxonSet) {
+		self.taxa = taxa;
+	}
+
 	pub fn name(&self, node: Node) -> Option<&str> {
 		if node.0 < self.num_leaves {
 			let name = self.taxa.get(node.usize());

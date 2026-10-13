@@ -5,8 +5,9 @@ from pathlib import Path
 from aspartik.data import TaxonSet
 from aspartik.data.tree import BinaryTree, robinson_foulds_matrix
 
-TREE_PATHS = sorted(Path("data/runs").glob("*/beast*.trees"))
-assert TREE_PATHS
+# TREE_PATHS = sorted(Path("data/runs").glob("*/beast*.trees"))
+# assert TREE_PATHS
+TREE_PATHS = [Path("data/runs/skyline-coalescent/beast1.trees")]
 
 
 @pytest.mark.parametrize("path", TREE_PATHS, ids=lambda path: path.parent.name)

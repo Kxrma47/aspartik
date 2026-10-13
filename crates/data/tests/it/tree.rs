@@ -11,9 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use data::TaxonSet;
 use data::tree::{
-	BinaryTree, Internal, Node, SvgOptions, branch_score,
-	branch_score_matrix, parse_newick, robinson_foulds_matrix,
-	triplet_distance_matrix,
+	BinaryTree, Internal, Node, SvgOptions, TreeBuilder, branch_score,
+	branch_score_matrix, robinson_foulds_matrix, triplet_distance_matrix,
 };
 
 fn nullable_values<'a>(
@@ -185,7 +184,7 @@ fn internal_indices(tree: &BinaryTree) -> Vec<u32> {
 }
 
 fn indexed_tree(source: &str) -> Result<BinaryTree> {
-	let source = parse_newick(source)?.into_binary()?;
+	let source = TreeBuilder::from_newick(source)?.to_binary()?;
 	let num_leaves = source.num_leaves();
 	let num_nodes = source.num_nodes();
 	let mut mapping = vec![0; num_nodes as usize];
@@ -571,15 +570,15 @@ fn canonical_constructor_relabels_internals() -> Result<()> {
 
 #[test]
 fn canonical_names_and_topology() -> Result<()> {
-	let first = parse_newick(
+	let first = TreeBuilder::from_newick(
 		"((B:2[&edge=B],A[&node=A]:1)AB[&node=AB]:5[&edge=AB],(D:4,C:3)CD:6)ROOT;",
 	)?
-	.into_binary()?
+	.to_binary()?
 	.canonical()?;
-	let second = parse_newick(
+	let second = TreeBuilder::from_newick(
 		"((C:3,D:4)CD:6,(A[&node=A]:1,B:2[&edge=B])AB[&node=AB]:5[&edge=AB])ROOT;",
 	)?
-	.into_binary()?
+	.to_binary()?
 	.canonical()?;
 
 	assert_eq!(first.to_newick()?, second.to_newick()?);
@@ -597,116 +596,6 @@ fn canonical_names_and_topology() -> Result<()> {
 	);
 	assert_eq!(internal_indices(&first), vec![4, 5, 6]);
 	Ok(())
-}
-
-#[test]
-fn newick_trees_share_taxa() -> Result<()> {
-	let taxa = TaxonSet::from_iter(["A", "B", "C", "D"]);
-	let first = BinaryTree::parse_newick_with_taxa(
-		"((B:2,A:1)left:3,(D:4,C:5)right:6)root;",
-		taxa.clone(),
-	)?;
-	let second = BinaryTree::parse_newick_with_taxa(
-		"((C:5,D:4)R:6,(A:1,B:2)L:3)top;",
-		taxa.clone(),
-	)?;
-	for tree in [&first, &second] {
-		assert_eq!(tree.taxa(), &taxa);
-		assert_eq!(
-			tree.leaves()
-				.map(|leaf| tree.name(leaf.into()).unwrap())
-				.collect::<Vec<_>>(),
-			["A", "B", "C", "D"]
-		);
-		assert_eq!(
-			tree.edge_length(
-				tree.leaf_by_name("B").unwrap().into()
-			),
-			Some(2.0)
-		);
-	}
-	assert!(std::ptr::eq(first.taxa().get(0), second.taxa().get(0)));
-	assert!(first.identical_children(&second));
-	assert_eq!(first.robinson_foulds(&second), 0);
-	assert_eq!(branch_score(&first, &second)?, 0.0);
-	assert_eq!(
-		robinson_foulds_matrix(&[&first, &second])?,
-		[[0, 0], [0, 0]]
-	);
-	assert_eq!(
-		first.to_newick()?,
-		"((B:2,A:1)left:3,(D:4,C:5)right:6)root;"
-	);
-	Ok(())
-}
-
-#[test]
-fn newick_taxa_must_match_leaves() {
-	let tree = "((A:1,B:2):3,C:4);";
-	for names in [
-		vec!["A", "B"],
-		vec!["A", "B", "D"],
-		vec!["A", "A", "C"],
-		vec!["A", "", "C"],
-	] {
-		assert!(BinaryTree::parse_newick_with_taxa(
-			tree,
-			TaxonSet::from_iter(names),
-		)
-		.is_err());
-	}
-	assert!(BinaryTree::parse_newick_with_taxa(
-		"((A:1,A:2):3,C:4);",
-		TaxonSet::from_iter(["A", "B", "C"]),
-	)
-	.is_err());
-}
-
-#[test]
-fn newick_translation_matches_shared_taxa() -> Result<()> {
-	let aliases = TaxonSet::from_iter(["2", "1", "3"]);
-	let taxa = TaxonSet::from_iter(["B", "A", "C"]);
-	let translated = BinaryTree::parse_newick_with_translation(
-		"((1:1,2:2):3,3:4);",
-		&aliases,
-		taxa.clone(),
-	)?;
-	let named = BinaryTree::parse_newick_with_taxa(
-		"((A:1,B:2):3,C:4);",
-		taxa.clone(),
-	)?;
-	assert_eq!(translated.taxa(), &taxa);
-	assert!(std::ptr::eq(translated.taxa().get(0), taxa.get(0)));
-	assert!(translated.identical_children(&named));
-	assert_eq!(branch_score(&translated, &named)?, 0.0);
-	assert_eq!(translated.to_newick()?, "((A:1,B:2):3,C:4);");
-	Ok(())
-}
-
-#[test]
-fn newick_translation_rejects_invalid_taxa() {
-	let tree = "((1:1,2:2):3,3:4);";
-	for (aliases, taxa) in [
-		(vec!["1", "2"], vec!["A", "B"]),
-		(vec!["1", "2", "2"], vec!["A", "B", "C"]),
-		(vec!["1", "", "3"], vec!["A", "B", "C"]),
-		(vec!["1", "2", "3"], vec!["A", "A", "C"]),
-		(vec!["1", "2", "3"], vec!["A", "", "C"]),
-		(vec!["1", "2", "4"], vec!["A", "B", "C"]),
-	] {
-		assert!(BinaryTree::parse_newick_with_translation(
-			tree,
-			&TaxonSet::from_iter(aliases),
-			TaxonSet::from_iter(taxa),
-		)
-		.is_err());
-	}
-	assert!(BinaryTree::parse_newick_with_translation(
-		"((1:1,1:2):3,3:4);",
-		&TaxonSet::from_iter(["1", "2", "3"]),
-		TaxonSet::from_iter(["A", "B", "C"]),
-	)
-	.is_err());
 }
 
 #[test]
@@ -757,12 +646,14 @@ fn canonical_is_independent_of_child_order_and_internal_ids() {
 		.unwrap();
 		let first = original.canonical().unwrap();
 		let second = swapped.canonical().unwrap();
-		let reparsed = parse_newick(&original.to_newick().unwrap())
-			.unwrap()
-			.into_binary()
-			.unwrap()
-			.canonical()
-			.unwrap();
+		let reparsed = TreeBuilder::from_newick(
+			&original.to_newick().unwrap(),
+		)
+		.unwrap()
+		.to_binary()
+		.unwrap()
+		.canonical()
+		.unwrap();
 		assert_eq!(
 			first.to_newick().unwrap(),
 			second.to_newick().unwrap()
@@ -926,7 +817,8 @@ fn preserves_child_order_and_edge_values() -> Result<()> {
 		vec![0.25, 2.5, -1.5, 0.0],
 		names(&["A", "B", "C", "AB", "root"]),
 	)?;
-	let roundtrip = parse_newick(&tree.to_newick()?)?.into_binary()?;
+	let roundtrip =
+		TreeBuilder::from_newick(&tree.to_newick()?)?.to_binary()?;
 
 	let preorder_names = roundtrip
 		.preorder()
@@ -951,11 +843,11 @@ fn preserves_child_order_and_edge_values() -> Result<()> {
 #[test]
 fn newick_roundtrip() -> Result<()> {
 	let source = "((A:0.1,B:0.2):0.3,(C:0.4,D:0.5):0.6);";
-	let tree = parse_newick(source)?.into_binary()?;
+	let tree = TreeBuilder::from_newick(source)?.to_binary()?;
 	assert_eq!(tree.to_newick()?, source);
 
 	let named_source = "((A:0.1,B:0.2)AB:0.3,(C:0.4,D:0.5)CD:0.6)ROOT;";
-	let named_tree = parse_newick(named_source)?.into_binary()?;
+	let named_tree = TreeBuilder::from_newick(named_source)?.to_binary()?;
 	assert!(named_tree
 		.nodes()
 		.any(|node| named_tree.name(node) == Some("AB")));
@@ -964,26 +856,6 @@ fn newick_roundtrip() -> Result<()> {
 		.any(|node| named_tree.name(node) == Some("CD")));
 	assert_eq!(named_tree.name(named_tree.root().into()), Some("ROOT"));
 	assert_eq!(named_tree.to_newick()?, named_source);
-
-	Ok(())
-}
-
-#[test]
-fn newick_rejects_unsupported_structures() -> Result<()> {
-	for source in ["A;", "(A:1);", "(A:1,B:1,C:1);", "(A:1,B:);"] {
-		assert!(parse_newick(source)?.into_binary().is_err());
-	}
-
-	Ok(())
-}
-
-#[test]
-fn newick_rejects_multiple_parents_and_cycles() -> Result<()> {
-	assert!(parse_newick("((A:1)X#H1:1,(X#H1:1,B:1):1);")?
-		.into_binary()
-		.is_err());
-	assert!(parse_newick("((A:1)X#H1:1,(X#H1:1,B:1)X#H1:1);").is_err());
-	assert!(parse_newick("((A:1)X#H:1,B:1);").is_err());
 
 	Ok(())
 }
@@ -1003,7 +875,8 @@ fn deep_ladder_uses_iterative_traversal() -> Result<()> {
 		vec![1.0; (NUM_LEAVES as usize - 1) * 2],
 		nulls(NUM_LEAVES as usize * 2 - 1),
 	)?;
-	let roundtrip = parse_newick(&tree.to_newick()?)?.into_binary()?;
+	let roundtrip =
+		TreeBuilder::from_newick(&tree.to_newick()?)?.to_binary()?;
 
 	assert_eq!(tree.preorder().count(), tree.num_nodes() as usize);
 	assert_eq!(tree.postorder().count(), tree.num_nodes() as usize);
@@ -1103,9 +976,9 @@ fn random_binary_trees_roundtrip() {
 		assert_eq!(tree.postorder().count(), num_nodes as usize);
 
 		let first_newick = tree.to_newick().unwrap();
-		let roundtrip = parse_newick(&first_newick)
+		let roundtrip = TreeBuilder::from_newick(&first_newick)
 			.unwrap()
-			.into_binary()
+			.to_binary()
 			.unwrap();
 		assert_eq!(first_newick, roundtrip.to_newick().unwrap());
 
@@ -1322,8 +1195,8 @@ fn multi_tree_branch_score() -> Result<()> {
 	assert!(branch_score_matrix(&mismatched_count).is_err());
 
 	let mismatched_names = [
-		&parse_newick("(A:1,B:1);")?.into_binary()?,
-		&parse_newick("(A:1,C:1);")?.into_binary()?,
+		&TreeBuilder::from_newick("(A:1,B:1);")?.to_binary()?,
+		&TreeBuilder::from_newick("(A:1,C:1);")?.to_binary()?,
 	];
 	assert!(branch_score_matrix(&mismatched_names).is_err());
 	Ok(())

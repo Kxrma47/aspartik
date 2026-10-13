@@ -230,7 +230,11 @@ fn write_node<W: Write>(
 ) -> Result<()> {
 	let name = source.name(node);
 	write_label(name, writer)?;
-	writer.write_str(source.node_attributes(node))?;
+	if !source.node_attributes(node).is_empty() {
+		writer.write_char('[')?;
+		writer.write_str(source.node_attributes(node))?;
+		writer.write_char(']')?;
+	}
 	if let Some(edge) = edge {
 		write_edge(edge, writer)?;
 	}
@@ -243,8 +247,13 @@ fn write_edge<W: Write>(edge: Edge<'_>, writer: &mut W) -> fmt::Result {
 	}
 	if let Some(length) = edge.length {
 		write!(writer, "{length}")?;
+	};
+	if !edge.attributes.is_empty() {
+		writer.write_char('[')?;
+		writer.write_str(edge.attributes)?;
+		writer.write_char(']')?;
 	}
-	writer.write_str(edge.attributes)
+	Ok(())
 }
 
 const ILLEGAL_CHARS: [char; 12] = [

@@ -1,10 +1,7 @@
-#![allow(unused)]
-
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use logos::{Lexer, Logos};
-use smallvec::SmallVec;
 
-use super::{Node, builder::TreeBuilder};
+use super::builder::TreeBuilder;
 
 fn unquote(s: &str) -> &str {
 	&s[1..s.len() - 1]
@@ -23,7 +20,7 @@ enum Token<'a> {
 	Colon,
 	#[token(";")]
 	Semicolon,
-	#[regex(r"[^ \[\t\r\n():,;]+", |lex| lex.slice())]
+	#[regex(r#"[^ '\"\[\t\r\n():,;]+"#, |lex| lex.slice())]
 	Ident(&'a str),
 	#[regex(r#""[^"]*""#, |lex| unquote(lex.slice()))]
 	#[regex(r"'[^']*'", |lex| unquote(lex.slice()))]
@@ -32,11 +29,11 @@ enum Token<'a> {
 	Attribute(&'a str),
 }
 
-fn parse_newick<'a>(newick: &'a str) -> Result<TreeBuilder> {
+pub fn parse_newick<'a>(newick: &'a str) -> Result<TreeBuilder> {
 	let mut lexer = Token::lexer(newick);
 	let mut tree = TreeBuilder::new();
 
-	let mut next = |lexer: &mut Lexer<'a, Token<'a>>| -> Result<Token<'a>> {
+	let next = |lexer: &mut Lexer<'a, Token<'a>>| -> Result<Token<'a>> {
 		match lexer.next() {
 			Some(Ok(t)) => Ok(t),
 			Some(Err(_)) => bail!("Lexing error"),
@@ -48,6 +45,7 @@ fn parse_newick<'a>(newick: &'a str) -> Result<TreeBuilder> {
 	if token != Token::Open {
 		bail!("Expected a Newick tree to start with '('");
 	}
+	token = next(&mut lexer)?;
 
 	let mut parents = Vec::new();
 	let mut children = Vec::new();
@@ -96,6 +94,9 @@ fn parse_newick<'a>(newick: &'a str) -> Result<TreeBuilder> {
 				node = tree.add_dummy_node();
 			}
 			Token::Close => {
+				if parents.is_empty() {
+					bail!("Too many closing parentheses");
+				}
 				children.last_mut().unwrap().push(node);
 				let parent = parents.pop().unwrap();
 				let node_children = children.pop().unwrap();

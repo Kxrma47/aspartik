@@ -96,7 +96,7 @@ impl PyTreeBuilder {
 		newick: &str,
 	) -> Result<Self> {
 		Ok(Self {
-			inner: Mutex::new(TreeBuilder::parse_newick(newick)?),
+			inner: Mutex::new(TreeBuilder::from_newick(newick)?),
 		})
 	}
 
@@ -308,7 +308,7 @@ impl PyTreeBuilder {
 
 	fn to_binary(&self) -> Result<PyBinaryTree> {
 		Ok(PyBinaryTree {
-			inner: self.inner().clone().into_binary()?,
+			inner: self.inner().to_binary()?,
 		})
 	}
 
@@ -397,17 +397,14 @@ impl PyBinaryTree {
 		newick: &str,
 		taxa: Option<PyRef<'_, PyTaxonSet>>,
 	) -> Result<Self> {
-		Ok(Self {
-			inner: if let Some(taxa) = taxa {
-				BinaryTree::parse_newick_with_taxa(
-					newick,
-					taxa.0.clone(),
-				)?
-			} else {
-				TreeBuilder::parse_newick(newick)?
-					.into_binary()?
-			},
-		})
+		let builder = TreeBuilder::from_newick(newick)?;
+		let tree = match taxa {
+			Some(taxa) => {
+				builder.to_binary_with_taxa(taxa.0.clone())?
+			}
+			None => builder.to_binary()?,
+		};
+		Ok(Self { inner: tree })
 	}
 
 	#[getter]

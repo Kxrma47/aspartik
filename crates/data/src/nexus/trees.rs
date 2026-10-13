@@ -4,7 +4,10 @@ use picoarrow::array::{ArrayUtf8, NonNullable};
 use std::io::BufRead;
 
 use super::{NexusParser, parse_token};
-use crate::{TaxonSet, tree::BinaryTree};
+use crate::{
+	TaxonSet,
+	tree::{BinaryTree, builder::TreeBuilder},
+};
 
 fn parse_translate(command: &str) -> Result<(TaxonSet, TaxonSet)> {
 	let mut from = ArrayUtf8::<NonNullable>::new();
@@ -45,6 +48,7 @@ pub fn read_binary_trees<R>(mut reader: R) -> Result<Vec<BinaryTree>>
 where
 	R: BufRead,
 {
+	println!("read_binary_trees");
 	let mut out = vec![];
 	let mut line = String::new();
 	let mut parser = NexusParser::default();
@@ -54,23 +58,29 @@ where
 		if block != "TREES" {
 			return Ok(());
 		}
+		println!("tree command");
 		if command.get(..9).is_some_and(|prefix| {
 			prefix.eq_ignore_ascii_case("translate")
 		}) {
 			translation = Some(parse_translate(command)?);
+			return Ok(());
 		}
 
 		if command.get(..4).is_some_and(|prefix| {
 			prefix.eq_ignore_ascii_case("tree")
 		}) {
 			let idx = command.find('(').unwrap();
-			let tree =
-				if let Some(translation) = &translation {
-					BinaryTree::parse_newick_with_translation(
-				&command[idx..], &translation.0, translation.1.clone())?
-				} else {
-					unimplemented!();
-				};
+			let newick = &command[idx..];
+			let builder = TreeBuilder::from_newick(newick)?;
+			let tree = if let Some(translation) = &translation {
+				let mut out = builder.to_binary_with_taxa(
+					translation.0.clone(),
+				)?;
+				out.set_taxa(translation.1.clone());
+				out
+			} else {
+				builder.to_binary()?
+			};
 			out.push(tree);
 		}
 		Ok(())
