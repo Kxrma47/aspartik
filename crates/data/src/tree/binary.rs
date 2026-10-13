@@ -7,7 +7,7 @@ use std::{
 	collections::BinaryHeap,
 };
 
-use super::{Internal, Leaf, Node, ROOT_PARENT};
+use super::{Internal, Leaf, Node, TOMBSTONE};
 use crate::TaxonSet;
 use buffer::Buffer;
 
@@ -46,7 +46,7 @@ impl BinaryTree {
 		let num_edges_usize = num_nodes_usize - 1;
 
 		let internals = num_leaves..num_nodes;
-		let mut parents = Buffer::repeat(ROOT_PARENT, num_nodes);
+		let mut parents = Buffer::repeat(TOMBSTONE, num_nodes);
 		for (slot, parent) in parents[..num_edges_usize]
 			.iter_mut()
 			.zip(internals.clone().chain(internals))
@@ -56,7 +56,7 @@ impl BinaryTree {
 		let root = parents[num_edges_usize - 1];
 		parents[..num_edges_usize - 1].shuffle(rng);
 
-		let mut children = Buffer::repeat(ROOT_PARENT, num_edges);
+		let mut children = Buffer::repeat(TOMBSTONE, num_edges);
 		let mut remaining = vec![2; num_internals as usize];
 		*remaining.last_mut().unwrap() = 1;
 		let mut unused =
@@ -68,7 +68,7 @@ impl BinaryTree {
 			let child = unused.pop().unwrap().0;
 			removed.push(child);
 			let offset = ((parent - num_leaves) * 2) as usize;
-			if children[offset] == ROOT_PARENT {
+			if children[offset] == TOMBSTONE {
 				children[offset] = child;
 			} else {
 				children[offset + 1] = child;
@@ -198,7 +198,7 @@ impl BinaryTree {
 				);
 				ensure!(
 					self.parents[node as usize]
-						== ROOT_PARENT,
+						== TOMBSTONE,
 					"The root has a parent"
 				);
 			} else {
@@ -294,7 +294,7 @@ impl BinaryTree {
 
 	pub fn parent_of(&self, node: Node) -> Option<Internal> {
 		let parent = self.parents[node.usize()];
-		(parent != ROOT_PARENT).then_some(Internal(parent))
+		(parent != TOMBSTONE).then_some(Internal(parent))
 	}
 
 	pub fn edge_length(&self, child: Node) -> Option<f64> {
@@ -340,12 +340,12 @@ impl BinaryTree {
 		let mut right = second.0;
 
 		while left != right {
-			left = if left == ROOT_PARENT {
+			left = if left == TOMBSTONE {
 				second.0
 			} else {
 				self.parents[left as usize]
 			};
-			right = if right == ROOT_PARENT {
+			right = if right == TOMBSTONE {
 				first.0
 			} else {
 				self.parents[right as usize]

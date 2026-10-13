@@ -17,7 +17,7 @@ pub use distances::{
 };
 pub use render::{LayoutKind, Point, SvgOptions, TreeLayout};
 
-const ROOT_PARENT: u32 = 0x544f4f52;
+const TOMBSTONE: u32 = 0x544f4f52;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(
@@ -56,7 +56,7 @@ impl Node {
 		self.0 as usize
 	}
 
-	const TOMBSTONE: Self = Node(0x544f4f52);
+	const TOMBSTONE: Self = Node(TOMBSTONE);
 }
 
 impl Leaf {
