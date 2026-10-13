@@ -22,7 +22,11 @@ const ROOT_PARENT: u32 = 0x544f4f52;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(
 	feature = "python",
-	pyo3::pyclass(module = "aspartik.data.tree", frozen, from_py_object)
+	pyo3::pyclass(
+		module = "aspartik.data.tree",
+		frozen,
+		skip_from_py_object
+	)
 )]
 #[repr(transparent)]
 pub struct Node(u32);

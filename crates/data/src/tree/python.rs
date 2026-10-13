@@ -1,6 +1,8 @@
 use anyhow::{Result, anyhow, ensure};
 use parking_lot::{Mutex, MutexGuard};
-use pyo3::{basic::CompareOp, prelude::*, types::PyType};
+use pyo3::{
+	basic::CompareOp, exceptions::PyTypeError, prelude::*, types::PyType,
+};
 
 use crate::PyTaxonSet;
 use crate::tree::{
@@ -9,6 +11,27 @@ use crate::tree::{
 	robinson_foulds_matrix, triplet_distance_matrix,
 };
 use rng::PyRng;
+use util::py_bail;
+
+impl<'py> FromPyObject<'_, 'py> for Node {
+	type Error = PyErr;
+
+	fn extract(obj: Borrowed<'_, 'py, PyAny>) -> PyResult<Node> {
+		if let Ok(node) = obj.cast::<Node>() {
+			Ok(Node(node.get().0))
+		} else if let Ok(internal) = obj.cast::<Internal>() {
+			Ok(Node(internal.get().0))
+		} else if let Ok(leaf) = obj.cast::<Leaf>() {
+			Ok(Node(leaf.get().0))
+		} else {
+			py_bail!(
+				PyTypeError,
+				"Expected `Leaf` or `Internal`, got {}",
+				obj.get_type().name()?
+			);
+		}
+	}
+}
 
 fn node_index(value: &Bound<'_, PyAny>) -> Option<u32> {
 	if let Ok(node) = value.cast::<Node>() {
@@ -156,19 +179,12 @@ impl PyTreeBuilder {
 		nonempty(self.inner().node_attribute(node))
 	}
 
-	fn edge_length(&self, child: &Bound<'_, PyAny>) -> Result<Option<f64>> {
-		let tree = self.inner();
-		let child = checked_node(child, tree.num_nodes() as u32)?;
-		Ok(tree.edge_length(child))
+	fn edge_length(&self, child: Node) -> Option<f64> {
+		self.inner().edge_length(child)
 	}
 
-	fn edge_metadata(
-		&self,
-		child: &Bound<'_, PyAny>,
-	) -> Result<Option<String>> {
-		let tree = self.inner();
-		let child = checked_node(child, tree.num_nodes() as u32)?;
-		Ok(nonempty(tree.edge_attribute(child)))
+	fn edge_metadata(&self, child: Node) -> Option<String> {
+		nonempty(self.inner().edge_attribute(child))
 	}
 
 	#[pyo3(signature = (
@@ -180,14 +196,13 @@ impl PyTreeBuilder {
 	))]
 	fn add_node(
 		&self,
-		parent: &Bound<'_, PyAny>,
+		parent: Node,
 		name: Option<String>,
 		length: Option<f64>,
 		node_metadata: Option<String>,
 		edge_metadata: Option<String>,
-	) -> Result<Node> {
+	) -> Node {
 		let mut tree = self.inner.lock();
-		let parent = checked_node(parent, tree.num_nodes() as u32)?;
 		let node = tree.add_node(
 			&name.unwrap_or_default(),
 			length.unwrap_or(f64::NAN),
@@ -201,40 +216,22 @@ impl PyTreeBuilder {
 			node,
 			&edge_metadata.unwrap_or_default(),
 		);
-		Ok(node)
+		node
 	}
 
-	fn set_name(
-		&self,
-		node: &Bound<'_, PyAny>,
-		name: Option<String>,
-	) -> Result<()> {
+	fn set_name(&self, node: Node, name: Option<String>) {
 		let mut tree = self.inner.lock();
-		let node = checked_node(node, tree.num_nodes() as u32)?;
 		tree.set_node_name(node, &name.unwrap_or_default());
-		Ok(())
 	}
 
-	fn set_node_metadata(
-		&self,
-		node: &Bound<'_, PyAny>,
-		metadata: Option<String>,
-	) -> Result<()> {
+	fn set_node_metadata(&self, node: Node, metadata: Option<String>) {
 		let mut tree = self.inner.lock();
-		let node = checked_node(node, tree.num_nodes() as u32)?;
 		tree.set_node_attribute(node, &metadata.unwrap_or_default());
-		Ok(())
 	}
 
-	fn set_edge_length(
-		&self,
-		child: &Bound<'_, PyAny>,
-		length: Option<f64>,
-	) -> Result<()> {
+	fn set_edge_length(&self, child: Node, length: Option<f64>) {
 		let mut tree = self.inner.lock();
-		let child = checked_node(child, tree.num_nodes() as u32)?;
 		tree.set_edge_length(child, length.unwrap_or(f64::NAN));
-		Ok(())
 	}
 
 	fn set_edge_metadata(&self, child: Node, metadata: Option<String>) {
@@ -401,16 +398,15 @@ impl PyBinaryTree {
 		self.inner.edges().collect()
 	}
 
-	fn is_leaf(&self, node: &Bound<'_, PyAny>) -> Result<bool> {
-		Ok(self.inner.is_leaf(self.node(node)?))
+	fn is_leaf(&self, node: Node) -> bool {
+		self.inner.is_leaf(node)
 	}
 
-	fn is_internal(&self, node: &Bound<'_, PyAny>) -> Result<bool> {
-		Ok(self.inner.is_internal(self.node(node)?))
+	fn is_internal(&self, node: Node) -> bool {
+		self.inner.is_internal(node)
 	}
 
-	fn children_of(&self, node: &Bound<'_, PyAny>) -> Result<(Node, Node)> {
-		let node = self.node(node)?;
+	fn children_of(&self, node: Node) -> Result<(Node, Node)> {
 		let internal =
 			self.inner.as_internal(node).ok_or_else(|| {
 				anyhow!("Node {} is a leaf", node.u32())
@@ -421,19 +417,16 @@ impl PyBinaryTree {
 		Ok((left, right))
 	}
 
-	fn parent_of(
-		&self,
-		node: &Bound<'_, PyAny>,
-	) -> Result<Option<Internal>> {
-		Ok(self.inner.parent_of(self.node(node)?))
+	fn parent_of(&self, node: Node) -> Option<Internal> {
+		self.inner.parent_of(node)
 	}
 
-	fn name(&self, node: &Bound<'_, PyAny>) -> Result<Option<&str>> {
-		Ok(self.inner.name(self.node(node)?))
+	fn name(&self, node: Node) -> Option<&str> {
+		self.inner.name(node)
 	}
 
-	fn edge_length(&self, child: &Bound<'_, PyAny>) -> Result<Option<f64>> {
-		Ok(self.inner.edge_length(self.node(child)?))
+	fn edge_length(&self, child: Node) -> Option<f64> {
+		self.inner.edge_length(child)
 	}
 
 	fn leaf_by_name(&self, name: &str) -> Option<Leaf> {
@@ -545,10 +538,6 @@ impl From<BinaryTree> for PyBinaryTree {
 }
 
 impl PyBinaryTree {
-	fn node(&self, node: &Bound<'_, PyAny>) -> Result<Node> {
-		checked_node(node, self.inner.num_nodes())
-	}
-
 	fn create_layout(
 		&self,
 		kind: &str,
@@ -609,13 +598,6 @@ pub fn py_triplet_distance_matrix(
 	let py_array = array_module.call_method1("array", ("Q",))?;
 	py_array.call_method1("frombytes", (flat_bytes,))?;
 	Ok(py_array.unbind())
-}
-
-fn checked_node(value: &Bound<'_, PyAny>, num_nodes: u32) -> Result<Node> {
-	let index = node_index(value)
-		.ok_or_else(|| anyhow!("Expected Node, Leaf, or Internal"))?;
-	ensure!(index < num_nodes, "Node {index} is out of range");
-	Ok(Node(index))
 }
 
 fn nonempty(value: &str) -> Option<String> {
