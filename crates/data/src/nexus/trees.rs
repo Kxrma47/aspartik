@@ -48,7 +48,6 @@ pub fn read_binary_trees<R>(mut reader: R) -> Result<Vec<BinaryTree>>
 where
 	R: BufRead,
 {
-	println!("read_binary_trees");
 	let mut out = vec![];
 	let mut line = String::new();
 	let mut parser = NexusParser::default();
@@ -58,7 +57,6 @@ where
 		if block != "TREES" {
 			return Ok(());
 		}
-		println!("tree command");
 		if command.get(..9).is_some_and(|prefix| {
 			prefix.eq_ignore_ascii_case("translate")
 		}) {

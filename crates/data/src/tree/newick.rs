@@ -29,9 +29,8 @@ enum Token<'a> {
 	Attribute(&'a str),
 }
 
-pub fn parse_newick<'a>(newick: &'a str) -> Result<TreeBuilder> {
+pub fn parse_newick<'a>(tree: &mut TreeBuilder, newick: &'a str) -> Result<()> {
 	let mut lexer = Token::lexer(newick);
-	let mut tree = TreeBuilder::new();
 
 	let next = |lexer: &mut Lexer<'a, Token<'a>>| -> Result<Token<'a>> {
 		match lexer.next() {
@@ -122,5 +121,5 @@ pub fn parse_newick<'a>(newick: &'a str) -> Result<TreeBuilder> {
 
 	tree.set_root(root);
 
-	Ok(tree)
+	Ok(())
 }

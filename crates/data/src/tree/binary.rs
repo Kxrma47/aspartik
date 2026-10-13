@@ -255,7 +255,7 @@ impl BinaryTree {
 		for pair in leaves.windows(2) {
 			ensure!(
 				pair[0].0 != pair[1].0,
-				"Duplicate leaf name: {}",
+				"Duplicate leaf name: {:?}",
 				pair[0].0
 			);
 		}

@@ -31,10 +31,6 @@ fn names<S: AsRef<str>>(values: &[S]) -> ArrayUtf8<Nullable> {
 	}))
 }
 
-fn nulls(len: usize) -> ArrayUtf8<Nullable> {
-	nullable_values((0..len).map(|_| None))
-}
-
 fn split_names(
 	num_leaves: u32,
 	names: ArrayUtf8<Nullable>,
@@ -869,11 +865,16 @@ fn deep_ladder_uses_iterative_traversal() -> Result<()> {
 		children.extend([parent - NUM_LEAVES + 1, parent - 1]);
 	}
 
+	let mut names = ArrayUtf8::<Nullable>::new();
+	for i in 0..NUM_LEAVES {
+		names.push_some(&i.to_string()).unwrap();
+	}
+
 	let tree = tree(
 		NUM_LEAVES,
 		children,
 		vec![1.0; (NUM_LEAVES as usize - 1) * 2],
-		nulls(NUM_LEAVES as usize * 2 - 1),
+		names,
 	)?;
 	let roundtrip =
 		TreeBuilder::from_newick(&tree.to_newick()?)?.to_binary()?;

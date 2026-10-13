@@ -2,25 +2,25 @@ import pytest
 
 from pathlib import Path
 
-from aspartik.data import TaxonSet
-from aspartik.data.tree import BinaryTree, robinson_foulds_matrix
+from aspartik.data.tree import TreeBuilder, robinson_foulds_matrix
 
-# TREE_PATHS = sorted(Path("data/runs").glob("*/beast*.trees"))
-# assert TREE_PATHS
-TREE_PATHS = [Path("data/runs/skyline-coalescent/beast1.trees")]
+TREE_PATHS = sorted(Path("data/runs").glob("*/beast*.trees"))
+assert TREE_PATHS
 
 
 @pytest.mark.parametrize("path", TREE_PATHS, ids=lambda path: path.parent.name)
 def test_robinson_foulds_matrix_on_beast_trees(path):
-    newick = path.read_text().splitlines()
-    first = BinaryTree.from_newick(newick[0])
-    leaf_names = []
-    for node in first.leaves():
-        name = first.name(node)
-        assert name is not None
-        leaf_names.append(name)
-    taxa = TaxonSet(sorted(leaf_names))
-    trees = [BinaryTree.from_newick(line, taxa) for line in newick]
+    builder = TreeBuilder()
+    newicks = path.read_text().splitlines()
+    builder.load_newick(newicks[0])
+    first = builder.to_binary()
+    taxa = first.taxa
+
+    trees = [first]
+    for newick in newicks[1:]:
+        builder.load_newick(newick)
+        trees.append(builder.to_binary(taxa))
+
     matrix = robinson_foulds_matrix(trees)
 
     assert trees

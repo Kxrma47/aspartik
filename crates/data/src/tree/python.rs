@@ -100,6 +100,11 @@ impl PyTreeBuilder {
 		})
 	}
 
+	fn load_newick(&self, newick: &str) -> Result<()> {
+		let mut inner = self.inner();
+		inner.load_newick(newick)
+	}
+
 	fn add_dummy_node(&self) -> Node {
 		self.inner.lock().add_dummy_node()
 	}
@@ -306,10 +311,16 @@ impl PyTreeBuilder {
 		Ok(())
 	}
 
-	fn to_binary(&self) -> Result<PyBinaryTree> {
-		Ok(PyBinaryTree {
-			inner: self.inner().to_binary()?,
-		})
+	#[pyo3(signature = (taxa = None))]
+	fn to_binary(&self, taxa: Option<PyTaxonSet>) -> Result<PyBinaryTree> {
+		let inner = self.inner();
+		let tree = match taxa {
+			Some(taxa) => {
+				inner.to_binary_with_taxa(taxa.0.clone())?
+			}
+			None => inner.to_binary()?,
+		};
+		Ok(PyBinaryTree { inner: tree })
 	}
 
 	fn to_newick(&self) -> Result<String> {
@@ -395,7 +406,7 @@ impl PyBinaryTree {
 	fn from_newick(
 		_class: &Bound<'_, PyType>,
 		newick: &str,
-		taxa: Option<PyRef<'_, PyTaxonSet>>,
+		taxa: Option<PyTaxonSet>,
 	) -> Result<Self> {
 		let builder = TreeBuilder::from_newick(newick)?;
 		let tree = match taxa {

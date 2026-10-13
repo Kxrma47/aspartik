@@ -162,8 +162,15 @@ impl TreeBuilder {
 		self.to_binary_with_taxa(taxon_set)
 	}
 
+	pub fn load_newick(&mut self, newick: &str) -> Result<()> {
+		self.clear();
+		parse_newick(self, newick)
+	}
+
 	pub fn from_newick(newick: &str) -> Result<Self> {
-		parse_newick(newick)
+		let mut out = TreeBuilder::new();
+		out.load_newick(newick)?;
+		Ok(out)
 	}
 }
 
@@ -179,36 +186,25 @@ fn to_binary(builder: &TreeBuilder, taxon_set: TaxonSet) -> Result<BinaryTree> {
 	let unmapped = u32::MAX;
 	let mut mapping = vec![unmapped; num_nodes as usize];
 	let mut used = vec![false; taxon_set.len()];
+
 	for node in (0..num_nodes).map(Node) {
 		if builder.children_of(node).is_empty() {
 			let name = builder.name(node);
-			let taxon = (0..taxon_set.len())
-				.position(|index| {
-					!used[index]
-						&& taxon_set.iter().nth(index)
-							== Some(name)
-				})
+			let taxon = taxon_set
+				.iter()
+				.position(|t| t == name)
 				.ok_or_else(|| {
-					let duplicate = taxon_set
-						.iter()
-						.any(|taxon| taxon == name);
-					if duplicate {
-						anyhow!(
-							"Duplicate leaf name: {name}"
-						)
-					} else {
-						anyhow!("Unknown taxon: {name}")
-					}
+					anyhow!("Unknown taxon: {name:?}")
 				})?;
+			ensure!(!used[taxon], "Duplicate leaf name: {name:?}");
 			used[taxon] = true;
 			mapping[node.usize()] = taxon as u32;
 		}
 	}
+
 	for node in (0..num_nodes).map(Node) {
-		let num_children = builder.children_of(node).len();
-		if num_children != 0 && num_children != 2 {
-			anyhow::bail!("The tree is not binary");
-		}
+		let n = builder.children_of(node).len();
+		ensure!(n == 0 || n == 2, "The tree is not binary");
 	}
 
 	let mut children =
@@ -218,18 +214,18 @@ fn to_binary(builder: &TreeBuilder, taxon_set: TaxonSet) -> Result<BinaryTree> {
 	let mut internal_names = ArrayUtf8::<Nullable>::new();
 	let mut next_internal = num_leaves;
 	let mut internals =
-		Vec::with_capacity(num_nodes as usize - num_leaves as usize);
+		Vec::with_capacity((num_nodes - num_leaves) as usize);
 
 	let mut stack = vec![(root, false)];
 	while let Some((node, expanded)) = stack.pop() {
 		if !expanded {
-			if !builder.children_of(node).is_empty() {
+			let kids = builder.children_of(node);
+			if !kids.is_empty() {
 				stack.push((node, true));
-				stack.extend(builder
-					.children_of(node)
+				stack.extend(kids
 					.iter()
 					.rev()
-					.map(|&child| (child, false)));
+					.map(|&c| (c, false)));
 			}
 			continue;
 		}
@@ -241,21 +237,21 @@ fn to_binary(builder: &TreeBuilder, taxon_set: TaxonSet) -> Result<BinaryTree> {
 			internal_names.push(Some(builder.name(node)))?;
 		}
 	}
+
 	let new_root = num_nodes - 1;
 	mapping[root.usize()] = new_root;
 	internals.push(root);
 	internal_names.push(Some(builder.name(root)))?;
-	for value in &mapping {
-		ensure!(
-			*value != unmapped,
-			"The tree contains unreachable nodes"
-		);
-	}
+
+	ensure!(
+		!mapping.contains(&unmapped),
+		"The tree contains unreachable nodes"
+	);
+
 	for node in (0..num_nodes).map(Node) {
 		let new = mapping[node.usize()];
 		if new != new_root {
-			let index = new - u32::from(new > new_root);
-			lengths[index as usize] =
+			lengths[new as usize] =
 				builder.edge_length(node).ok_or_else(|| {
 					anyhow!(
 						"Node {} has no edge length",
@@ -264,6 +260,7 @@ fn to_binary(builder: &TreeBuilder, taxon_set: TaxonSet) -> Result<BinaryTree> {
 				})?;
 		}
 	}
+
 	for (offset, &old) in internals.iter().enumerate() {
 		for (slot, child) in builder.children_of(old).iter().enumerate()
 		{
