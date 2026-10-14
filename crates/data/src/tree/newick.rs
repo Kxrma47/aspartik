@@ -1,7 +1,9 @@
 use anyhow::{Result, bail};
 use logos::{Lexer, Logos};
 
-use super::builder::TreeBuilder;
+use std::fmt::{self, Formatter, Write};
+
+use super::{Node, Tree, TreeBuilder};
 
 fn unquote(s: &str) -> &str {
 	&s[1..s.len() - 1]
@@ -122,4 +124,87 @@ pub fn parse_newick<'a>(tree: &mut TreeBuilder, newick: &'a str) -> Result<()> {
 	tree.set_root(root);
 
 	Ok(())
+}
+
+pub fn serialize_newick<T: Tree + ?Sized>(
+	tree: &T,
+	f: &mut Formatter<'_>,
+) -> fmt::Result {
+	let Some(root) = tree.root() else {
+		return Err(fmt::Error);
+	};
+
+	let mut parents = vec![root];
+	let mut children = vec![tree.children_of(root)];
+
+	f.write_str("(")?;
+
+	while !parents.is_empty() {
+		let Some((&first, rest)) =
+			children.last_mut().unwrap().split_first()
+		else {
+			f.write_str(")")?;
+			children.pop();
+			let parent = parents.pop().unwrap();
+			write_node(tree, parent, f)?;
+			if !children.is_empty()
+				&& !children.last().unwrap().is_empty()
+			{
+				f.write_str(",")?;
+			}
+			continue;
+		};
+
+		*children.last_mut().unwrap() = rest;
+
+		let first_children = tree.children_of(first);
+		if first_children.is_empty() {
+			write_node(tree, first, f)?;
+			if !rest.is_empty() {
+				f.write_str(",")?;
+			}
+		} else {
+			parents.push(first);
+			children.push(first_children);
+			f.write_str("(")?;
+		}
+	}
+
+	f.write_str(";")?;
+
+	Ok(())
+}
+
+fn write_node<T: Tree + ?Sized>(
+	tree: &T,
+	node: Node,
+	f: &mut Formatter<'_>,
+) -> fmt::Result {
+	write_label(tree.name_of(node), f)?;
+	if let Some(length) = tree.edge_length(node) {
+		write!(f, ":{length}")?;
+	}
+	Ok(())
+}
+
+const ILLEGAL_CHARS: [char; 12] = [
+	' ', '\n', '\t', '(', ')', '[', ']', ',', ':', ';', '\'', '"',
+];
+
+fn write_label(label: &str, f: &mut Formatter<'_>) -> fmt::Result {
+	if label.is_empty() {
+		return Ok(());
+	}
+	if !label.contains(ILLEGAL_CHARS) {
+		return f.write_str(label);
+	}
+
+	f.write_char('\'')?;
+	for character in label.chars() {
+		f.write_char(character)?;
+		if character == '\'' {
+			f.write_char('\'')?;
+		}
+	}
+	f.write_char('\'')
 }

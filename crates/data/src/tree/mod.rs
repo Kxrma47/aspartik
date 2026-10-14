@@ -7,7 +7,6 @@ mod newick;
 #[cfg(feature = "python")]
 pub mod python;
 mod render;
-mod serialize_newick;
 
 pub use binary::BinaryTree;
 pub use builder::TreeBuilder;
@@ -17,7 +16,7 @@ pub use distances::{
 };
 pub use render::{LayoutKind, Point, SvgOptions, TreeLayout};
 
-use std::{mem, ops::Deref};
+use std::{fmt, mem, ops::Deref};
 
 const TOMBSTONE: u32 = 0x544f4f52;
 
@@ -101,6 +100,8 @@ nodes_2!(Leaf);
 nodes_2!(Internal);
 
 pub trait Tree {
+	fn root(&self) -> Option<Node>;
+
 	fn parent_of(&self, node: Node) -> Option<Node>;
 
 	fn children_of(&self, node: Node) -> &[Node];
@@ -115,6 +116,19 @@ pub trait Tree {
 			second = self.parent_of(second).unwrap_or(first);
 		}
 		first
+	}
+
+	fn to_newick(&self) -> String {
+		struct AsDisplay<'a, T: ?Sized>(&'a T);
+		impl<T: Tree + ?Sized> fmt::Display for AsDisplay<'_, T> {
+			fn fmt(
+				&self,
+				f: &mut fmt::Formatter<'_>,
+			) -> fmt::Result {
+				newick::serialize_newick(self.0, f)
+			}
+		}
+		AsDisplay(self).to_string()
 	}
 }
 

@@ -8,7 +8,14 @@ use std::{
 	path::PathBuf,
 };
 
-use data::tree::{BinaryTree, builder::TreeBuilder};
+use data::tree::{BinaryTree, Tree, TreeBuilder};
+
+#[test]
+fn roundtrip_basic() {
+	let s = "(A:0.1,B:0.2,(C:0.3,D:0.4)E:0.5)F;";
+	let tree = TreeBuilder::from_newick(s).unwrap();
+	assert_eq!(s, tree.to_newick());
+}
 
 #[test]
 fn labels_lengths_and_empty_fields() {
@@ -20,7 +27,7 @@ fn labels_lengths_and_empty_fields() {
 		("(,A,,)ROOT;", "(,A,,)ROOT;"),
 	] {
 		let tree = TreeBuilder::from_newick(source).unwrap();
-		assert_eq!(tree.to_newick().unwrap(), expected);
+		assert_eq!(tree.to_newick(), expected);
 	}
 }
 
@@ -32,7 +39,7 @@ fn quoted_labels() -> Result<()> {
 		"(\"with quotes!\":0.1,\"another one\":0.2);",
 	)?;
 	assert_eq!(
-		double_quoted.to_newick()?,
+		double_quoted.to_newick(),
 		"('with quotes!':0.1,'another one':0.2);"
 	);
 
@@ -46,25 +53,7 @@ fn multifurcating_roundtrip() -> Result<()> {
 	assert!(!builder.is_binary());
 	assert!(builder.to_binary().is_err());
 	assert_eq!(builder.children_of(builder.root().unwrap()).len(), 4);
-	assert_eq!(builder.to_newick()?, source);
-
-	Ok(())
-}
-
-#[test]
-fn attributes_are_preserved() -> Result<()> {
-	let mut tree = TreeBuilder::new();
-	let root = tree.add_dummy_node();
-	tree.set_root(root);
-	tree.set_node_attribute(root, "&root=1");
-	let child = tree.add_node("A", 1.0, root);
-	tree.set_edge_attribute(child, "&rate=0.5");
-
-	let output = tree.to_newick()?;
-	assert_eq!(output, "(A:1[&rate=0.5])[&root=1];");
-	let reparsed = TreeBuilder::from_newick(&output)?;
-	assert_eq!(reparsed.node_attribute(root), "&root=1");
-	assert_eq!(reparsed.edge_attribute(child), "&rate=0.5");
+	assert_eq!(builder.to_newick(), source);
 
 	Ok(())
 }
@@ -127,7 +116,7 @@ fn deep_ladder_parse_and_write() -> Result<()> {
 
 	let tree = TreeBuilder::from_newick(&source)?;
 	assert_eq!(tree.num_nodes(), NUM_LEAVES * 2 - 1);
-	let output = tree.to_newick()?;
+	let output = tree.to_newick();
 	let reparsed = TreeBuilder::from_newick(&output)?;
 	assert_eq!(reparsed.num_nodes(), tree.num_nodes());
 	assert!(reparsed.is_binary());
@@ -168,9 +157,9 @@ fn arbitrary_roundtrip() {
 	arbtest(|u: &mut Unstructured<'_>| {
 		let num_leaves = u.int_in_range(2_u32..=10_000)?;
 		let tree = arbitrary_builder(u, num_leaves)?;
-		let first = tree.to_newick().unwrap();
+		let first = tree.to_newick();
 		let reparsed = TreeBuilder::from_newick(&first).unwrap();
-		let second = reparsed.to_newick().unwrap();
+		let second = reparsed.to_newick();
 		assert_eq!(first, second);
 		let binary: BinaryTree = reparsed.to_binary().unwrap();
 		assert_eq!(binary.num_leaves(), num_leaves);

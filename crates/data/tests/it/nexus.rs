@@ -2,7 +2,10 @@ use anyhow::Result;
 
 use std::io::Cursor;
 
-use data::nexus::{NexusParser, read_binary_trees};
+use data::{
+	nexus::{NexusParser, read_binary_trees},
+	tree::Tree,
+};
 
 fn parse(source: &str) -> Result<()> {
 	let mut p = NexusParser::default();
@@ -95,7 +98,7 @@ END;
 	let trees = read_binary_trees(Cursor::new(s)).unwrap();
 
 	for (tree, expected) in trees.iter().zip(expected_trees) {
-		assert_eq!(tree.to_newick().unwrap(), expected);
+		assert_eq!(tree.to_newick(), expected);
 	}
 }
 
@@ -126,6 +129,6 @@ END;
 	let trees = read_binary_trees(Cursor::new(s)).unwrap();
 
 	for (tree, expected) in trees.iter().zip(expected_trees) {
-		assert_eq!(tree.to_newick().unwrap(), expected);
+		assert_eq!(tree.to_newick(), expected);
 	}
 }

@@ -259,6 +259,10 @@ fn to_binary(builder: &TreeBuilder, taxon_set: TaxonSet) -> Result<BinaryTree> {
 }
 
 impl Tree for TreeBuilder {
+	fn root(&self) -> Option<Node> {
+		self.root
+	}
+
 	fn parent_of(&self, node: Node) -> Option<Node> {
 		self.parent_of(node)
 	}

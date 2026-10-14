@@ -6,8 +6,8 @@ use pyo3::{
 
 use crate::PyTaxonSet;
 use crate::tree::{
-	BinaryTree, Internal, Leaf, Node, SvgOptions as TreeSvgOptions,
-	TreeLayout, branch_score, branch_score_matrix, builder::TreeBuilder,
+	BinaryTree, Internal, Leaf, Node, SvgOptions as TreeSvgOptions, Tree,
+	TreeBuilder, TreeLayout, branch_score, branch_score_matrix,
 	robinson_foulds_matrix, triplet_distance_matrix,
 };
 use rng::PyRng;
@@ -257,16 +257,12 @@ impl PyTreeBuilder {
 		Ok(PyBinaryTree { inner: tree })
 	}
 
-	fn to_newick(&self) -> Result<String> {
+	fn to_newick(&self) -> String {
 		self.inner().to_newick()
 	}
 
 	fn __len__(&self) -> usize {
 		self.inner().num_nodes()
-	}
-
-	fn __str__(&self) -> Result<String> {
-		self.to_newick()
 	}
 }
 
@@ -441,7 +437,7 @@ impl PyBinaryTree {
 		self.inner.postorder().collect()
 	}
 
-	fn to_newick(&self) -> Result<String> {
+	fn to_newick(&self) -> String {
 		self.inner.to_newick()
 	}
 
@@ -504,10 +500,6 @@ impl PyBinaryTree {
 
 	fn __len__(&self) -> usize {
 		self.num_nodes() as usize
-	}
-
-	fn __str__(&self) -> Result<String> {
-		self.to_newick()
 	}
 }
 

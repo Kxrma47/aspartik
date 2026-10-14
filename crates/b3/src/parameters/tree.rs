@@ -24,7 +24,7 @@ use bitmap::Bitmap;
 use data::{
 	PyTaxonSet, TaxonSet,
 	tree::{
-		Node as DataNode, builder::TreeBuilder,
+		Node as DataNode, Tree as _, builder::TreeBuilder,
 		python::PyTreeBuilder as PyNewickTree,
 	},
 };
@@ -952,7 +952,7 @@ impl Tree {
 		&self,
 		internal_ids: bool,
 		clock_rate: &dyn Fn(u32) -> f64,
-	) -> Result<String> {
+	) -> String {
 		let root = *self.root();
 		let root_name = if internal_ids {
 			root.0.to_string()
@@ -1532,7 +1532,7 @@ impl_pyparameter_common!(PyTree, Tree, {
 		&self,
 		internal_ids: bool,
 		clock: Option<Py<PyClock>>,
-	) -> Result<String> {
+	) -> String {
 		if let Some(clock) = clock {
 			let clock = clock.get().inner();
 			self.inner().to_newick(internal_ids, &|edge| {

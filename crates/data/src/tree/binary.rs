@@ -473,16 +473,20 @@ impl Iterator for Postorder<'_> {
 }
 
 impl Tree for BinaryTree {
+	fn root(&self) -> Option<Node> {
+		Some(Self::root(self).into())
+	}
+
 	fn parent_of(&self, node: Node) -> Option<Node> {
 		self.parent_of(node).as_deref().copied()
 	}
 
 	fn children_of(&self, node: Node) -> &[Node] {
-		if self.is_internal(node) {
+		if self.is_leaf(node) {
 			return &[];
 		}
 		let offset = (node.0 - self.num_leaves()) as usize * 2;
-		let slice = &self.children[offset..offset + 1];
+		let slice = &self.children[offset..offset + 2];
 		// SAFETY: Node is a transparent wrapper over u32
 		let slice: &[Node] = unsafe {
 			slice::from_raw_parts(
