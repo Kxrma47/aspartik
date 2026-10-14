@@ -1,8 +1,6 @@
 use anyhow::{Result, anyhow, ensure};
 use parking_lot::{Mutex, MutexGuard};
-use pyo3::{
-	basic::CompareOp, exceptions::PyTypeError, prelude::*, types::PyType,
-};
+use pyo3::{exceptions::PyTypeError, prelude::*, types::PyType};
 
 use crate::PyTaxonSet;
 use crate::tree::{
@@ -33,15 +31,21 @@ impl<'py> FromPyObject<'_, 'py> for Node {
 	}
 }
 
-fn node_index(value: &Bound<'_, PyAny>) -> Option<u32> {
-	if let Ok(node) = value.cast::<Node>() {
-		Some(node.get().u32())
-	} else if let Ok(leaf) = value.cast::<Leaf>() {
-		Some(leaf.get().u32())
-	} else if let Ok(internal) = value.cast::<Internal>() {
-		Some(internal.get().u32())
-	} else {
-		None
+impl Node {
+	pub fn into_pyobject(
+		self,
+		py: Python,
+		num_leaves: u32,
+	) -> Result<Bound<PyAny>> {
+		let num_nodes = num_leaves * 2 - 1;
+		let any = if self.0 < num_leaves {
+			Leaf(self.0).into_pyobject(py)?.into_any()
+		} else if self.0 < num_nodes {
+			Internal(self.0).into_pyobject(py)?.into_any()
+		} else {
+			unreachable!()
+		};
+		Ok(any)
 	}
 }
 
@@ -49,11 +53,6 @@ macro_rules! python_node {
 	($type:ty, $name:literal) => {
 		#[pymethods]
 		impl $type {
-			#[getter]
-			fn index(&self) -> u32 {
-				self.u32()
-			}
-
 			fn __index__(&self) -> u32 {
 				self.u32()
 			}
@@ -66,21 +65,17 @@ macro_rules! python_node {
 				self.u32() as isize
 			}
 
-			fn __richcmp__(
-				&self,
-				other: &Bound<'_, PyAny>,
-				op: CompareOp,
-			) -> bool {
-				let Some(index) = node_index(other) else {
-					return matches!(op, CompareOp::Ne);
-				};
-				match op {
-					CompareOp::Eq => self.u32() == index,
-					CompareOp::Ne => self.u32() != index,
-					CompareOp::Lt => self.u32() < index,
-					CompareOp::Le => self.u32() <= index,
-					CompareOp::Gt => self.u32() > index,
-					CompareOp::Ge => self.u32() >= index,
+			fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+				if let Ok(node) = other.cast::<Node>() {
+					self.u32() == node.get().u32()
+				} else if let Ok(leaf) = other.cast::<Leaf>() {
+					self.u32() == leaf.get().u32()
+				} else if let Ok(internal) =
+					other.cast::<Internal>()
+				{
+					self.u32() == internal.get().u32()
+				} else {
+					false
 				}
 			}
 		}

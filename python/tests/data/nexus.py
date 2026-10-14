@@ -24,7 +24,7 @@ EXPECTED = [
 
 def test_read_binary_tree_str():
     trees = read_binary_tree_str(NEXUS)
-    assert [str(tree) for tree in trees] == EXPECTED
+    assert [tree.to_newick() for tree in trees] == EXPECTED
     assert [tree.num_leaves for tree in trees] == [4, 4]
 
 
@@ -32,4 +32,4 @@ def test_read_binary_trees_path(tmp_path):
     path = tmp_path / "trees.nex"
     path.write_text(NEXUS)
     trees = read_binary_trees_path(path)
-    assert [str(tree) for tree in trees] == EXPECTED
+    assert [tree.to_newick() for tree in trees] == EXPECTED

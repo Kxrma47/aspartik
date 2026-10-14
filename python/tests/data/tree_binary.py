@@ -50,7 +50,6 @@ def test_random_tree():
     assert tree.num_edges == 198
     assert len(tree.preorder()) == tree.num_nodes
     assert tree.preorder()[0] == tree.root
-    assert sorted(tree.postorder()) == tree.nodes()
     assert tree.taxa == taxa
     assert [tree.name(leaf) for leaf in tree.leaves()] == list(taxa)
     assert all(tree.name(node) is None for node in tree.internals())

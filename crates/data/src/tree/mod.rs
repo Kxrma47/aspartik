@@ -16,11 +16,15 @@ pub use distances::{
 };
 pub use render::{LayoutKind, Point, SvgOptions, TreeLayout};
 
+use bytemuck::{Pod, Zeroable};
+
 use std::{fmt, mem, ops::Deref};
 
 const TOMBSTONE: u32 = 0x544f4f52;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod,
+)]
 #[cfg_attr(
 	feature = "python",
 	pyo3::pyclass(
@@ -30,23 +34,27 @@ const TOMBSTONE: u32 = 0x544f4f52;
 	)
 )]
 #[repr(transparent)]
-pub struct Node(u32);
+pub struct Node(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod,
+)]
 #[cfg_attr(
 	feature = "python",
 	pyo3::pyclass(module = "aspartik.data.tree", frozen, from_py_object)
 )]
 #[repr(transparent)]
-pub struct Leaf(u32);
+pub struct Leaf(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+	Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod,
+)]
 #[cfg_attr(
 	feature = "python",
 	pyo3::pyclass(module = "aspartik.data.tree", frozen, from_py_object)
 )]
 #[repr(transparent)]
-pub struct Internal(u32);
+pub struct Internal(pub u32);
 
 impl Node {
 	const TOMBSTONE: Self = Node(TOMBSTONE);
