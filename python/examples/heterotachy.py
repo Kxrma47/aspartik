@@ -27,7 +27,6 @@ msa = MSA.from_fasta_file("data/alignments/electricFish.fasta")
 
 rng = RNG(4)
 tree = Tree(msa.sequence_names(), rng)
-tree.set_random_heights(20, rng)
 tree.accept()
 leaves = list(tree.leaves())
 
