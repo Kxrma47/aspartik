@@ -5,9 +5,10 @@ use rand::{Rng, seq::SliceRandom};
 use std::{
 	cmp::{Reverse, max, min},
 	collections::BinaryHeap,
+	slice,
 };
 
-use super::{Internal, Leaf, Node, TOMBSTONE};
+use super::{Internal, Leaf, Node, TOMBSTONE, Tree};
 use crate::TaxonSet;
 use buffer::Buffer;
 
@@ -335,26 +336,6 @@ impl BinaryTree {
 			.find(|leaf| self.taxa.get(leaf.usize()) == name)
 	}
 
-	pub fn mrca(&self, first: Node, second: Node) -> Node {
-		let mut left = first.0;
-		let mut right = second.0;
-
-		while left != right {
-			left = if left == TOMBSTONE {
-				second.0
-			} else {
-				self.parents[left as usize]
-			};
-			right = if right == TOMBSTONE {
-				first.0
-			} else {
-				self.parents[right as usize]
-			};
-		}
-
-		Node(left)
-	}
-
 	pub fn ola(&self) -> Vec<i32> {
 		let num_nodes = self.num_nodes();
 		let num_leaves = self.num_leaves();
@@ -488,5 +469,35 @@ impl Iterator for Postorder<'_> {
 		}
 
 		None
+	}
+}
+
+impl Tree for BinaryTree {
+	fn parent_of(&self, node: Node) -> Option<Node> {
+		self.parent_of(node).as_deref().copied()
+	}
+
+	fn children_of(&self, node: Node) -> &[Node] {
+		if self.is_internal(node) {
+			return &[];
+		}
+		let offset = (node.0 - self.num_leaves()) as usize * 2;
+		let slice = &self.children[offset..offset + 1];
+		// SAFETY: Node is a transparent wrapper over u32
+		let slice: &[Node] = unsafe {
+			slice::from_raw_parts(
+				slice.as_ptr() as *const Node,
+				slice.len(),
+			)
+		};
+		slice
+	}
+
+	fn name_of(&self, node: Node) -> &str {
+		self.name(node).unwrap_or("")
+	}
+
+	fn edge_length(&self, node: Node) -> Option<f64> {
+		self.edge_length(node)
 	}
 }

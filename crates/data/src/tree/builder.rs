@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow, ensure};
 use picoarrow::array::{Array, ArrayUtf8, NonNullable, Nullable};
 use smallvec::SmallVec;
 
-use super::{BinaryTree, Node, newick::parse_newick};
+use super::{BinaryTree, Node, Tree, newick::parse_newick};
 use crate::TaxonSet;
 use buffer::Buffer;
 
@@ -256,4 +256,22 @@ fn to_binary(builder: &TreeBuilder, taxon_set: TaxonSet) -> Result<BinaryTree> {
 		internal_names,
 	);
 	Ok(binary)
+}
+
+impl Tree for TreeBuilder {
+	fn parent_of(&self, node: Node) -> Option<Node> {
+		self.parent_of(node)
+	}
+
+	fn children_of(&self, node: Node) -> &[Node] {
+		self.children_of(node)
+	}
+
+	fn name_of(&self, node: Node) -> &str {
+		self.name(node)
+	}
+
+	fn edge_length(&self, node: Node) -> Option<f64> {
+		self.edge_length(node)
+	}
 }
