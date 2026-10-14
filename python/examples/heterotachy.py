@@ -132,7 +132,7 @@ mcmc = MCMC(
 if __name__ == "__main__":
     run_from_cmdline(mcmc)
 
-    df = pl.read_ipc("target/heterotachy.trace", memory_map=False)
+    df = pl.read_ipc("target/heterotachy.trace")
     df = df.slice(df.height // 2)
     patterns = pattern_probabilities(df["categories"])
     sites = site_probabilities(patterns, likelihood.sites_to_patterns)

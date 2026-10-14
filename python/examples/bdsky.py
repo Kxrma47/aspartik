@@ -113,7 +113,7 @@ mcmc = MCMC(
 if __name__ == "__main__":
     run_from_cmdline(mcmc, default_length=200_000)
 
-    df = pl.read_ipc("target/bdsky.trace", memory_map=False)
+    df = pl.read_ipc("target/bdsky.trace")
     df = df.slice(df.height // 2)
 
     fig, ax = plt.subplots(figsize=(10, 6))

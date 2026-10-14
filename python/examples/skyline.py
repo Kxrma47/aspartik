@@ -107,7 +107,7 @@ if __name__ == "__main__":
 
     offset = mcmc.current_step // (10_000 * 10)
     sequence_names = msa.sequence_names()
-    df = pl.read_ipc("target/skyline.trace", memory_map=False).slice(offset)
+    df = pl.read_ipc("target/skyline.trace").slice(offset)
 
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.set_yscale("log")

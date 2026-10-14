@@ -36,7 +36,7 @@ fork_union = "2.3"
 hashbrown = { version = "0.17", default-features = false }
 logos = "0.16.1"
 parking_lot = "0.12.5"
-picoarrow = "0.3.4"
+picoarrow = "0.3.5"
 pyo3 = "0.29.2"
 rand = { version = "0.10.3", default-features = false }
 rand_pcg = "0.10.2"
