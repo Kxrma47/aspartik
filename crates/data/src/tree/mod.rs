@@ -122,12 +122,13 @@ pub trait Tree {
 
 	fn edge_length(&self, node: Node) -> Option<f64>;
 
-	fn mrca(&self, mut first: Node, mut second: Node) -> Node {
-		while first != second {
-			first = self.parent_of(first).unwrap_or(second);
-			second = self.parent_of(second).unwrap_or(first);
+	fn mrca(&self, mut a: Node, mut b: Node) -> Node {
+		let (orig_a, orig_b) = (a, b);
+		while a != b {
+			a = self.parent_of(a).unwrap_or(orig_b);
+			b = self.parent_of(b).unwrap_or(orig_a);
 		}
-		first
+		a
 	}
 
 	fn to_newick(&self) -> String {
