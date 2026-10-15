@@ -9,7 +9,7 @@ use crate::{
 	Transitions,
 	calculator::{Calculator, CalculatorConfig},
 	clock::PyClock,
-	parameters::{Parameter, PyReal, PyTree, Real},
+	parameters::{Parameter, PyDatedTree, PyReal, Real},
 	substitution::Substitution,
 };
 use data::PyMsa;
@@ -25,7 +25,7 @@ pub struct GammaLikelihood {
 	clock: Py<PyClock>,
 	alpha: Py<PyReal>,
 	transitions: Mutex<Vec<Transitions>>,
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 
 	categories: Mutex<EpochBuf<f64>>,
 
@@ -41,7 +41,7 @@ impl GammaLikelihood {
 	#[new]
 	fn new(
 		msa: Py<PyMsa>,
-		tree: Py<PyTree>,
+		tree: Py<PyDatedTree>,
 		substitution: Substitution,
 		num_categories: usize,
 		alpha: Py<PyReal>,

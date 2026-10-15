@@ -20,8 +20,8 @@ use std::{
 use crate::{
 	mcmc::Mcmc,
 	parameters::{
-		Parameter, PyClassVector, PyIntVector, PyReal, PyRealVector,
-		PyTree,
+		Parameter, PyClassVector, PyDatedTree, PyIntVector, PyReal,
+		PyRealVector,
 	},
 	priors::PyPrior,
 };
@@ -54,7 +54,7 @@ enum LoggedArray {
 		array: ArrayFixedSizeList<ArrayU32<NonNullable>, NonNullable>,
 	},
 	Tree {
-		tree: Py<PyTree>,
+		tree: Py<PyDatedTree>,
 		binary: ArrayBinary<NonNullable>,
 		length: ArrayF64<NonNullable>,
 		height: ArrayF64<NonNullable>,
@@ -229,7 +229,7 @@ impl TraceWriter {
 						size,
 					),
 				}
-			} else if let Ok(tree) = val.cast::<PyTree>() {
+			} else if let Ok(tree) = val.cast::<PyDatedTree>() {
 				LoggedArray::Tree {
 					tree: tree.clone().unbind(),
 					binary: ArrayBinary::new(),

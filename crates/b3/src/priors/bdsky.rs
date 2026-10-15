@@ -2,7 +2,7 @@ use anyhow::{Result, ensure};
 use parking_lot::Mutex;
 use pyo3::prelude::*;
 
-use crate::parameters::{DatedTree, PyReal, PyRealVector, PyTree};
+use crate::parameters::{DatedTree, PyDatedTree, PyReal, PyRealVector};
 
 #[derive(Debug)]
 struct Scratch {
@@ -37,7 +37,7 @@ impl Scratch {
 #[pyclass(module = "aspartik.b3.priors", frozen)]
 pub struct BirthDeathSkyline {
 	#[pyo3(get)]
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 	#[pyo3(get)]
 	origin: Option<Py<PyReal>>,
 	#[pyo3(get)]
@@ -147,7 +147,7 @@ impl BirthDeathSkyline {
 		interval_times=None,
 	))]
 	fn new(
-		tree: Py<PyTree>,
+		tree: Py<PyDatedTree>,
 		become_uninfectious_rate: Py<PyReal>,
 		reproductive_number: Py<PyRealVector>,
 		sampling_proportion: Py<PyReal>,

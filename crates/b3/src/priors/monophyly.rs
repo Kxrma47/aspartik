@@ -3,13 +3,13 @@ use std::collections::VecDeque;
 use anyhow::Result;
 use pyo3::prelude::*;
 
-use crate::parameters::{Leaf, PyTree};
+use crate::parameters::{Leaf, PyDatedTree};
 
 #[derive(Debug)]
 #[pyclass(module = "aspartik.b3.priors", frozen)]
 pub struct Monophyly {
 	#[pyo3(get)]
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 
 	/// The leaves should must be [monophyletic][w]
 	///
@@ -25,7 +25,7 @@ pub struct Monophyly {
 impl Monophyly {
 	#[new]
 	#[pyo3(signature = (tree, leaves, penalty = -1000.0))]
-	fn new(tree: Py<PyTree>, leaves: Vec<Leaf>, penalty: f64) -> Self {
+	fn new(tree: Py<PyDatedTree>, leaves: Vec<Leaf>, penalty: f64) -> Self {
 		Self {
 			tree,
 			leaves,

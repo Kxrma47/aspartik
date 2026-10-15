@@ -15,7 +15,7 @@ pub use data::tree::{Internal, Leaf, Node};
 pub use int_vector::{IntVector, PyIntVector};
 pub use real::{PyReal, Real};
 pub use real_vector::{PyRealVector, RealVector};
-pub use tree::{DatedTree, PyTree};
+pub use tree::{DatedTree, PyDatedTree};
 
 pub trait Parameter {
 	fn is_changed(&self) -> bool;
@@ -75,7 +75,7 @@ pub enum PyParameter {
 	Real(Py<PyReal>),
 	RealVector(Py<PyRealVector>),
 	IntVector(Py<PyIntVector>),
-	DatedTree(Py<PyTree>),
+	DatedTree(Py<PyDatedTree>),
 }
 
 impl PyParameter {

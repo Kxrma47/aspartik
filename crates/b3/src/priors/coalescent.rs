@@ -3,7 +3,7 @@ use bytemuck::cast_vec;
 use parking_lot::Mutex;
 use pyo3::prelude::*;
 
-use crate::parameters::{DatedTree, Node, PyReal, PyTree};
+use crate::parameters::{DatedTree, Node, PyDatedTree, PyReal};
 
 #[derive(Debug)]
 pub struct Intervals {
@@ -125,7 +125,7 @@ fn calculate(
 #[pyclass(module = "aspartik.b3.priors", frozen)]
 pub struct ConstantPopulation {
 	#[pyo3(get)]
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 	#[pyo3(get)]
 	population_size: Py<PyReal>,
 	intervals: Mutex<Intervals>,
@@ -134,7 +134,10 @@ pub struct ConstantPopulation {
 #[pymethods]
 impl ConstantPopulation {
 	#[new]
-	fn new(tree: Py<PyTree>, population_size: Py<PyReal>) -> Result<Self> {
+	fn new(
+		tree: Py<PyDatedTree>,
+		population_size: Py<PyReal>,
+	) -> Result<Self> {
 		let intervals = Intervals::new(&tree.get().inner());
 		Ok(Self {
 			tree,
@@ -174,7 +177,7 @@ impl ConstantPopulation {
 #[pyclass(module = "aspartik.b3.priors", frozen)]
 pub struct ExponentialGrowth {
 	#[pyo3(get)]
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 	#[pyo3(get)]
 	population_size: Py<PyReal>,
 	#[pyo3(get)]
@@ -186,7 +189,7 @@ pub struct ExponentialGrowth {
 impl ExponentialGrowth {
 	#[new]
 	fn new(
-		tree: Py<PyTree>,
+		tree: Py<PyDatedTree>,
 		population_size: Py<PyReal>,
 		growth_rate: Py<PyReal>,
 	) -> Result<Self> {

@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use rand::seq::IndexedRandom;
 
 use super::Proposal;
-use crate::parameters::{DatedTree, Internal, Node, PyParameter, PyTree};
+use crate::parameters::{DatedTree, Internal, Node, PyDatedTree, PyParameter};
 use rng::PyRng;
 use util::{atomic::MonotonicF64, py_call_method};
 
@@ -19,7 +19,7 @@ use util::{atomic::MonotonicF64, py_call_method};
 pub struct SubtreeLeap {
 	/// The tree to edit.
 	#[pyo3(get)]
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 	#[pyo3(get)]
 	/// The distribution to draw the height move distance from
 	distribution: Py<PyAny>,
@@ -35,7 +35,7 @@ pub struct SubtreeLeap {
 impl SubtreeLeap {
 	#[new]
 	fn new(
-		tree: Py<PyTree>,
+		tree: Py<PyDatedTree>,
 		distribution: Py<PyAny>,
 		rng: Py<PyRng>,
 		weight: f64,

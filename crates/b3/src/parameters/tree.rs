@@ -1094,21 +1094,19 @@ impl NodesIter {
 
 #[derive(Debug)]
 #[pyclass(name = "DatedTree", module = "aspartik.b3", frozen)]
-/// A phylogenetic tree
+/// A bifuracting dated phylogenetic tree which supports epoch-versioning
 ///
-/// Unlike BEAST2, where the tree is implemented as a collection of nodes
-/// pointing to each other, in `b3` `DatedTree` is a self-contained data structure
-/// which holds all of the topology and heights.  This means that nodes
-/// (`Internal` and `Leaf`) are identifiers of nodes in a given `DatedTree` object,
-/// much like indices of an array.  This means that all operations, such as
-/// getting parents of node heights, have to go through `DatedTree`'s methods.
+/// - "Dated" means that in this tree each node has a certain height and edge
+///   lengths are derived from these heights.  Thus, it is impossible to change
+///   just the edge length, node heights must be changed instead.
 ///
-/// The current implementation only supports bifurcating trees.
-pub struct PyTree {
+/// - Epoch-versioning means that the changes made to the tree can be rolled
+///   back or accepted via the `accept` and `reject` methods.
+pub struct PyDatedTree {
 	inner: Mutex<DatedTree>,
 }
 
-impl_pyparameter_common!(PyTree, DatedTree, {
+impl_pyparameter_common!(PyDatedTree, DatedTree, {
 	#[new]
 	fn new(names: PyTaxonSet, rng: Py<PyRng>) -> Result<Self> {
 		let tree = DatedTree::new(names.0, &mut rng.get().inner())?;

@@ -1,14 +1,14 @@
 use anyhow::Result;
 use pyo3::prelude::*;
 
-use crate::parameters::{PyReal, PyTree};
+use crate::parameters::{PyDatedTree, PyReal};
 
 /// Uncalibrated Yule birth-rate model
 #[derive(Debug)]
 #[pyclass(module = "aspartik.b3.priors", frozen)]
 pub struct Yule {
 	#[pyo3(get)]
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 	#[pyo3(get)]
 	birth_rate: Py<PyReal>,
 }
@@ -16,7 +16,7 @@ pub struct Yule {
 #[pymethods]
 impl Yule {
 	#[new]
-	fn new(tree: Py<PyTree>, birth_rate: Py<PyReal>) -> Self {
+	fn new(tree: Py<PyDatedTree>, birth_rate: Py<PyReal>) -> Self {
 		Self { tree, birth_rate }
 	}
 

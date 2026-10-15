@@ -3,13 +3,13 @@ use parking_lot::Mutex;
 use pyo3::prelude::*;
 
 use super::coalescent::Intervals;
-use crate::parameters::{Parameter, PyIntVector, PyRealVector, PyTree};
+use crate::parameters::{Parameter, PyDatedTree, PyIntVector, PyRealVector};
 
 #[derive(Debug)]
 #[pyclass(module = "aspartik.b3.priors", frozen)]
 pub struct BayesianSkyline {
 	#[pyo3(get)]
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 	#[pyo3(get)]
 	pop_sizes: Py<PyRealVector>,
 	#[pyo3(get)]
@@ -21,7 +21,7 @@ pub struct BayesianSkyline {
 impl BayesianSkyline {
 	#[new]
 	fn new(
-		tree: Py<PyTree>,
+		tree: Py<PyDatedTree>,
 		pop_sizes: Py<PyRealVector>,
 		group_sizes: Py<PyIntVector>,
 	) -> Result<Self> {

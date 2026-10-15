@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use rand::seq::IteratorRandom;
 
 use super::Proposal;
-use crate::parameters::{PyParameter, PyTree};
+use crate::parameters::{PyDatedTree, PyParameter};
 use rng::PyRng;
 
 /// Fixed height subtree and regraft move.
@@ -18,7 +18,7 @@ use rng::PyRng;
 #[pyclass(module = "aspartik.b3.operators", frozen)]
 pub struct FixedHeightSPR {
 	#[pyo3(get)]
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 	#[pyo3(get)]
 	rng: Py<PyRng>,
 	#[pyo3(get)]
@@ -29,7 +29,11 @@ pub struct FixedHeightSPR {
 impl FixedHeightSPR {
 	#[new]
 	#[pyo3(signature = (tree, rng, weight = 1.0))]
-	fn new(tree: Py<PyTree>, rng: Py<PyRng>, weight: f64) -> Result<Self> {
+	fn new(
+		tree: Py<PyDatedTree>,
+		rng: Py<PyRng>,
+		weight: f64,
+	) -> Result<Self> {
 		Ok(Self { tree, rng, weight })
 	}
 

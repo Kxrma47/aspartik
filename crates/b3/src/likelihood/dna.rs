@@ -7,7 +7,7 @@ use crate::{
 	Transitions,
 	calculator::{Calculator, CalculatorConfig},
 	clock::PyClock,
-	parameters::{Parameter, PyTree},
+	parameters::{Parameter, PyDatedTree},
 	substitution::Substitution,
 };
 use data::PyMsa;
@@ -21,7 +21,7 @@ pub struct DnaLikelihood {
 	substitution: Mutex<Substitution>,
 	clock: Py<PyClock>,
 	transitions: Mutex<Transitions>,
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 
 	cache: MonotonicF64,
 	last: MonotonicF64,
@@ -33,7 +33,7 @@ impl DnaLikelihood {
 	#[new]
 	fn new(
 		msa: Py<PyMsa>,
-		tree: Py<PyTree>,
+		tree: Py<PyDatedTree>,
 		substitution: Substitution,
 		clock: Py<PyClock>,
 		calculator: CalculatorConfig,

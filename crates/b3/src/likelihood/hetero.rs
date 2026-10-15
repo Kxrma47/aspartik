@@ -8,7 +8,7 @@ use crate::{
 	SkSliceBuf, Transitions,
 	calculator::{Calculator, CalculatorConfig},
 	clock::PyClock,
-	parameters::{Parameter, PyClassVector, PyTree},
+	parameters::{Parameter, PyClassVector, PyDatedTree},
 	substitution::Substitution,
 };
 use data::PyMsa;
@@ -22,7 +22,7 @@ pub struct HeteroLikelihood {
 	substitutions: Mutex<Vec<Substitution>>,
 	clocks: Vec<Py<PyClock>>,
 	transitions: Mutex<Vec<Transitions>>,
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 
 	weights: Vec<u32>,
 	#[pyo3(get)]
@@ -41,7 +41,7 @@ impl HeteroLikelihood {
 	#[new]
 	fn new(
 		msa: Py<PyMsa>,
-		tree: Py<PyTree>,
+		tree: Py<PyDatedTree>,
 		categories: Py<PyClassVector>,
 		substitutions: Vec<Substitution>,
 		clocks: Vec<Py<PyClock>>,

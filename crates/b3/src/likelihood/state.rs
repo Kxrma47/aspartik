@@ -9,7 +9,7 @@ use crate::{
 	Transitions,
 	calculator::StateCalculator,
 	clock::PyClock,
-	parameters::{Parameter, PyTree},
+	parameters::{Parameter, PyDatedTree},
 	substitution::{self, Substitution, SubstitutionModel},
 };
 use util::atomic::{MonotonicBool, MonotonicF64};
@@ -21,7 +21,7 @@ pub struct StateLikelihood {
 	substitution: Mutex<Substitution>,
 	clock: Py<PyClock>,
 	transitions: Mutex<Transitions>,
-	tree: Py<PyTree>,
+	tree: Py<PyDatedTree>,
 
 	cache: MonotonicF64,
 	last: MonotonicF64,
@@ -34,7 +34,7 @@ impl StateLikelihood {
 	fn new(
 		size: usize,
 		values: Vec<u8>,
-		tree: Py<PyTree>,
+		tree: Py<PyDatedTree>,
 		clock: Py<PyClock>,
 		substitution: Substitution,
 	) -> Result<Self> {
