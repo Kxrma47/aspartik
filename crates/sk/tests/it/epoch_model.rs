@@ -63,7 +63,17 @@ where
 					model.reject();
 				}
 
-				10.. => {
+				10..20 => {
+					let start = u.choose_index(len + 1)?;
+					let length = u.choose_index(
+						len + 1 - start,
+					)?;
+					let value = u.arbitrary::<T>()?;
+					buf[start..start + length].fill(value);
+					model[start..start + length]
+						.fill(value);
+				}
+				20.. => {
 					let index = u.choose_index(len)?;
 					let value = u.arbitrary::<T>()?;
 					buf[index] = value;
@@ -75,7 +85,7 @@ where
 
 		Ok(())
 	})
-	.size_min(64_000);
+	.size_min(2u32.pow(16));
 }
 
 #[test]

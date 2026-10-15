@@ -1,4 +1,4 @@
-use std::ops::{Deref, Index, IndexMut};
+use std::ops::{Deref, Index, IndexMut, Range};
 
 #[derive(Debug, Clone)]
 pub struct EpochBuf<T> {
@@ -65,6 +65,21 @@ impl<T> Index<usize> for EpochBuf<T> {
 impl<T> IndexMut<usize> for EpochBuf<T> {
 	fn index_mut(&mut self, index: usize) -> &mut T {
 		self.indices.push(index);
+		&mut self.values[index]
+	}
+}
+
+impl<T> Index<Range<usize>> for EpochBuf<T> {
+	type Output = [T];
+
+	fn index(&self, index: Range<usize>) -> &[T] {
+		&self.values[index]
+	}
+}
+
+impl<T> IndexMut<Range<usize>> for EpochBuf<T> {
+	fn index_mut(&mut self, index: Range<usize>) -> &mut [T] {
+		self.indices.extend(index.clone());
 		&mut self.values[index]
 	}
 }
