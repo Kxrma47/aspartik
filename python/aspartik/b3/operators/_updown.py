@@ -4,7 +4,7 @@ from math import log
 from ...distributions import Sample
 from ...rng import RNG
 from .. import Operator, Proposal, TunableOperator
-from ..parameters import Parameter, Real, Tree
+from ..parameters import DatedTree, Parameter, Real
 from ._util import sample_range
 
 
@@ -22,9 +22,9 @@ class UpDown(Operator, TunableOperator):
     accounting for rejections).
     """
 
-    up: Real | Tree
+    up: Real | DatedTree
     """The parameter to scale up."""
-    down: Real | Tree
+    down: Real | DatedTree
     """The parameter to scale down."""
     distribution: Sample[float]
     """The distribution from which to sample the scaling factor."""

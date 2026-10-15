@@ -2,7 +2,7 @@ use anyhow::Result;
 use parking_lot::{Mutex, MutexGuard};
 use pyo3::{prelude::*, types::PyType};
 
-use crate::parameters::{Parameter, PyClassVector, PyReal, Tree};
+use crate::parameters::{DatedTree, Parameter, PyClassVector, PyReal};
 use util::{
 	atomic::{MonotonicBool, MonotonicF64},
 	py_call_method,
@@ -14,7 +14,7 @@ pub struct StrictClock {
 }
 
 impl StrictClock {
-	fn update(&mut self, tree: &mut Tree) -> Result<()> {
+	fn update(&mut self, tree: &mut DatedTree) -> Result<()> {
 		if self.rate.get().inner().is_changed() {
 			self.update_rate();
 			tree.mark_all_edges_updated();
@@ -83,7 +83,7 @@ impl RelaxedClock {
 		Ok(())
 	}
 
-	fn update(&mut self, tree: &mut Tree) -> Result<()> {
+	fn update(&mut self, tree: &mut DatedTree) -> Result<()> {
 		let updated = Python::attach(|py| -> Result<bool> {
 			let dist_upd = py_call_method!(
 				py,
@@ -139,7 +139,7 @@ pub enum Clock {
 }
 
 impl Clock {
-	pub fn update(&mut self, tree: &mut Tree) -> Result<()> {
+	pub fn update(&mut self, tree: &mut DatedTree) -> Result<()> {
 		match self {
 			Self::Strict(clock) => clock.update(tree),
 			Self::Relaxed(clock) => clock.update(tree),

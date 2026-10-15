@@ -73,6 +73,6 @@ impl FixedHeightSPR {
 	}
 
 	fn parameters(&self, py: Python) -> Vec<PyParameter> {
-		vec![PyParameter::Tree(self.tree.clone_ref(py))]
+		vec![PyParameter::DatedTree(self.tree.clone_ref(py))]
 	}
 }

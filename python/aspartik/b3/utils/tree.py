@@ -11,7 +11,7 @@ from typing import TextIO
 
 from ...data import TaxonSet
 from ...rng import RNG
-from ..parameters import Tree
+from ..parameters import DatedTree
 
 
 def trees_to_newick(
@@ -23,7 +23,7 @@ def trees_to_newick(
 ):
     dest = _to_io(dest)
 
-    tree = Tree(names, RNG(4))
+    tree = DatedTree(names, RNG(4))
     df = pl.read_ipc(trace_path)
 
     for bytes in df["tree"]:

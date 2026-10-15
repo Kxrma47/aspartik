@@ -1,6 +1,6 @@
 from aspartik.b3 import Calculator, Clock
 from aspartik.b3.likelihoods import DNALikelihood
-from aspartik.b3.parameters import Real, RealVector, Tree
+from aspartik.b3.parameters import DatedTree, Real, RealVector
 from aspartik.b3.substitutions import HKY
 from aspartik.data.msa import MSA
 from aspartik.rng import RNG
@@ -9,7 +9,7 @@ from aspartik.rng import RNG
 def test_cpu(rng: RNG):
     msa = MSA.from_fasta_file("data/alignments/apes.fasta")
 
-    tree = Tree(msa.sequence_names(), rng)
+    tree = DatedTree(msa.sequence_names(), rng)
 
     likelihood = DNALikelihood(
         msa=msa,

@@ -4,7 +4,7 @@ from math import log
 from ...distributions import Sample
 from ...rng import RNG
 from .. import Operator, Proposal, TunableOperator
-from ..parameters import Parameter, Tree
+from ..parameters import DatedTree, Parameter
 from ._util import sample_range
 
 
@@ -17,7 +17,7 @@ class TreeScale(Operator, TunableOperator):
     picked depending on `factor` and `distribution`.
     """
 
-    tree: Tree
+    tree: DatedTree
     """The tree to scale."""
     distribution: Sample[float]
     """Distribution from which the scale is sampled."""

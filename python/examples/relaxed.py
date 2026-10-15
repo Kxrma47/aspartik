@@ -9,7 +9,7 @@ from aspartik.b3.operators import (
     ScaleReal,
     SubtreeLeap,
 )
-from aspartik.b3.parameters import ClassVector, Real, RealVector, Root, Tree
+from aspartik.b3.parameters import ClassVector, DatedTree, Real, RealVector, Root
 from aspartik.b3.priors import Bound, Distribution, Monophyly, SymmetricDirichlet
 from aspartik.b3.substitutions import GTR
 from aspartik.b3.utils import run_from_cmdline
@@ -20,7 +20,7 @@ from aspartik.rng import RNG
 msa = MSA.from_fasta_file("data/alignments/electricFish.fasta")
 
 rng = RNG(4)
-tree = Tree(msa.sequence_names(), rng)
+tree = DatedTree(msa.sequence_names(), rng)
 tree.accept()
 leaves = list(tree.leaves())
 

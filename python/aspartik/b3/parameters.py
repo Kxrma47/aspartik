@@ -3,13 +3,13 @@ from typing import Protocol, runtime_checkable
 
 from .._aspartik_rust_impl._b3_rust_impl import (
     ClassVector as ClassVector,
+    DatedTree as DatedTree,
     Internal as Internal,
     IntVector as IntVector,
     Leaf as Leaf,
     Proposal as Proposal,
     Real as Real,
     RealVector as RealVector,
-    Tree as Tree,
 )
 
 type Node = Leaf | Internal
@@ -19,7 +19,7 @@ Used for type hints in places where there isn't a need to distinguish between
 internal and leaf nodes.
 """
 
-type Parameter = ClassVector | Real | RealVector | IntVector | Tree
+type Parameter = ClassVector | Real | RealVector | IntVector | DatedTree
 
 
 @runtime_checkable
@@ -34,7 +34,7 @@ class Scalable(Protocol):
 
 @dataclass(slots=True)
 class Root:
-    tree: Tree
+    tree: DatedTree
 
     def __float__(self):
         return self.tree.height_of(self.tree.root)
@@ -45,7 +45,7 @@ class Root:
 
 @dataclass(slots=True)
 class MRCA:
-    tree: Tree
+    tree: DatedTree
     nodes: list[Node]
 
     def __post_init__(self):

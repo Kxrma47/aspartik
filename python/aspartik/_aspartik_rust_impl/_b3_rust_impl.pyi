@@ -15,7 +15,7 @@ from ..data.tree import TreeBuilder as NewickTree
 from ..distributions import Continuous, Sample
 from ..rng import RNG
 
-class Tree(Scalable):
+class DatedTree(Scalable):
     def __init__(self, names: TaxonSet, rng: RNG): ...
     def set_random_topology(self, rng: RNG): ...
     def set_random_edges(self, rng: RNG): ...
@@ -70,7 +70,7 @@ class Tree(Scalable):
     def internal_heights(self) -> list[float]: ...
     def depth(self, node: Node) -> int: ...
     def mrca(self, a: Node, b: Node) -> Internal: ...
-    def robinson_foulds(self, other: Tree) -> int: ...
+    def robinson_foulds(self, other: DatedTree) -> int: ...
     # Parameter
     def accept(self) -> None: ...
     def reject(self) -> None: ...
@@ -103,7 +103,7 @@ class DNALikelihood:
         msa: MSA,
         substitution: Substitution4,
         clock: Clock,
-        tree: Tree,
+        tree: DatedTree,
         calculator: Calculator,
     ): ...
     def likelihood(self) -> float: ...
@@ -118,7 +118,7 @@ class GammaLikelihood:
         num_categories: int,
         alpha: Real,
         clock: Clock,
-        tree: Tree,
+        tree: DatedTree,
         calculator: Calculator,
     ): ...
     def likelihood(self) -> float: ...
@@ -129,7 +129,7 @@ class HeteroLikelihood:
     def __init__(
         self,
         msa: MSA,
-        tree: Tree,
+        tree: DatedTree,
         categories: ClassVector,
         substitutions: list[Substitution4],
         clocks: list[Clock],
@@ -189,7 +189,7 @@ class MCMC:
 
 @dataclass(slots=True)
 class SubtreeLeap(Operator, TunableOperator):
-    tree: Tree
+    tree: DatedTree
     distribution: Sample[float]
     rng: RNG
     weight: float = 1
@@ -202,7 +202,7 @@ class SubtreeLeap(Operator, TunableOperator):
 
 @dataclass(slots=True)
 class FixedHeightSPR(Operator):
-    tree: Tree
+    tree: DatedTree
     rng: RNG
     weight: float = 1
 
@@ -232,7 +232,7 @@ class SymmetricDirichlet(Prior):
 
 @dataclass
 class ConstantPopulation(Prior):
-    tree: Tree
+    tree: DatedTree
     population: Real
 
     # Prior
@@ -241,7 +241,7 @@ class ConstantPopulation(Prior):
 
 @dataclass
 class ExponentialGrowth(Prior):
-    tree: Tree
+    tree: DatedTree
     population: Real
     growth_rate: Real
 
@@ -251,7 +251,7 @@ class ExponentialGrowth(Prior):
 
 @dataclass
 class BayesianSkyline(Prior):
-    tree: Tree
+    tree: DatedTree
     population_sizes: RealVector
     group_sizes: IntVector
 
@@ -261,7 +261,7 @@ class BayesianSkyline(Prior):
 
 @dataclass
 class BirthDeathSkyline(Prior):
-    tree: Tree
+    tree: DatedTree
     become_uninfectious_rate: Real
     reproductive_number: RealVector
     sampling_proportion: Real
@@ -274,7 +274,7 @@ class BirthDeathSkyline(Prior):
 
 @dataclass
 class Monophyly(Prior):
-    tree: Tree
+    tree: DatedTree
     leaves: Sequence[Leaf]
     penalty: float = -1000.0
 
@@ -284,7 +284,7 @@ class Monophyly(Prior):
 
 @dataclass
 class Yule(Prior):
-    tree: Tree
+    tree: DatedTree
     birth_rate: Real
 
     # Prior

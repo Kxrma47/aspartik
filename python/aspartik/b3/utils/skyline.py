@@ -10,7 +10,7 @@ try:
 except ModuleNotFoundError as e:
     raise_import(e)
 
-from aspartik.b3.parameters import Tree
+from aspartik.b3.parameters import DatedTree
 from aspartik.rng import RNG
 
 Mode = Literal["traces", "hpd"]
@@ -31,7 +31,7 @@ def plot_skyline_coalescent(
     _validate_num_samples(values, cred_mass)
 
     rng = RNG(4)
-    tree = Tree(sequence_names, rng)
+    tree = DatedTree(sequence_names, rng)
 
     num_groups = group_sizes.arr.len()[0]
     num_heights = len(tree.internal_heights())

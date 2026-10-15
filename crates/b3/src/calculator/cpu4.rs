@@ -5,7 +5,7 @@ use anyhow::Result;
 use bytemuck::{cast_slice, checked::cast_slice_mut};
 use fork_union::{SyncConstPtr, SyncMutPtr, ThreadPool, count_logical_cores};
 
-use crate::{Transitions, calculator::Calculator, parameters::Tree};
+use crate::{Transitions, calculator::Calculator, parameters::DatedTree};
 use buffer::Buffer;
 use sk::EditBuf;
 
@@ -38,7 +38,7 @@ pub struct Cpu4Calculator {
 impl Calculator<f64> for Cpu4Calculator {
 	fn propose(
 		&mut self,
-		tree: &Tree,
+		tree: &DatedTree,
 		transitions: &Transitions,
 	) -> Result<()> {
 		let frequencies =

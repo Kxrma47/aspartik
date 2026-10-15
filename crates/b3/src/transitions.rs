@@ -1,7 +1,9 @@
 use anyhow::Result;
 use linalg::MatrixMut;
 
-use crate::{SkSliceBuf, parameters::Tree, substitution::SubstitutionModel};
+use crate::{
+	SkSliceBuf, parameters::DatedTree, substitution::SubstitutionModel,
+};
 
 pub struct Transitions {
 	size: usize,
@@ -23,7 +25,7 @@ impl Transitions {
 
 	pub fn update(
 		&mut self,
-		tree: &mut Tree,
+		tree: &mut DatedTree,
 		substitution: &mut dyn SubstitutionModel,
 		clock_rate: impl Fn(u32) -> f64,
 	) -> Result<()> {

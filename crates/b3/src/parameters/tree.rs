@@ -27,7 +27,7 @@ use sk::EpochBuf;
 use util::{atomic::MonotonicU32, py_bail};
 
 #[derive(Debug, Clone)]
-pub struct Tree {
+pub struct DatedTree {
 	names: TaxonSet,
 
 	num_nodes: u32,
@@ -48,7 +48,7 @@ pub struct Tree {
 	updated_propagatons: Bitmap,
 }
 
-impl Tree {
+impl DatedTree {
 	pub fn new(names: TaxonSet, rng: &mut Rng) -> Result<Self> {
 		ensure!(
 			names.len() >= 2,
@@ -915,7 +915,7 @@ impl Tree {
 }
 
 struct Postorder<'a> {
-	tree: &'a Tree,
+	tree: &'a DatedTree,
 	stack: Vec<(Node, bool)>,
 }
 
@@ -943,7 +943,7 @@ impl Iterator for Postorder<'_> {
 }
 
 struct Preorder<'a> {
-	tree: &'a Tree,
+	tree: &'a DatedTree,
 	stack: Vec<Node>,
 }
 
@@ -963,7 +963,7 @@ impl Iterator for Preorder<'_> {
 	}
 }
 
-impl Parameter for Tree {
+impl Parameter for DatedTree {
 	fn is_changed(&self) -> bool {
 		self.updated_edges.is_any_on()
 	}
@@ -1093,25 +1093,25 @@ impl NodesIter {
 }
 
 #[derive(Debug)]
-#[pyclass(name = "Tree", module = "aspartik.b3", frozen)]
+#[pyclass(name = "DatedTree", module = "aspartik.b3", frozen)]
 /// A phylogenetic tree
 ///
 /// Unlike BEAST2, where the tree is implemented as a collection of nodes
-/// pointing to each other, in `b3` `Tree` is a self-contained data structure
+/// pointing to each other, in `b3` `DatedTree` is a self-contained data structure
 /// which holds all of the topology and heights.  This means that nodes
-/// (`Internal` and `Leaf`) are identifiers of nodes in a given `Tree` object,
+/// (`Internal` and `Leaf`) are identifiers of nodes in a given `DatedTree` object,
 /// much like indices of an array.  This means that all operations, such as
-/// getting parents of node heights, have to go through `Tree`'s methods.
+/// getting parents of node heights, have to go through `DatedTree`'s methods.
 ///
 /// The current implementation only supports bifurcating trees.
 pub struct PyTree {
-	inner: Mutex<Tree>,
+	inner: Mutex<DatedTree>,
 }
 
-impl_pyparameter_common!(PyTree, Tree, {
+impl_pyparameter_common!(PyTree, DatedTree, {
 	#[new]
 	fn new(names: PyTaxonSet, rng: Py<PyRng>) -> Result<Self> {
-		let tree = Tree::new(names.0, &mut rng.get().inner())?;
+		let tree = DatedTree::new(names.0, &mut rng.get().inner())?;
 		let tree = Self {
 			inner: Mutex::new(tree),
 		};
@@ -1184,7 +1184,7 @@ impl_pyparameter_common!(PyTree, Tree, {
 	/// Makes `node` the root of the tree
 	///
 	/// As the topology can be temporarily broken while the edges are being
-	/// swapped, `Tree` can't automatically figure out which node is the
+	/// swapped, `DatedTree` can't automatically figure out which node is the
 	/// root one.  So, operators which change the root of the tree have to
 	/// update it manually.
 	fn set_root(&self, node: Internal) -> Result<()> {

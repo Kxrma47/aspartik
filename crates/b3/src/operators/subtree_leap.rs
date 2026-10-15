@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use rand::seq::IndexedRandom;
 
 use super::Proposal;
-use crate::parameters::{Internal, Node, PyParameter, PyTree, Tree};
+use crate::parameters::{DatedTree, Internal, Node, PyParameter, PyTree};
 use rng::PyRng;
 use util::{atomic::MonotonicF64, py_call_method};
 
@@ -140,12 +140,12 @@ impl SubtreeLeap {
 	}
 
 	fn parameters(&self, py: Python) -> Vec<PyParameter> {
-		vec![PyParameter::Tree(self.tree.clone_ref(py))]
+		vec![PyParameter::DatedTree(self.tree.clone_ref(py))]
 	}
 }
 
 fn walk_tree(
-	tree: &Tree,
+	tree: &DatedTree,
 	node: Node,
 	sibling: Node,
 	parent: Internal,
@@ -201,7 +201,7 @@ fn walk_tree(
 
 fn intersections(
 	destinations: &mut Vec<(Node, f64)>,
-	tree: &Tree,
+	tree: &DatedTree,
 	node: Node,
 	height: f64,
 ) {

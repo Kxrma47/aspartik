@@ -5,7 +5,7 @@ use pyo3::{prelude::*, types::PyType};
 
 use std::borrow::BorrowMut;
 
-use crate::{Transitions, parameters::Tree};
+use crate::{Transitions, parameters::DatedTree};
 
 mod cpu4;
 mod cuda;
@@ -40,7 +40,7 @@ pub trait Calculator<F> {
 	/// Calculate tree likelihood
 	fn propose(
 		&mut self,
-		tree: &Tree,
+		tree: &DatedTree,
 		transitions: &Transitions,
 	) -> Result<()>;
 

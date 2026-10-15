@@ -2,7 +2,7 @@ use anyhow::{Result, ensure};
 use parking_lot::Mutex;
 use pyo3::prelude::*;
 
-use crate::parameters::{PyReal, PyRealVector, PyTree, Tree};
+use crate::parameters::{DatedTree, PyReal, PyRealVector, PyTree};
 
 #[derive(Debug)]
 struct Scratch {
@@ -92,7 +92,11 @@ fn mul_scale(probability: &mut f64, scale: &mut i32, mul: f64) {
 	}
 }
 
-fn update_lineage_counts(heights: &[f64], tree: &Tree, counts: &mut [i64]) {
+fn update_lineage_counts(
+	heights: &[f64],
+	tree: &DatedTree,
+	counts: &mut [i64],
+) {
 	counts.fill(1);
 	for internal in tree.internals() {
 		let h = tree.height_of(*internal);

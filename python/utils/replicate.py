@@ -2,7 +2,7 @@ import polars as pl
 
 from aspartik.b3 import Prior
 from aspartik.b3.likelihoods import Likelihood
-from aspartik.b3.parameters import IntVector, Parameter, Real, RealVector, Tree
+from aspartik.b3.parameters import DatedTree, IntVector, Parameter, Real, RealVector
 from aspartik.data.tree import TreeBuilder as NewickTree
 
 
@@ -17,7 +17,7 @@ def replicate_b3(
     for row in trace.iter_rows(named=True):
         for name, param in parameters.items():
             match param:
-                case Tree():
+                case DatedTree():
                     param.load(row[name])
                 case Real():
                     param.set(row[name])
@@ -41,7 +41,7 @@ def replicate_beast1(
     for row, tree in zip(log.iter_rows(named=True), trees):
         for name, param in parameters.items():
             match param:
-                case Tree():
+                case DatedTree():
                     print(param.to_newick())
                     print(NewickTree.from_newick(tree))
                     param.load_newick(NewickTree.from_newick(tree))
@@ -75,7 +75,7 @@ def replicate_beast2(
         for row in log.iter_rows(named=True):
             for name, param in parameters.items():
                 match param:
-                    case Tree():
+                    case DatedTree():
                         tree = next(trees) if trees is not None else row[name]
                         param.load_newick(NewickTree.from_newick(tree))
                     case Real():

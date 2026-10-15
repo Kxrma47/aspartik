@@ -15,7 +15,7 @@ from aspartik.b3.operators import (
     ScaleRealVector,
     SubtreeLeap,
 )
-from aspartik.b3.parameters import IntVector, Real, RealVector, Tree
+from aspartik.b3.parameters import DatedTree, IntVector, Real, RealVector
 from aspartik.b3.priors import (
     BayesianSkyline,
     Bound,
@@ -33,7 +33,7 @@ from aspartik.rng import RNG
 msa = MSA.from_fasta_file("data/alignments/hcv.fasta")
 
 rng = RNG(4)
-tree = Tree(msa.sequence_names(), rng)
+tree = DatedTree(msa.sequence_names(), rng)
 tree.set_random_heights(0.1, rng)
 tree.accept()
 

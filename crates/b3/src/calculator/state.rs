@@ -3,7 +3,7 @@
 use anyhow::Result;
 use parking_lot::MutexGuard;
 
-use crate::{Transitions, parameters::Tree};
+use crate::{Transitions, parameters::DatedTree};
 use buffer::Buffer;
 use sk::EditBuf;
 
@@ -24,7 +24,7 @@ pub struct StateCalculator {
 impl StateCalculator {
 	pub fn likelihood(
 		&mut self,
-		mut tree: MutexGuard<Tree>,
+		mut tree: MutexGuard<DatedTree>,
 		transitions: &Transitions,
 	) -> Result<f64> {
 		let (internals, children) = tree.partials_lists();

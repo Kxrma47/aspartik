@@ -7,7 +7,7 @@ from .._aspartik_rust_impl._b3_rust_impl import (
     TraceWriter as TraceWriter,
 )
 from . import MCMC, Callback
-from .parameters import Tree
+from .parameters import DatedTree
 
 
 @dataclass(slots=True)
@@ -60,7 +60,7 @@ class TreeValidator(Callback):
     purposes when developing new operators.
     """
 
-    trees: tuple[Tree]
+    trees: tuple[DatedTree]
     """An iterable of trees to validate"""
     every: int = 1
 

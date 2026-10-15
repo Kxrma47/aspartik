@@ -15,7 +15,7 @@ pub use data::tree::{Internal, Leaf, Node};
 pub use int_vector::{IntVector, PyIntVector};
 pub use real::{PyReal, Real};
 pub use real_vector::{PyRealVector, RealVector};
-pub use tree::{PyTree, Tree};
+pub use tree::{DatedTree, PyTree};
 
 pub trait Parameter {
 	fn is_changed(&self) -> bool;
@@ -75,7 +75,7 @@ pub enum PyParameter {
 	Real(Py<PyReal>),
 	RealVector(Py<PyRealVector>),
 	IntVector(Py<PyIntVector>),
-	Tree(Py<PyTree>),
+	DatedTree(Py<PyTree>),
 }
 
 impl PyParameter {
@@ -85,7 +85,7 @@ impl PyParameter {
 			Self::Real(p) => p.clone_ref(py).into(),
 			Self::RealVector(p) => p.clone_ref(py).into(),
 			Self::IntVector(p) => p.clone_ref(py).into(),
-			Self::Tree(p) => p.clone_ref(py).into(),
+			Self::DatedTree(p) => p.clone_ref(py).into(),
 		}
 	}
 
@@ -95,7 +95,7 @@ impl PyParameter {
 			Self::Real(p) => p.as_ptr(),
 			Self::RealVector(p) => p.as_ptr(),
 			Self::IntVector(p) => p.as_ptr(),
-			Self::Tree(p) => p.as_ptr(),
+			Self::DatedTree(p) => p.as_ptr(),
 		}
 	}
 
@@ -121,7 +121,7 @@ impl PyParameter {
 					m as &mut dyn Parameter
 				})
 			}
-			Self::Tree(p) => {
+			Self::DatedTree(p) => {
 				MutexGuard::map(p.get().inner(), |m| {
 					m as &mut dyn Parameter
 				})

@@ -4,7 +4,7 @@ from math import log
 from ...distributions import Sample
 from ...rng import RNG
 from .. import Operator, Proposal, TunableOperator
-from ..parameters import Parameter, Tree
+from ..parameters import DatedTree, Parameter
 from ._util import sample_range
 
 
@@ -18,7 +18,7 @@ class RootSlide(Operator, TunableOperator):
     the operation gets rejected.
     """
 
-    tree: Tree
+    tree: DatedTree
     """The tree to edit."""
     distribution: Sample[float]
     """The distribution to draw the height move distance from"""

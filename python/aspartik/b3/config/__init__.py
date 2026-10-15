@@ -30,7 +30,7 @@ from aspartik.b3.operators import (
     TreeScale,
     UpDown,
 )
-from aspartik.b3.parameters import IntVector, Real, RealVector, Tree
+from aspartik.b3.parameters import DatedTree, IntVector, Real, RealVector
 from aspartik.b3.priors import (
     BayesianSkyline,
     BirthDeathSkyline,
@@ -662,7 +662,7 @@ def _b3_config(c: MCMCConfig):
     parameters, operators, priors = [], [], []
     items = {}
 
-    tree = Tree(c.msa.sequence_names(), rng)
+    tree = DatedTree(c.msa.sequence_names(), rng)
     if c.heights:
         for leaf, height in zip(tree.leaves(), c.heights):
             tree.set_height(leaf, height)

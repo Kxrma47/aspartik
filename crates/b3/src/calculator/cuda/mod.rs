@@ -11,7 +11,7 @@ use cudarc::{
 use std::{env, sync::Arc};
 
 use super::Calculator;
-use crate::{Transitions, parameters::Tree};
+use crate::{Transitions, parameters::DatedTree};
 use sk::EditBuf;
 
 type Row = [f64; 4];
@@ -74,7 +74,7 @@ pub struct CudaCalculator {
 impl Calculator<f64> for CudaCalculator {
 	fn propose(
 		&mut self,
-		tree: &Tree,
+		tree: &DatedTree,
 		transitions: &Transitions,
 	) -> Result<()> {
 		let frequencies =

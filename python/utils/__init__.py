@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
 from aspartik.b3 import Operator, Proposal
-from aspartik.b3.parameters import Tree
+from aspartik.b3.parameters import DatedTree
 from aspartik.data import TaxonSet
 from aspartik.data.msa import MSA
 from aspartik.rng import RNG
@@ -17,9 +17,9 @@ def random_integer(lower: int, upper: int, num: int = 100) -> list[int]:
     return [rng.random_int(lower, upper) for _ in range(num)]
 
 
-def check_tree_operator(factory: Callable[[Tree], Operator]) -> None:
+def check_tree_operator(factory: Callable[[DatedTree], Operator]) -> None:
     rng = RNG(4)
-    tree = Tree(TaxonSet.ranged_ints(100), rng)
+    tree = DatedTree(TaxonSet.ranged_ints(100), rng)
 
     operator = factory(tree)
 
@@ -35,7 +35,7 @@ def check_tree_operator(factory: Callable[[Tree], Operator]) -> None:
 
 def random_tree(rng, lower: int, upper: int):
     len = rng.random_int(lower, upper)
-    return Tree(TaxonSet.ranged_ints(len), rng)
+    return DatedTree(TaxonSet.ranged_ints(len), rng)
 
 
 def random_trees(lower: int, upper: int, num: int = 1000):

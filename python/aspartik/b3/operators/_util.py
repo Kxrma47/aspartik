@@ -1,7 +1,7 @@
 from math import exp, inf, isfinite
 
 from ...rng import RNG
-from ..parameters import Internal, Node, Tree
+from ..parameters import DatedTree, Internal, Node
 
 
 # x must be in [0, inf)
@@ -35,7 +35,7 @@ def sample_range(low: float, high: float, distribution, rng: RNG) -> int | float
     return new_point
 
 
-def family(tree: Tree, rng: RNG) -> tuple[Node, Node, Internal, Internal | None]:
+def family(tree: DatedTree, rng: RNG) -> tuple[Node, Node, Internal, Internal | None]:
     root = tree.root
 
     node = tree.random_node(rng)

@@ -3,7 +3,7 @@ use bytemuck::cast_vec;
 use parking_lot::Mutex;
 use pyo3::prelude::*;
 
-use crate::parameters::{Node, PyReal, PyTree, Tree};
+use crate::parameters::{DatedTree, Node, PyReal, PyTree};
 
 #[derive(Debug)]
 pub struct Intervals {
@@ -12,7 +12,7 @@ pub struct Intervals {
 }
 
 impl Intervals {
-	pub fn new(tree: &Tree) -> Mutex<Self> {
+	pub fn new(tree: &DatedTree) -> Mutex<Self> {
 		let num_nodes = tree.num_nodes() as usize;
 		let state = Vec::<(Node, f64)>::with_capacity(num_nodes);
 		let mut out = Self {
@@ -25,7 +25,7 @@ impl Intervals {
 	}
 
 	// Rebuilds `nodes` and `heights` from scratch
-	pub fn rebuild(&mut self, tree: &Tree) {
+	pub fn rebuild(&mut self, tree: &DatedTree) {
 		self.state.clear();
 
 		for node in tree.nodes() {
@@ -37,7 +37,7 @@ impl Intervals {
 			.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
 	}
 
-	pub fn update(&mut self, tree: &Tree) {
+	pub fn update(&mut self, tree: &DatedTree) {
 		let changed = tree.changed_height_nodes();
 		if changed.len() > 5 {
 			self.rebuild(tree);
@@ -90,7 +90,7 @@ impl Intervals {
 
 fn calculate(
 	intervals: &Intervals,
-	tree: &Tree,
+	tree: &DatedTree,
 	population_size_at: impl Fn(f64) -> f64,
 	integral: impl Fn(f64, f64) -> f64,
 ) -> f64 {

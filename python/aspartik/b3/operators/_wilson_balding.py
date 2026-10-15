@@ -3,7 +3,7 @@ from math import log
 
 from ...rng import RNG
 from .. import Operator, Proposal
-from ..parameters import Parameter, Tree
+from ..parameters import DatedTree, Parameter
 
 
 @dataclass(slots=True)
@@ -16,7 +16,7 @@ class WilsonBalding(Operator):
     [paper]: https://doi.org/10.1093/genetics/161.3.1307
     """
 
-    tree: Tree
+    tree: DatedTree
     rng: RNG
     weight: float = 1
 

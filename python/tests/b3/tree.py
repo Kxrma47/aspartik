@@ -4,7 +4,7 @@ from utils import random_msas, random_trees
 import itertools
 
 from aspartik.b3.config import MCMCConfig
-from aspartik.b3.parameters import Tree
+from aspartik.b3.parameters import DatedTree
 from aspartik.data import TaxonSet
 from aspartik.data.msa import MSA
 from aspartik.data.tree import TreeBuilder as NewickTree
@@ -12,7 +12,7 @@ from aspartik.rng import RNG
 
 
 def test_other_child(rng):
-    tree = Tree(TaxonSet(["1", "2"]), rng)
+    tree = DatedTree(TaxonSet(["1", "2"]), rng)
 
     n1 = tree.leaf_by_name("1")
     n2 = tree.leaf_by_name("2")
@@ -28,7 +28,7 @@ def test_other_child(rng):
 
 
 def test_total_length(rng):
-    tree = Tree(TaxonSet(["1", "2"]), rng)
+    tree = DatedTree(TaxonSet(["1", "2"]), rng)
     tree.set_height(tree.root, 10)
 
     assert tree.total_length() == 20
@@ -36,11 +36,11 @@ def test_total_length(rng):
 
 def test_names(rng):
     names = TaxonSet(["1", "2"])
-    tree = Tree(names, rng)
+    tree = DatedTree(names, rng)
     assert tree.names == names
 
     names = TaxonSet([str(rng.random_int(0, 2**32)) for _ in range(1000)])
-    tree = Tree(names, rng)
+    tree = DatedTree(names, rng)
     assert tree.names == names
 
 
@@ -75,10 +75,10 @@ def test_dump_load_mcmc(msa: MSA, rng: RNG):
     ).b3_mcmc()
     mcmc.run(100)
     tree = mcmc.parameters[2]
-    assert isinstance(tree, Tree)
+    assert isinstance(tree, DatedTree)
     tree_state = tree.dump()
 
-    deserialized_tree = Tree(msa.sequence_names(), rng)
+    deserialized_tree = DatedTree(msa.sequence_names(), rng)
     deserialized_tree.load(tree_state)
 
     assert tree.to_newick() == deserialized_tree.to_newick()
@@ -87,7 +87,7 @@ def test_dump_load_mcmc(msa: MSA, rng: RNG):
 def test_ola(rng: RNG):
     # Paper: https://arxiv.org/abs/2509.16405v1
     # figure 1
-    tree = Tree(TaxonSet.ranged_ints(4), rng)
+    tree = DatedTree(TaxonSet.ranged_ints(4), rng)
 
     newick = NewickTree.from_newick("(((0:0,1:0):0,3:0):0,2:0);")
     tree.load_newick(newick)
@@ -102,7 +102,7 @@ def test_ola(rng: RNG):
     assert tree.ola() == [0, 1, -2]
 
     # figure 2
-    tree = Tree(TaxonSet.ranged_ints(6), rng)
+    tree = DatedTree(TaxonSet.ranged_ints(6), rng)
 
     newick = NewickTree.from_newick("(((0:0,(1:0,5:0):0):0,(3:0,4:0):0):0,2:0);")
     tree.load_newick(newick)
@@ -113,7 +113,7 @@ def test_ola(rng: RNG):
     assert tree.ola() == [0, -1, 2, 3, 3]
 
     # Paper: https://doi.org/10.1007/s11538-026-01611-9
-    tree = Tree(TaxonSet.ranged_ints(5), rng)
+    tree = DatedTree(TaxonSet.ranged_ints(5), rng)
 
     # figure 1
     newick = NewickTree.from_newick("((0:0,(2:0,3:0):0):0,(1:0,4:0):0);")
@@ -148,7 +148,7 @@ def test_depth(rng: RNG):
         "spa": 8,
         "yli": 2,
     }
-    tree = Tree(TaxonSet(list(values.keys())), rng)
+    tree = DatedTree(TaxonSet(list(values.keys())), rng)
     tree.load_newick(
         NewickTree.from_newick(
             "((yli:1,(((lel:1,(cal:1,ctr:1):1):1,pst:1):1,(pgu:1,dha:1):1):1):1,(((kla:1,ago:1):1,(skl:1,kwa:1):1):1,(cgl:1,(sca:1,(sba:1,(((sce:1,spa:1):1,smi:1):1,sku:1):1):1):1):1):1):0;"
@@ -162,12 +162,12 @@ def test_depth(rng: RNG):
 
 
 def test_depth_root(rng: RNG):
-    tree = Tree(TaxonSet.ranged_ints(5), rng)
+    tree = DatedTree(TaxonSet.ranged_ints(5), rng)
     assert tree.depth(tree.root) == 0
 
 
 def test_mrca(rng: RNG):
-    tree = Tree(TaxonSet.ranged_ints(4), rng)
+    tree = DatedTree(TaxonSet.ranged_ints(4), rng)
     newick = NewickTree.from_newick("((0:0,1:0):0,(2:0,3:0):0);")
     tree.load_newick(newick)
 

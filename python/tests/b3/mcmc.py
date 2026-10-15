@@ -4,7 +4,7 @@ from aspartik.b3 import MCMC, STATE_PROTOCOL_VERSION, Calculator, Clock
 from aspartik.b3.config import MCMCConfig
 from aspartik.b3.likelihoods import DNALikelihood
 from aspartik.b3.operators import ScaleReal, TreeScale
-from aspartik.b3.parameters import Real, Tree
+from aspartik.b3.parameters import DatedTree, Real
 from aspartik.b3.priors import Bound
 from aspartik.b3.substitutions import K80
 from aspartik.data.msa import MSA
@@ -16,7 +16,7 @@ def test_mcmc():
     msa = MSA.from_fasta_file("data/alignments/apes.fasta")
 
     rng = RNG(4)
-    tree = Tree(msa.sequence_names(), rng)
+    tree = DatedTree(msa.sequence_names(), rng)
 
     a = Real(2.0)
 
@@ -73,8 +73,8 @@ def test_dump_restore():
     mcmc1.run(10_000)
 
     tree0, tree1 = mcmc0.parameters[4], mcmc1.parameters[4]
-    assert isinstance(tree0, Tree)
-    assert isinstance(tree1, Tree)
+    assert isinstance(tree0, DatedTree)
+    assert isinstance(tree1, DatedTree)
     assert tree0.to_newick() == tree1.to_newick()
     assert mcmc0.prior == mcmc1.prior
 

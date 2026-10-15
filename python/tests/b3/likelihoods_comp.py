@@ -2,7 +2,7 @@ from utils.replicate import replicate_b3
 
 from aspartik.b3 import Calculator, Clock
 from aspartik.b3.likelihoods import DNALikelihood, Likelihood
-from aspartik.b3.parameters import Real, RealVector, Tree
+from aspartik.b3.parameters import DatedTree, Real, RealVector
 from aspartik.b3.substitutions import GTR
 from aspartik.data.msa import MSA
 from aspartik.rng import RNG
@@ -15,7 +15,7 @@ def test_replicate_likelihood():
 
     msa = MSA.from_fasta_file("data/alignments/H1N1pdm_2009.fasta")
 
-    tree = Tree(msa.sequence_names(), rng)
+    tree = DatedTree(msa.sequence_names(), rng)
 
     clock_rate = Real(1.0)
     frequencies = RealVector.repeat(0.25, 4)

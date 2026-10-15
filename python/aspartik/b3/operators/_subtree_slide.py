@@ -4,7 +4,7 @@ from math import log
 from ...distributions import Sample
 from ...rng import RNG
 from .. import Operator, Proposal
-from ..parameters import Internal, Node, Parameter, Tree
+from ..parameters import DatedTree, Internal, Node, Parameter
 from ._util import assert_two_internals, family
 
 
@@ -17,7 +17,7 @@ class SubtreeSlide(Operator):
     or below its children.
     """
 
-    tree: Tree
+    tree: DatedTree
     """The tree to edit."""
     distribution: Sample[float]
     """
@@ -107,7 +107,7 @@ class SubtreeSlide(Operator):
         return self._factor
 
 
-def intersections(tree: Tree, node: Node, height: float) -> list[Node]:
+def intersections(tree: DatedTree, node: Node, height: float) -> list[Node]:
     if tree.height_of(node) < height:
         return [node]
 

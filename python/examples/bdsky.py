@@ -15,7 +15,7 @@ from aspartik.b3.operators import (
     ScaleRealVector,
     SubtreeLeap,
 )
-from aspartik.b3.parameters import Real, RealVector, Tree
+from aspartik.b3.parameters import DatedTree, Real, RealVector
 from aspartik.b3.priors import (
     BirthDeathSkyline,
     Bound,
@@ -32,7 +32,7 @@ from aspartik.rng import RNG
 msa = MSA.from_fasta_file("data/alignments/hcv.fasta")
 
 rng = RNG(4)
-tree = Tree(msa.sequence_names(), rng)
+tree = DatedTree(msa.sequence_names(), rng)
 tree.set_random_heights(10, rng)
 
 become_uninfectious_rate = Real(1)

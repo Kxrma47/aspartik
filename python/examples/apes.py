@@ -20,7 +20,7 @@ from aspartik.b3.operators import (
     SubtreeSlide,
     TreeScale,
 )
-from aspartik.b3.parameters import Real, RealVector, Tree
+from aspartik.b3.parameters import DatedTree, Real, RealVector
 from aspartik.b3.priors import ConstantPopulation, Distribution
 from aspartik.b3.substitutions import HKY
 from aspartik.b3.utils import run_from_cmdline
@@ -31,7 +31,7 @@ from aspartik.rng import RNG
 msa = MSA.from_fasta_file("data/alignments/apes.fasta")
 
 rng = RNG(4)
-tree = Tree(msa.sequence_names(), rng)
+tree = DatedTree(msa.sequence_names(), rng)
 
 kappa = Real(2.0)
 population_size = Real(2.0)

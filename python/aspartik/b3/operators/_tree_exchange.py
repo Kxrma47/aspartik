@@ -3,7 +3,7 @@ from math import log
 
 from ...rng import RNG
 from .. import Operator, Proposal
-from ..parameters import Internal, Parameter, Tree
+from ..parameters import DatedTree, Internal, Parameter
 from ._util import assert_two_internals
 
 
@@ -18,7 +18,7 @@ class NarrowExchange(Operator):
     `uncle`.
     """
 
-    tree: Tree
+    tree: DatedTree
     rng: RNG
     weight: float = 1
 
@@ -81,7 +81,7 @@ class WideExchange(Operator):
     its child) the operator aborts with `Proposal.Abort`.
     """
 
-    tree: Tree
+    tree: DatedTree
     rng: RNG
     weight: float = 1
 
@@ -130,7 +130,7 @@ class BeastNarrowExchange(Operator):
     Narrow exchange operator compatible with BEASTs `narrowExchange`
     """
 
-    tree: Tree
+    tree: DatedTree
     rng: RNG
     weight: float = 1
 
@@ -165,7 +165,7 @@ class BeastWideExchange(Operator):
     Wide exchange operator compatible with BEASTs `wideExchange`
     """
 
-    tree: Tree
+    tree: DatedTree
     rng: RNG
     weight: float = 1
 

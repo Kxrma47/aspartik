@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from ...rng import RNG
 from .. import Operator, Proposal
-from ..parameters import Parameter, Tree
+from ..parameters import DatedTree, Parameter
 from ._util import assert_two_internals
 
 
@@ -15,7 +15,7 @@ class NodeSlide(Operator):
     node cannot slide above its parent).
     """
 
-    tree: Tree
+    tree: DatedTree
     """The tree to edit."""
     rng: RNG
     weight: float = 1
