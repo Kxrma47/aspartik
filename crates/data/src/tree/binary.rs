@@ -404,71 +404,9 @@ impl BinaryTree {
 		ola
 	}
 
-	pub fn preorder(&self) -> impl Iterator<Item = Node> + '_ {
-		Preorder {
-			tree: self,
-			stack: vec![self.root().into()],
-		}
-	}
-
-	pub fn postorder(&self) -> impl Iterator<Item = Node> + '_ {
-		Postorder {
-			tree: self,
-			stack: vec![(self.root().into(), false)],
-		}
-	}
-
 	/// Returns `true` if the children have the same names and ids
 	pub fn identical_children(&self, other: &BinaryTree) -> bool {
 		self.taxa == other.taxa
-	}
-}
-
-struct Preorder<'a> {
-	tree: &'a BinaryTree,
-	stack: Vec<Node>,
-}
-
-impl Iterator for Preorder<'_> {
-	type Item = Node;
-
-	fn next(&mut self) -> Option<Self::Item> {
-		let node = self.stack.pop()?;
-
-		if let Some(internal) = self.tree.as_internal(node) {
-			let [left, right] = self.tree.children_of(internal);
-			self.stack.push(right);
-			self.stack.push(left);
-		}
-
-		Some(node)
-	}
-}
-
-struct Postorder<'a> {
-	tree: &'a BinaryTree,
-	stack: Vec<(Node, bool)>,
-}
-
-impl Iterator for Postorder<'_> {
-	type Item = Node;
-
-	fn next(&mut self) -> Option<Self::Item> {
-		while let Some((node, children_visited)) = self.stack.pop() {
-			if children_visited {
-				return Some(node);
-			}
-
-			self.stack.push((node, true));
-			if let Some(internal) = self.tree.as_internal(node) {
-				let [left, right] =
-					self.tree.children_of(internal);
-				self.stack.push((right, false));
-				self.stack.push((left, false));
-			}
-		}
-
-		None
 	}
 }
 

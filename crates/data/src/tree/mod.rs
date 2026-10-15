@@ -110,6 +110,10 @@ nodes_2!(Internal);
 pub trait Tree {
 	fn root(&self) -> Option<Node>;
 
+	fn has_root(&self) -> bool {
+		self.root().is_some()
+	}
+
 	fn parent_of(&self, node: Node) -> Option<Node>;
 
 	fn children_of(&self, node: Node) -> &[Node];
@@ -138,6 +142,80 @@ pub trait Tree {
 		}
 		AsDisplay(self).to_string()
 	}
+
+	/// Iterator which walks the tree post-order
+	///
+	/// If the tree has no root, the iterator will be empty.
+	fn postorder(&self) -> Postorder<'_, Self>
+	where
+		Self: Sized,
+	{
+		let mut stack = Vec::new();
+		if let Some(root) = self.root() {
+			stack.push(root);
+		}
+		Postorder {
+			tree: self,
+			stack,
+			prev: None,
+		}
+	}
+
+	/// If the tree has no root, the iterator will be empty.
+	fn preorder(&self) -> Preorder<'_, Self>
+	where
+		Self: Sized,
+	{
+		let mut stack = Vec::new();
+		if let Some(root) = self.root() {
+			stack.push(root);
+		}
+		Preorder { tree: self, stack }
+	}
 }
 
-// TODO: generic preorder/postorder, perhaps a RootedTree traits
+pub struct Postorder<'a, T> {
+	tree: &'a T,
+	stack: Vec<Node>,
+	prev: Option<Node>,
+}
+
+impl<T: Tree> Iterator for Postorder<'_, T> {
+	type Item = Node;
+
+	fn next(&mut self) -> Option<Node> {
+		while let Some(&node) = self.stack.last() {
+			let children = self.tree.children_of(node);
+
+			if children.is_empty() {
+				self.stack.pop();
+				self.prev = Some(node);
+				return Some(node);
+			}
+
+			if self.prev == children.last().copied() {
+				self.stack.pop();
+				self.prev = Some(node);
+				return Some(node);
+			} else {
+				self.stack.extend(children.iter().rev());
+			}
+		}
+		None
+	}
+}
+
+pub struct Preorder<'a, T> {
+	tree: &'a T,
+	stack: Vec<Node>,
+}
+
+impl<T: Tree> Iterator for Preorder<'_, T> {
+	type Item = Node;
+
+	fn next(&mut self) -> Option<Node> {
+		let node = self.stack.pop()?;
+		self.stack.extend(self.tree.children_of(node));
+		Some(node)
+	}
+}

@@ -2,7 +2,7 @@ use anyhow::{Result, ensure};
 
 use std::fmt::{self, Write};
 
-use super::{BinaryTree, Node};
+use super::{BinaryTree, Node, Tree};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
