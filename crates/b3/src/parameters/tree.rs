@@ -11,6 +11,7 @@ use std::{
 	cmp::{max, min},
 	collections::VecDeque,
 	io::Write,
+	slice,
 };
 
 use crate::{clock::PyClock, impl_pyparameter_common, parameters::Parameter};
@@ -18,7 +19,7 @@ use bitmap::Bitmap;
 use data::{
 	PyTaxonSet, TaxonSet,
 	tree::{
-		Internal, Leaf, Node, TOMBSTONE, Tree as _, TreeBuilder,
+		Internal, Leaf, Node, TOMBSTONE, Tree, TreeBuilder,
 		python::PyTreeBuilder,
 	},
 };
@@ -757,25 +758,9 @@ impl DatedTree {
 		out
 	}
 
-	pub fn mrca(&self, mut a: Node, mut b: Node) -> Internal {
-		let mut depth_a = self.depth(a);
-		let mut depth_b = self.depth(b);
-
-		while depth_a > depth_b {
-			a = *self.parent_of(a).expect("unreachable");
-			depth_a -= 1;
-		}
-		while depth_b > depth_a {
-			b = *self.parent_of(b).expect("unreachable");
-			depth_b -= 1;
-		}
-
-		while a != b {
-			a = *self.parent_of(a).expect("unreachable");
-			b = *self.parent_of(b).expect("unreachable");
-		}
-
-		Internal(a.0)
+	pub fn mrca(&self, a: Node, b: Node) -> Internal {
+		let out = Tree::mrca(self, a, b);
+		self.as_internal(out).expect("unreachable")
 	}
 
 	pub fn is_grandparent(&self, node: Internal) -> bool {
@@ -890,20 +875,6 @@ impl DatedTree {
 		tree.to_newick()
 	}
 
-	fn postorder(&self) -> Postorder<'_> {
-		Postorder {
-			tree: self,
-			stack: vec![(*self.root(), false)],
-		}
-	}
-
-	fn preorder(&self) -> Preorder<'_> {
-		Preorder {
-			tree: self,
-			stack: vec![*self.root()],
-		}
-	}
-
 	fn internal_heights(&self) -> Vec<f64> {
 		let mut out = Vec::new();
 		for internal in self.internals() {
@@ -914,52 +885,41 @@ impl DatedTree {
 	}
 }
 
-struct Postorder<'a> {
-	tree: &'a DatedTree,
-	stack: Vec<(Node, bool)>,
-}
-
-impl Iterator for Postorder<'_> {
-	type Item = Node;
-
-	fn next(&mut self) -> Option<Node> {
-		while let Some((node, children_visited)) = self.stack.pop() {
-			if children_visited {
-				return Some(node);
-			}
-
-			self.stack.push((node, true));
-
-			let Some(internal) = self.tree.as_internal(node) else {
-				continue;
-			};
-
-			let (left, right) = self.tree.children_of(internal);
-			self.stack.push((right, false));
-			self.stack.push((left, false));
-		}
-		None
+impl Tree for DatedTree {
+	fn root(&self) -> Option<Node> {
+		Some(*self.root())
 	}
-}
 
-struct Preorder<'a> {
-	tree: &'a DatedTree,
-	stack: Vec<Node>,
-}
+	fn parent_of(&self, node: Node) -> Option<Node> {
+		self.parent_of(node).as_deref().copied()
+	}
 
-impl Iterator for Preorder<'_> {
-	type Item = Node;
-
-	fn next(&mut self) -> Option<Node> {
-		let node = self.stack.pop()?;
-
-		if let Some(internal) = self.tree.as_internal(node) {
-			let (left, right) = self.tree.children_of(internal);
-			self.stack.push(right);
-			self.stack.push(left);
+	fn children_of(&self, node: Node) -> &[Node] {
+		if self.is_leaf(node) {
+			return &[];
 		}
+		let offset = (node.0 - self.num_leaves()) as usize * 2;
+		let slice = &self.children[offset..offset + 2];
+		// SAFETY: Node is a transparent wrapper over u32
+		let slice: &[Node] = unsafe {
+			slice::from_raw_parts(
+				slice.as_ptr() as *const Node,
+				slice.len(),
+			)
+		};
+		slice
+	}
 
-		Some(node)
+	fn name_of(&self, node: Node) -> &str {
+		if let Some(leaf) = self.as_leaf(node) {
+			self.names.get(leaf.usize())
+		} else {
+			""
+		}
+	}
+
+	fn edge_length(&self, node: Node) -> Option<f64> {
+		Some(self.edge_length(node.0))
 	}
 }
 
