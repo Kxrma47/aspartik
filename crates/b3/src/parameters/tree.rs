@@ -18,15 +18,13 @@ use bitmap::Bitmap;
 use data::{
 	PyTaxonSet, TaxonSet,
 	tree::{
-		Internal, Leaf, Node, Tree as _, TreeBuilder,
+		Internal, Leaf, Node, TOMBSTONE, Tree as _, TreeBuilder,
 		python::PyTreeBuilder,
 	},
 };
 use rng::{PyRng, Rng};
 use sk::EpochBuf;
 use util::{atomic::MonotonicU32, py_bail};
-
-const ROOT: u32 = 0x524f4f54;
 
 #[derive(Debug, Clone)]
 pub struct Tree {
@@ -71,8 +69,11 @@ impl Tree {
 
 			root: (0, 0),
 
-			children: EpochBuf::repeat(ROOT, num_internals * 2),
-			parents: EpochBuf::repeat(ROOT, num_nodes),
+			children: EpochBuf::repeat(
+				TOMBSTONE,
+				num_internals * 2,
+			),
+			parents: EpochBuf::repeat(TOMBSTONE, num_nodes),
 			heights: EpochBuf::repeat(0.0, num_nodes),
 
 			updated_edges: Bitmap::new(num_nodes),
@@ -99,8 +100,9 @@ impl Tree {
 		let root = prüfer.pop().unwrap(); // remove the last node
 		prüfer.shuffle(rng); // random shuffle
 
-		let mut parents = vec![ROOT; num_nodes as usize];
-		let mut children = vec![ROOT; (2 * num_internals) as usize];
+		let mut parents = vec![TOMBSTONE; num_nodes as usize];
+		let mut children =
+			vec![TOMBSTONE; (2 * num_internals) as usize];
 
 		let mut degrees = vec![1u8; num_nodes as usize];
 		for internal in num_leaves..num_nodes {
@@ -178,7 +180,7 @@ impl Tree {
 		ensure!(tree.num_leaves() == self.num_leaves());
 		ensure!(tree.num_nodes() == self.num_nodes());
 
-		let mut mapping = vec![ROOT; tree.num_nodes() as usize];
+		let mut mapping = vec![TOMBSTONE; tree.num_nodes() as usize];
 		let mut seen = vec![false; self.num_leaves() as usize];
 		for leaf in tree.leaves() {
 			let node = Node::from(leaf);
@@ -208,10 +210,10 @@ impl Tree {
 		}
 
 		for index in 0..self.num_edges() as usize {
-			self.children[index] = ROOT;
+			self.children[index] = TOMBSTONE;
 		}
 		for index in 0..self.num_nodes() as usize {
-			self.parents[index] = ROOT;
+			self.parents[index] = TOMBSTONE;
 		}
 		for internal in tree.internals() {
 			let parent = mapping[internal.usize()];
@@ -525,7 +527,7 @@ impl Tree {
 	/// Doesn't overwrite the old root.
 	pub fn set_root(&mut self, node: Internal) {
 		self.root.0 = node.0;
-		self.parents[node.usize()] = ROOT;
+		self.parents[node.usize()] = TOMBSTONE;
 	}
 
 	pub fn swap_parents(&mut self, a: Node, b: Node) -> Result<()> {
@@ -623,7 +625,7 @@ impl Tree {
 			.parents
 			.iter()
 			.enumerate()
-			.filter(|&(_, &parent)| parent == ROOT)
+			.filter(|&(_, &parent)| parent == TOMBSTONE)
 			.map(|(idx, _)| idx as u32)
 			.collect();
 		ensure!(
@@ -739,7 +741,7 @@ impl Tree {
 	}
 
 	pub fn parent_of(&self, node: Node) -> Option<Internal> {
-		if self.parents[node.usize()] != ROOT {
+		if self.parents[node.usize()] != TOMBSTONE {
 			Some(Internal(self.parents[node.usize()]))
 		} else {
 			None
@@ -990,7 +992,7 @@ impl Parameter for Tree {
 
 		// overwrite all parents as one of them will be left as root
 		for internal in self.internals() {
-			self.parents[internal.usize()] = ROOT;
+			self.parents[internal.usize()] = TOMBSTONE;
 		}
 
 		let num_leaves = self.num_leaves();
@@ -1002,7 +1004,7 @@ impl Parameter for Tree {
 		}
 
 		for internal in self.internals() {
-			if self.parents[internal.usize()] == ROOT {
+			if self.parents[internal.usize()] == TOMBSTONE {
 				self.set_root(internal);
 			}
 		}

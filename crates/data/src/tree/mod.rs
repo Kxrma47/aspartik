@@ -20,7 +20,7 @@ use bytemuck::{Pod, Zeroable};
 
 use std::{fmt, mem, ops::Deref};
 
-const TOMBSTONE: u32 = 0x544f4f52;
+pub const TOMBSTONE: u32 = u32::MAX;
 
 #[derive(
 	Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Zeroable, Pod,
