@@ -31,7 +31,6 @@ pub struct Cuda2Calculator {
 	stream: Arc<CudaStream>,
 
 	propose_fn: CudaFunction,
-	update_likelihoods_fn: CudaFunction,
 
 	selectors: EditBuf,
 	selectors_device: CudaSlice<u8>,
@@ -99,10 +98,7 @@ impl Calculator<f64> for Cuda2Calculator {
 		let tms = cast_slice(&self.transitions_host);
 		self.stream.memcpy_htod(tms, &mut self.transitions)?;
 
-		self.update_partials(internals.len() as u32)?;
-
-		let root = *internals.last().unwrap();
-		self.update_likelihoods(root, frequencies)?;
+		self.update_partials(internals.len() as u32, frequencies)?;
 
 		// blocks on the running kernels
 		self.stream.memcpy_dtoh(
@@ -152,7 +148,11 @@ impl Calculator<f64> for Cuda2Calculator {
 }
 
 impl Cuda2Calculator {
-	fn update_partials(&self, num_internals: u32) -> Result<()> {
+	fn update_partials(
+		&self,
+		num_internals: u32,
+		frequencies: Row,
+	) -> Result<()> {
 		let mut builder = self.stream.launch_builder(&self.propose_fn);
 
 		let cfg = self.cfg(128);
@@ -167,35 +167,12 @@ impl Cuda2Calculator {
 		builder.arg(&self.internals);
 		builder.arg(&self.children);
 		builder.arg(&self.transitions);
+		builder.arg(&self.likelihoods);
+		builder.arg(&frequencies);
 
 		// SAFETY: TODO
 		unsafe { builder.launch(cfg) }
 			.with_context(|| anyhow!("update_partials: {cfg:?}"))?;
-
-		Ok(())
-	}
-
-	fn update_likelihoods(
-		&self,
-		root: u32,
-		frequencies: Row,
-	) -> Result<()> {
-		let mut builder =
-			self.stream.launch_builder(&self.update_likelihoods_fn);
-
-		let cfg = self.cfg(128);
-
-		builder.arg(&self.partials);
-		builder.arg(&self.likelihoods);
-		builder.arg(&self.selectors_device);
-
-		builder.arg(&root);
-		builder.arg(&frequencies);
-
-		// SAFETY: TODO
-		unsafe { builder.launch(cfg) }.with_context(|| {
-			anyhow!("update_likelihoods: {cfg:?}")
-		})?;
 
 		Ok(())
 	}
@@ -296,14 +273,10 @@ impl Cuda2Calculator {
 
 		let module = context.load_module(ptx)?;
 		let propose_fn = module.load_function("propose")?;
-		let update_likelihoods_fn =
-			module.load_function("update_likelihoods")?;
-
 		Ok(Self {
 			stream,
 
 			propose_fn,
-			update_likelihoods_fn,
 
 			selectors,
 			selectors_device,

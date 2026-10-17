@@ -3,10 +3,6 @@
 // Partial likelihoods are stored per internal node:
 // ((node - NUM_LEAVES) * 2 + selector) * NUM_PATTERNS + pattern
 
-__device__ f64x4 hadamard(const f64x4 a, const f64x4 b) {
-	return make_f64x4(a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w);
-}
-
 __device__ f64 dot(const f64x4 a, const f64x4 b) {
 	return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
@@ -65,9 +61,13 @@ void propose(
 	const u32 num_internals,
 	const u32* __restrict__ internals,
 	const uint2* __restrict__ children,
-	const f64x4* __restrict__ transitions
+	const f64x4* __restrict__ transitions,
+	f64* __restrict__ likelihoods,
+	f64x4 frequencies
 ) {
 	PATTERN_PRELUDE
+
+	u32 root = internals[num_internals - 1];
 
 	u32 scale_sum = scale_sums[pattern];
 
@@ -133,17 +133,6 @@ void propose(
 	}
 
 	scale_sums[pattern] = scale_sum;
-}
-
-entrypoint __launch_bounds__(128)
-void update_likelihoods(
-	const f64x4* __restrict__ partials,
-	f64* __restrict__ likelihoods,
-	const u8* __restrict__ selectors,
-	u32 root,
-	f64x4 frequencies
-) {
-	PATTERN_PRELUDE
 
 	u32 root_sel = selectors[root - NUM_LEAVES] & 1;
 	likelihoods[pattern] = log(dot(partials[lidx(root, root_sel)], frequencies));
