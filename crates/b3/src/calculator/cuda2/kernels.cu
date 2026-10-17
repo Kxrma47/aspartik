@@ -1,8 +1,3 @@
-// Each thread processes one pattern.
-//
-// Partial likelihoods are stored per internal node:
-// ((node - NUM_LEAVES) * 2 + selector) * NUM_PATTERNS + pattern
-
 __device__ f64 dot(const f64x4 a, const f64x4 b) {
 	return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
@@ -21,11 +16,7 @@ __device__ f64 dot(const f64x4 a, const f64x4 b) {
 	} \
 
 #define SAMPLE_VALUE(sample, tv) \
-	((sample) == 0 ? (tv).x \
-	: (sample) == 1 ? (tv).y \
-	: (sample) == 2 ? (tv).z \
-	: (sample) == 3 ? (tv).w \
-	: 1.0)
+    ((sample) < 4 ? (&(tv).x)[sample] : 1.0)
 
 // Scale `prod` like Cpu4, tracking changes relative to the old slot.
 #define APPLY_SCALE(old_scale) { \

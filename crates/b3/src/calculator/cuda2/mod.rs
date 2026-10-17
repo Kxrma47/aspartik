@@ -23,10 +23,7 @@ type Transition = [f64; 16];
 const CUDA_SRC: &str =
 	concat!(include_str!("typedefs.h"), include_str!("kernels.cu"),);
 
-/// CUDA calculator with the same update strategy as `Cpu4Calculator`
-///
-/// Instead of propagating partial likelihoods through the tree, it
-/// recomputes partials at internal nodes using the full postorder list.
+/// Partials-based CUDA likelihood calculator
 pub struct Cuda2Calculator {
 	stream: Arc<CudaStream>,
 
@@ -40,9 +37,7 @@ pub struct Cuda2Calculator {
 
 	/// Partial likelihoods at internal nodes
 	///
-	/// It has the length of `num_internals * num_patterns * 2`.  Each
-	/// internal node has two `num_patterns`-long buffers, determined by
-	/// the selector.
+	/// It has the length of `num_internals * num_patterns * 2`.
 	partials: CudaSlice<Row>,
 
 	/// `num_patterns`-long root likelihoods
@@ -100,7 +95,7 @@ impl Calculator<f64> for Cuda2Calculator {
 
 		self.update_partials(internals.len() as u32, frequencies)?;
 
-		// blocks on the running kernels
+		// blocks on the running kernel
 		self.stream.memcpy_dtoh(
 			&self.likelihoods,
 			&mut *self.likelihoods_host,
