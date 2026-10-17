@@ -11,7 +11,7 @@ def run_mcmc(
     toolkit: str,
     num_sequences: int,
     num_sites: int,
-    kind: Literal["cpu", "cuda"],
+    kind: Literal["cpu", "cuda", "cuda2"],
     length: int,
     tree_prior: str = "constant",
     seed: int = 4,
@@ -43,7 +43,7 @@ def parse_cli_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--toolkit", choices=("b3", "beast1"), default="b3")
-    parser.add_argument("--kind", choices=("cpu", "cuda"), required=True)
+    parser.add_argument("--kind", choices=("cpu", "cuda", "cuda2"), required=True)
     parser.add_argument("--num-sequences", type=int, required=True)
     parser.add_argument("--num-sites", type=int, required=True)
     parser.add_argument("--length", type=int, default=1_000_000)

@@ -72,7 +72,7 @@ class MCMCConfig:
     substitution_model: Literal["JC", "K80", "HKY", "GTR"]
     clock_rate: Optional[float] = None
 
-    calculator: Literal["cpu", "cuda"] = "cpu"
+    calculator: Literal["cpu", "cuda", "cuda2"] = "cpu"
     operator_mix: Literal["scalable", "beauti1_classic", "beauti1_default"] = "scalable"
     optimizer: Optimizer | None = None
 
@@ -875,6 +875,14 @@ def _b3_config(c: MCMCConfig):
                 clock=clock,
                 tree=tree,
                 calculator=Calculator.CUDA(),
+            )
+        case "cuda2":
+            likelihood = DNALikelihood(
+                msa=c.msa,
+                substitution=sub_model,
+                clock=clock,
+                tree=tree,
+                calculator=Calculator.CUDA2(),
             )
 
     callbacks = []

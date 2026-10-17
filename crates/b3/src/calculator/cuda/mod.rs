@@ -391,13 +391,13 @@ impl CudaCalculator {
 	}
 }
 
-fn cuda_path() -> String {
+pub(super) fn cuda_path() -> String {
 	env::var("CUDA_PATH")
 		.or_else(|_| env::var("CUDA_HOME"))
 		.unwrap_or_else(|_| "/usr/local/cuda".to_string())
 }
 
-fn cccl_qual_path() -> String {
+pub(super) fn cccl_qual_path() -> String {
 	let arch = match env::consts::ARCH {
 		"x86_64" => "x86_64",
 		_ => unimplemented!(),

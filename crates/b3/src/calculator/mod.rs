@@ -9,10 +9,12 @@ use crate::{Transitions, parameters::DatedTree};
 
 mod cpu4;
 mod cuda;
+mod cuda2;
 mod state;
 
 pub use cpu4::Cpu4Calculator;
 pub use cuda::CudaCalculator;
+pub use cuda2::Cuda2Calculator;
 pub use state::StateCalculator;
 
 /// Felsenstein's pruning tree likelihood calculator
@@ -64,6 +66,7 @@ pub trait Calculator<F> {
 enum CalculatorKind {
 	Cpu { num_threads: usize },
 	Cuda { device: usize },
+	Cuda2 { device: usize },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -89,6 +92,15 @@ impl CalculatorConfig {
 	fn cuda(_cls: Py<PyType>, device: usize) -> Self {
 		Self {
 			kind: CalculatorKind::Cuda { device },
+			scale_ln: 30,
+		}
+	}
+
+	#[pyo3(name = "CUDA2", signature = (device = 0))]
+	#[classmethod]
+	fn cuda2(_cls: Py<PyType>, device: usize) -> Self {
+		Self {
+			kind: CalculatorKind::Cuda2 { device },
 			scale_ln: 30,
 		}
 	}
@@ -120,6 +132,15 @@ impl CalculatorConfig {
 			}
 			CalculatorKind::Cuda { device } => {
 				let calc = CudaCalculator::new(
+					num_patterns,
+					samples,
+					self.scale_ln,
+					device,
+				)?;
+				Ok(Box::new(calc))
+			}
+			CalculatorKind::Cuda2 { device } => {
+				let calc = Cuda2Calculator::new(
 					num_patterns,
 					samples,
 					self.scale_ln,
