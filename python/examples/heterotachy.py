@@ -14,6 +14,7 @@ from aspartik.b3.operators import (
     ScaleReal,
     SubtreeLeap,
 )
+from aspartik.b3.optimizers import LinearOptimizer
 from aspartik.b3.parameters import ClassVector, DatedTree, Real, RealVector, Root
 from aspartik.b3.priors import Bound, Distribution, Monophyly, SymmetricDirichlet
 from aspartik.b3.substitutions import GTR
@@ -121,7 +122,7 @@ callbacks = [
 mcmc = MCMC(
     priors=priors,
     operators=operators,
-    optimization_cutoff=5_000_000,
+    optimizer=LinearOptimizer(5_000_000),
     likelihood=likelihood,
     callbacks=callbacks,
     rng=rng,

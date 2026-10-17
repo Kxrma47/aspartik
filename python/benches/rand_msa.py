@@ -23,7 +23,6 @@ def run_mcmc(
     config = MCMCConfig(
         msa,
         calculator=kind,
-        optimization_cutoff=1,
         tree_prior=tree_prior,
         substitution_model="GTR",
         trace_path="target/rand_msa.trace",

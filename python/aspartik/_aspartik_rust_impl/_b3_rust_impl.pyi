@@ -7,6 +7,7 @@ from typing import Optional, Sized, SupportsFloat
 
 from ..b3 import Callback, Operator, Prior, TunableOperator
 from ..b3.likelihoods import Likelihood
+from ..b3.optimizers import Optimizer
 from ..b3.parameters import Node, Parameter, Scalable
 from ..b3.substitutions import Substitution4
 from ..data import TaxonSet
@@ -157,7 +158,7 @@ class MCMC:
         likelihood: Likelihood,
         callbacks: Sequence[Callback],
         rng: RNG,
-        optimization_cutoff: int = 1_000_000,
+        optimizer: Optimizer | None = None,
     ): ...
     @property
     def current_step(self) -> int: ...

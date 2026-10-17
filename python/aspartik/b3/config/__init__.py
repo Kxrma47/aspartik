@@ -30,6 +30,7 @@ from aspartik.b3.operators import (
     TreeScale,
     UpDown,
 )
+from aspartik.b3.optimizers import Optimizer
 from aspartik.b3.parameters import DatedTree, IntVector, Real, RealVector
 from aspartik.b3.priors import (
     BayesianSkyline,
@@ -73,7 +74,7 @@ class MCMCConfig:
 
     calculator: Literal["cpu", "cuda"] = "cpu"
     operator_mix: Literal["scalable", "beauti1_classic", "beauti1_default"] = "scalable"
-    optimization_cutoff: int = 1_000_000
+    optimizer: Optimizer | None = None
 
     overwrite: bool = True
 
@@ -902,7 +903,7 @@ def _b3_config(c: MCMCConfig):
         likelihood=likelihood,
         callbacks=callbacks,
         rng=rng,
-        optimization_cutoff=c.optimization_cutoff,
+        optimizer=c.optimizer,
     )
 
     return mcmc

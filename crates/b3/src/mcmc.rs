@@ -39,7 +39,7 @@ impl Mcmc {
 	#[new]
 	#[pyo3(signature = (
 		priors, operators, likelihood, callbacks, rng,
-		optimization_cutoff = 1_000_000,
+		optimizer = None,
 	))]
 	fn new(
 		py: Python,
@@ -50,10 +50,9 @@ impl Mcmc {
 		callbacks: Vec<PyCallback>,
 		rng: Py<PyRng>,
 
-		optimization_cutoff: usize,
+		optimizer: Option<Py<PyAny>>,
 	) -> Result<Mcmc> {
-		let scheduler =
-			Scheduler::new(py, operators, optimization_cutoff)?;
+		let scheduler = Scheduler::new(py, operators, optimizer)?;
 		let parameters = scheduler.parameters(py)?;
 
 		let out = Mcmc {

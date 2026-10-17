@@ -17,6 +17,7 @@ from aspartik.b3.operators import (
     SubtreeLeap,
     UpDown,
 )
+from aspartik.b3.optimizers import LinearOptimizer
 from aspartik.b3.parameters import DatedTree, Real, RealVector
 from aspartik.b3.priors import Bound, Distribution, ExponentialGrowth
 from aspartik.b3.substitutions import HKY
@@ -120,7 +121,7 @@ callbacks = [
 ]
 
 mcmc = MCMC(
-    optimization_cutoff=10_000_000,
+    optimizer=LinearOptimizer(10_000_000),
     priors=priors,
     operators=operators,
     likelihood=likelihood,

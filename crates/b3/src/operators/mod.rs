@@ -246,7 +246,7 @@ impl PyOperator {
 pub struct Scheduler {
 	operators: Vec<PyOperator>,
 	weights: Vec<f64>,
-	optimization_cutoff: usize,
+	optimizer: Option<Py<PyAny>>,
 	statistics: Mutex<Statistics>,
 }
 
@@ -305,7 +305,7 @@ impl Scheduler {
 	pub fn new(
 		py: Python,
 		operators: Vec<PyOperator>,
-		optimization_cutoff: usize,
+		optimizer: Option<Py<PyAny>>,
 	) -> Result<Self> {
 		let num_operators = operators.len();
 
@@ -330,7 +330,7 @@ impl Scheduler {
 		Ok(Self {
 			operators,
 			weights,
-			optimization_cutoff,
+			optimizer,
 			statistics: Statistics::new(num_operators).into(),
 		})
 	}
@@ -451,18 +451,20 @@ impl Scheduler {
 	}
 
 	pub fn tune(&self, py: Python, step: usize) -> Result<()> {
-		if !step.is_multiple_of(100_000)
-			|| step >= self.optimization_cutoff
-		{
+		if !step.is_multiple_of(100_000) {
 			return Ok(());
 		}
-
-		let step_ratio = step as f64 / self.optimization_cutoff as f64;
-		let rate = if step_ratio < 0.9 {
-			0.5
-		} else {
-			5.0 * (1.0 - step_ratio)
+		let Some(optimizer) = &self.optimizer else {
+			return Ok(());
 		};
+
+		let rate =
+			py_call_method!(py, optimizer, "tuning_method", step)?
+				.extract::<f64>(py)?;
+
+		if rate == 0.0 {
+			return Ok(());
+		}
 
 		for operator in &self.operators {
 			operator.tune(py, rate)?;
