@@ -59,8 +59,6 @@ pub struct Cuda2Calculator {
 	scale_sums_backup: CudaSlice<u32>,
 
 	num_patterns: u32,
-
-	scale_ln: u32,
 }
 
 impl Calculator<f64> for Cuda2Calculator {
@@ -100,13 +98,6 @@ impl Calculator<f64> for Cuda2Calculator {
 			&self.likelihoods,
 			&mut *self.likelihoods_host,
 		)?;
-
-		let scale_sums = self.stream.clone_dtoh(&self.scale_sums)?;
-		for (likelihood, scale) in
-			self.likelihoods_host.iter_mut().zip(scale_sums)
-		{
-			*likelihood -= f64::from(scale * self.scale_ln);
-		}
 
 		Ok(())
 	}
@@ -150,7 +141,14 @@ impl Cuda2Calculator {
 	) -> Result<()> {
 		let mut builder = self.stream.launch_builder(&self.propose_fn);
 
-		let cfg = self.cfg(128);
+		let block_size = 64;
+		let num_pattern_blocks =
+			(self.num_patterns * 4).div_ceil(block_size);
+		let cfg = LaunchConfig {
+			grid_dim: (num_pattern_blocks, 1, 1),
+			block_dim: (block_size, 1, 1),
+			shared_mem_bytes: 0,
+		};
 
 		builder.arg(&self.leaves);
 		builder.arg(&self.partials);
@@ -172,18 +170,9 @@ impl Cuda2Calculator {
 		Ok(())
 	}
 
-	fn cfg(&self, block_size: u32) -> LaunchConfig {
-		let num_site_blocks = self.num_patterns.div_ceil(block_size);
-		LaunchConfig {
-			grid_dim: (num_site_blocks, 1, 1),
-			block_dim: (block_size, 1, 1),
-			shared_mem_bytes: 0,
-		}
-	}
-
 	pub fn new(
 		num_patterns: usize,
-		mut leaves: Vec<u8>,
+		leaves: Vec<u8>,
 		scale_ln: u32,
 		cuda_device: usize,
 	) -> Result<Self> {
@@ -199,16 +188,6 @@ impl Cuda2Calculator {
 
 		let scale_threshold = f64::from(-(scale_ln as i32)).exp();
 		let scale_mult = f64::from(scale_ln).exp();
-
-		for sample in &mut leaves {
-			*sample = match *sample {
-				0b0001 => 0,
-				0b0010 => 1,
-				0b0100 => 2,
-				0b1000 => 3,
-				_ => 4,
-			};
-		}
 
 		let num_leaves = leaves.len() / num_patterns;
 		let num_internals = num_leaves - 1;
@@ -288,8 +267,6 @@ impl Cuda2Calculator {
 			scales,
 			scale_sums,
 			scale_sums_backup,
-
-			scale_ln,
 
 			num_patterns: num_patterns as u32,
 		})

@@ -1,47 +1,39 @@
-__device__ f64 dot(const f64x4 a, const f64x4 b) {
+#include <cooperative_groups.h>
+
+using namespace cooperative_groups;
+
+
+__device__ inline f64 dot(const f64x4 a, const f64x4 b) {
 	return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
 
-// Row `row` of matrix `half` (0 = left, 1 = right) of edge `i`
-#define MATROW(i, half, row) \
-	transitions[((i) * 2 + (half)) * 4 + (row)]
-
-#define lidx(node, sel) \
-	(((node) - NUM_LEAVES) * 2 + (sel)) * NUM_PATTERNS + pattern
-
-#define PATTERN_PRELUDE \
-	u32 pattern = blockIdx.x * blockDim.x + threadIdx.x; \
-	if (pattern >= NUM_PATTERNS) { \
-		return; \
-	} \
-
-#define SAMPLE_VALUE(sample, tv) \
-    ((sample) < 4 ? (&(tv).x)[sample] : 1.0)
-
-// Scale `prod` like Cpu4, tracking changes relative to the old slot.
-#define APPLY_SCALE(old_scale) { \
-	if (prod.x < SCALE_THRESHOLD \
-		&& prod.y < SCALE_THRESHOLD \
-		&& prod.z < SCALE_THRESHOLD \
-		&& prod.w < SCALE_THRESHOLD) \
-	{ \
-		prod.x *= SCALE_MULT; \
-		prod.y *= SCALE_MULT; \
-		prod.z *= SCALE_MULT; \
-		prod.w *= SCALE_MULT; \
-		if (old_scale == 0) { \
-			scale_sum += 1; \
-		} \
-		scale = 1; \
-	} else { \
-		if (old_scale != 0) { \
-			scale_sum -= 1; \
-		} \
-		scale = 0; \
-	} \
+__device__ inline f64x4 get_leaf_partial(u8 leaf) {
+	switch (leaf) {
+		case 1:  return make_f64x4(1.0, 0.0, 0.0, 0.0);
+		case 2:  return make_f64x4(0.0, 1.0, 0.0, 0.0);
+		case 4:  return make_f64x4(0.0, 0.0, 1.0, 0.0);
+		case 8:  return make_f64x4(0.0, 0.0, 0.0, 1.0);
+		default: return make_f64x4(1.0, 1.0, 1.0, 1.0);
+	}
 }
 
-entrypoint __launch_bounds__(128)
+#define BLOCK_SIZE 16 * 4
+
+// Leaf index
+#define lidx(node) \
+	(node) * NUM_PATTERNS + pattern
+
+#define sidx(node) \
+	((node - NUM_LEAVES) * 2 + (selectors[node - NUM_LEAVES] & 1)) * NUM_PATTERNS + pattern
+
+#define soidx(node) \
+	((node - NUM_LEAVES) * 2 + (selectors[node - NUM_LEAVES] & 1 ^ 1)) * NUM_PATTERNS + pattern
+
+#define spidx(node) \
+	(sidx(node)) * 4 + sub
+
+
+entrypoint __launch_bounds__(BLOCK_SIZE)
 void propose(
 	const u8* __restrict__ leaves,
 	f64x4* __restrict__ partials,
@@ -51,80 +43,81 @@ void propose(
 
 	const u32 num_internals,
 	const u32* __restrict__ internals,
-	const uint2* __restrict__ children,
+	const u32* __restrict__ children,
 	const f64x4* __restrict__ transitions,
 	f64* __restrict__ likelihoods,
 	f64x4 frequencies
 ) {
-	PATTERN_PRELUDE
+	u32 pattern = (blockIdx.x * blockDim.x + threadIdx.x) / 4;
+	if (pattern >= NUM_PATTERNS) {
+		return;
+	}
+	auto g = tiled_partition<4>(this_thread_block());
+	u32 sub = g.thread_rank();
+	u32 tile = threadIdx.x / 4;
 
-	u32 root = internals[num_internals - 1];
+	__shared__ f64 s_likelihood[BLOCK_SIZE];
 
 	u32 scale_sum = scale_sums[pattern];
 
 	for (u32 i = 0; i < num_internals; i++) {
 		u32 node = internals[i];
-		uint2 kids = children[i];
+		u32 left = children[i * 2];
+		u32 right = children[i * 2 + 1];
 
-		f64x4 prod;
-		u8 scale;
-		if (kids.y < NUM_LEAVES) {
-			u8 sample_l = leaves[kids.x * NUM_PATTERNS + pattern];
-			u8 sample_r = leaves[kids.y * NUM_PATTERNS + pattern];
+		f64x4 tv_left = transitions[i * 2 * 4 + sub];
+		f64x4 tv_right = transitions[(i * 2 + 1) * 4 + sub];
 
-			prod.x = SAMPLE_VALUE(sample_l, MATROW(i, 0, 0)) * SAMPLE_VALUE(sample_r, MATROW(i, 1, 0));
-			prod.y = SAMPLE_VALUE(sample_l, MATROW(i, 0, 1)) * SAMPLE_VALUE(sample_r, MATROW(i, 1, 1));
-			prod.z = SAMPLE_VALUE(sample_l, MATROW(i, 0, 2)) * SAMPLE_VALUE(sample_r, MATROW(i, 1, 2));
-			prod.w = SAMPLE_VALUE(sample_l, MATROW(i, 0, 3)) * SAMPLE_VALUE(sample_r, MATROW(i, 1, 3));
+		u8 old_scale = scales[soidx(node)];
 
-			if (scales[lidx(node, selectors[node - NUM_LEAVES] & 1 ^ 1)] != 0) {
-				scale_sum -= 1;
-			}
-			scale = 0;
-		} else if (kids.x < NUM_LEAVES) {
-			u8 sample_l = leaves[kids.x * NUM_PATTERNS + pattern];
-			f64x4 right = partials[lidx(kids.y, selectors[kids.y - NUM_LEAVES] & 1)];
+		f64x4 partial_left, partial_right;
 
-			f64 dr = dot(MATROW(i, 1, 0), right);
-			prod.x = SAMPLE_VALUE(sample_l, MATROW(i, 0, 0)) * dr;
-			dr = dot(MATROW(i, 1, 1), right);
-			prod.y = SAMPLE_VALUE(sample_l, MATROW(i, 0, 1)) * dr;
-			dr = dot(MATROW(i, 1, 2), right);
-			prod.z = SAMPLE_VALUE(sample_l, MATROW(i, 0, 2)) * dr;
-			dr = dot(MATROW(i, 1, 3), right);
-			prod.w = SAMPLE_VALUE(sample_l, MATROW(i, 0, 3)) * dr;
-
-			if (scales[lidx(node, selectors[node - NUM_LEAVES] & 1 ^ 1)] != 0) {
-				scale_sum -= 1;
-			}
-			scale = 0;
+		if (right < NUM_LEAVES) {
+			partial_left = get_leaf_partial(leaves[lidx(left)]);
+			partial_right = get_leaf_partial(leaves[lidx(right)]);
+		} else if (left < NUM_LEAVES) {
+			partial_left = get_leaf_partial(leaves[lidx(left)]);
+			partial_right = partials[sidx(right)];
 		} else {
-			f64x4 left = partials[lidx(kids.x, selectors[kids.x - NUM_LEAVES] & 1)];
-			f64x4 right = partials[lidx(kids.y, selectors[kids.y - NUM_LEAVES] & 1)];
-
-			f64 dl = dot(MATROW(i, 0, 0), left);
-			f64 dr = dot(MATROW(i, 1, 0), right);
-
-			prod.x = dl * dr;
-			dl = dot(MATROW(i, 0, 1), left);
-			dr = dot(MATROW(i, 1, 1), right);
-			prod.y = dl * dr;
-			dl = dot(MATROW(i, 0, 2), left);
-			dr = dot(MATROW(i, 1, 2), right);
-			prod.z = dl * dr;
-			dl = dot(MATROW(i, 0, 3), left);
-			dr = dot(MATROW(i, 1, 3), right);
-			prod.w = dl * dr;
-
-			APPLY_SCALE(scales[lidx(node, selectors[node - NUM_LEAVES] & 1 ^ 1)])
+			partial_left = partials[sidx(left)];
+			partial_right = partials[sidx(right)];
 		}
 
-		scales[lidx(node, selectors[node - NUM_LEAVES] & 1)] = scale;
-		partials[lidx(node, selectors[node - NUM_LEAVES] & 1)] = prod;
+		f64 l_likelihood = dot(tv_left, partial_left) * dot(tv_right, partial_right);
+
+		s_likelihood[tile * 4 + sub] = l_likelihood;
+		g.sync();
+
+		u32 should_scale = s_likelihood[tile * 4 + 0] < SCALE_THRESHOLD
+			&& s_likelihood[tile * 4 + 1] < SCALE_THRESHOLD
+			&& s_likelihood[tile * 4 + 2] < SCALE_THRESHOLD
+			&& s_likelihood[tile * 4 + 3] < SCALE_THRESHOLD;
+
+		if (should_scale) {
+			l_likelihood *= SCALE_MULT;
+			g.sync();
+		}
+
+		if (sub == 0) {
+			scales[sidx(node)] = should_scale;
+			if (old_scale == 0 && should_scale == 1) {
+				scale_sum += SCALE_LN;
+			} else if (old_scale == 1 && should_scale == 0) {
+				scale_sum -= SCALE_LN;
+			}
+		}
+
+		f64* partials_ptr = reinterpret_cast<f64*>(partials);
+		partials_ptr[spidx(node)] = l_likelihood;
 	}
 
-	scale_sums[pattern] = scale_sum;
 
-	u32 root_sel = selectors[root - NUM_LEAVES] & 1;
-	likelihoods[pattern] = log(dot(partials[lidx(root, root_sel)], frequencies));
+	if (sub == 0) {
+		scale_sums[pattern] = scale_sum;
+
+		u32 root = internals[num_internals - 1];
+		f64x4 root_partial = partials[sidx(root)];
+		f64 likelihood = log(dot(root_partial, frequencies)) - scale_sum;
+		likelihoods[pattern] = likelihood;
+	}
 }
