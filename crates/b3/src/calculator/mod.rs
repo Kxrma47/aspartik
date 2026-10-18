@@ -66,7 +66,7 @@ pub trait Calculator<F> {
 enum CalculatorKind {
 	Cpu { num_threads: usize },
 	Cuda { device: usize },
-	Cuda2 { device: usize },
+	Cuda2 { device: usize, block_size: u32 },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -96,11 +96,11 @@ impl CalculatorConfig {
 		}
 	}
 
-	#[pyo3(name = "CUDA2", signature = (device = 0))]
+	#[pyo3(name = "CUDA2", signature = (device = 0, block_size = 64))]
 	#[classmethod]
-	fn cuda2(_cls: Py<PyType>, device: usize) -> Self {
+	fn cuda2(_cls: Py<PyType>, device: usize, block_size: u32) -> Self {
 		Self {
-			kind: CalculatorKind::Cuda2 { device },
+			kind: CalculatorKind::Cuda2 { device, block_size },
 			scale_ln: 30,
 		}
 	}
@@ -139,11 +139,12 @@ impl CalculatorConfig {
 				)?;
 				Ok(Box::new(calc))
 			}
-			CalculatorKind::Cuda2 { device } => {
+			CalculatorKind::Cuda2 { device, block_size } => {
 				let calc = Cuda2Calculator::new(
 					num_patterns,
 					samples,
 					self.scale_ln,
+					block_size,
 					device,
 				)?;
 				Ok(Box::new(calc))

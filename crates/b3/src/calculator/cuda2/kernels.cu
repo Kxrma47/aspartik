@@ -17,8 +17,6 @@ __device__ inline f64x4 get_leaf_partial(u8 leaf) {
 	}
 }
 
-#define BLOCK_SIZE 16 * 4
-
 // Leaf index
 #define lidx(node) \
 	(node) * NUM_PATTERNS + pattern

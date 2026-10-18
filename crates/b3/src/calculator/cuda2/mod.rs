@@ -59,6 +59,7 @@ pub struct Cuda2Calculator {
 	scale_sums_backup: CudaSlice<u32>,
 
 	num_patterns: u32,
+	block_size: u32,
 }
 
 impl Calculator<f64> for Cuda2Calculator {
@@ -141,12 +142,11 @@ impl Cuda2Calculator {
 	) -> Result<()> {
 		let mut builder = self.stream.launch_builder(&self.propose_fn);
 
-		let block_size = 64;
 		let num_pattern_blocks =
-			(self.num_patterns * 4).div_ceil(block_size);
+			(self.num_patterns * 4).div_ceil(self.block_size);
 		let cfg = LaunchConfig {
 			grid_dim: (num_pattern_blocks, 1, 1),
-			block_dim: (block_size, 1, 1),
+			block_dim: (self.block_size, 1, 1),
 			shared_mem_bytes: 0,
 		};
 
@@ -174,6 +174,7 @@ impl Cuda2Calculator {
 		num_patterns: usize,
 		leaves: Vec<u8>,
 		scale_ln: u32,
+		block_size: u32,
 		cuda_device: usize,
 	) -> Result<Self> {
 		// SAFETY: since the function tries to link the library [0], it
@@ -240,6 +241,7 @@ impl Cuda2Calculator {
 				format!("-DSCALE_LN={scale_ln}"),
 				format!("-DSCALE_THRESHOLD={scale_threshold}"),
 				format!("-DSCALE_MULT={scale_mult}"),
+				format!("-DBLOCK_SIZE={block_size}"),
 			],
 			..Default::default()
 		};
@@ -269,6 +271,7 @@ impl Cuda2Calculator {
 			scale_sums_backup,
 
 			num_patterns: num_patterns as u32,
+			block_size,
 		})
 	}
 }
