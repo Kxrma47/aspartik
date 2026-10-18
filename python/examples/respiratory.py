@@ -121,9 +121,9 @@ callbacks = [
 ]
 
 mcmc = MCMC(
-    optimizer=LinearOptimizer(cutoff=5_000_000, every=50_000),
     priors=priors,
     operators=operators,
+    optimizer=LinearOptimizer(cutoff=5_000_000, every=50_000),
     likelihood=likelihood,
     callbacks=callbacks,
     rng=rng,
