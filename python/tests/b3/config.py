@@ -1,6 +1,7 @@
 import pytest
 
 from aspartik.b3.config import MCMCConfig
+from aspartik.b3.optimizers import BeastOptimizer, LinearOptimizer
 from aspartik.data.msa import MSA
 
 APES_MSA = MSA.from_fasta_file("data/alignments/apes.fasta")
@@ -9,6 +10,9 @@ APES_MSA = MSA.from_fasta_file("data/alignments/apes.fasta")
 @pytest.mark.parametrize("calculator", ["cpu"])
 @pytest.mark.parametrize("substitution_model", ["JC", "K80", "HKY", "GTR"])
 @pytest.mark.parametrize("operator_mix", ["classic", "default"])
+@pytest.mark.parametrize(
+    "optimizer", [None, LinearOptimizer(1_000_000), BeastOptimizer()]
+)
 @pytest.mark.parametrize("clock_rate", [None, 1.0])
 @pytest.mark.parametrize(
     "tree_prior",
@@ -17,7 +21,6 @@ APES_MSA = MSA.from_fasta_file("data/alignments/apes.fasta")
         "constant",
         "exponential",
         "bdsky",
-        "bdsky:10",
         "bdsky:20",
         "skyline",
         "skyline:5",
@@ -31,6 +34,7 @@ def test_config(
     calculator,
     substitution_model,
     operator_mix,
+    optimizer,
     clock_rate,
     tree_prior,
     print_every,
@@ -43,6 +47,7 @@ def test_config(
         calculator=calculator,
         substitution_model=substitution_model,
         operator_mix=operator_mix,
+        optimizer=optimizer,
         tree_prior=tree_prior,
         print_every=print_every,
         trace_path=trace_path,

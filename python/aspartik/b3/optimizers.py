@@ -5,10 +5,14 @@ from typing import Protocol
 class Optimizer(Protocol):
     def tuning_rate(self, step: int) -> float: ...
 
+    @property
+    def every(self) -> int: ...
+
 
 @dataclass(slots=True)
 class LinearOptimizer(Optimizer):
     cutoff: int
+    every: int = 10_000
 
     def tuning_rate(self, step: int) -> float:
         if step >= self.cutoff:
@@ -20,7 +24,8 @@ class LinearOptimizer(Optimizer):
 
 @dataclass(slots=True)
 class BeastOptimizer(Optimizer):
-    delay: int
+    delay: int = 0
+    every: int = 10_000
 
     def tuning_rate(self, step: int) -> float:
         if step >= self.delay:

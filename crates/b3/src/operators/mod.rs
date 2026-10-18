@@ -247,6 +247,7 @@ pub struct Scheduler {
 	operators: Vec<PyOperator>,
 	weights: Vec<f64>,
 	optimizer: Option<Py<PyAny>>,
+	optimize_every: usize,
 	statistics: Mutex<Statistics>,
 }
 
@@ -308,6 +309,10 @@ impl Scheduler {
 		optimizer: Option<Py<PyAny>>,
 	) -> Result<Self> {
 		let num_operators = operators.len();
+		let optimize_every = optimizer
+			.as_ref()
+			.map(|o| py_extract_attr!(o.bind(py), "every", usize))
+			.unwrap_or(Ok(usize::MAX))?;
 
 		let mut weights = Vec::with_capacity(num_operators);
 		for operator in &operators {
@@ -331,6 +336,7 @@ impl Scheduler {
 			operators,
 			weights,
 			optimizer,
+			optimize_every,
 			statistics: Statistics::new(num_operators).into(),
 		})
 	}
@@ -451,16 +457,15 @@ impl Scheduler {
 	}
 
 	pub fn tune(&self, py: Python, step: usize) -> Result<()> {
-		if !step.is_multiple_of(100_000) {
+		if step == 0 || !step.is_multiple_of(self.optimize_every) {
 			return Ok(());
 		}
 		let Some(optimizer) = &self.optimizer else {
 			return Ok(());
 		};
 
-		let rate =
-			py_call_method!(py, optimizer, "tuning_method", step)?
-				.extract::<f64>(py)?;
+		let rate = py_call_method!(py, optimizer, "tuning_rate", step)?
+			.extract::<f64>(py)?;
 
 		if rate == 0.0 {
 			return Ok(());
