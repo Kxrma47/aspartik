@@ -96,7 +96,7 @@ impl CalculatorConfig {
 		}
 	}
 
-	#[pyo3(name = "CUDA2", signature = (device = 0, block_size = 64))]
+	#[pyo3(name = "CUDA2", signature = (device = 0, block_size = 32))]
 	#[classmethod]
 	fn cuda2(_cls: Py<PyType>, device: usize, block_size: u32) -> Self {
 		Self {

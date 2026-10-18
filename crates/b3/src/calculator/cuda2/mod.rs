@@ -143,7 +143,7 @@ impl Cuda2Calculator {
 		let mut builder = self.stream.launch_builder(&self.propose_fn);
 
 		let num_pattern_blocks =
-			(self.num_patterns * 4).div_ceil(self.block_size);
+			self.num_patterns.div_ceil(self.block_size);
 		let cfg = LaunchConfig {
 			grid_dim: (num_pattern_blocks, 1, 1),
 			block_dim: (self.block_size, 1, 1),
