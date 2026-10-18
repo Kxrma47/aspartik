@@ -172,7 +172,7 @@ impl Cuda2Calculator {
 
 	pub fn new(
 		num_patterns: usize,
-		leaves: Vec<u8>,
+		mut leaves: Vec<u8>,
 		scale_ln: u32,
 		block_size: u32,
 		cuda_device: usize,
@@ -185,6 +185,16 @@ impl Cuda2Calculator {
 		let is_cuda_enabled = unsafe { is_culib_present() };
 		if !is_cuda_enabled {
 			bail!("CUDA library not found");
+		}
+
+		for leaf in &mut leaves {
+			*leaf = match *leaf {
+				0b0001 => 0,
+				0b0010 => 1,
+				0b0100 => 2,
+				0b1000 => 3,
+				_ => 4,
+			}
 		}
 
 		let scale_threshold = f64::from(-(scale_ln as i32)).exp();

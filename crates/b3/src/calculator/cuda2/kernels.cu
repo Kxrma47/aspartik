@@ -7,15 +7,13 @@ __device__ inline f64 dot(const f64x4 a, const f64x4 b) {
 	return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
 
-__device__ inline f64x4 get_leaf_partial(u8 leaf) {
-	switch (leaf) {
-		case 1:  return make_f64x4(1.0, 0.0, 0.0, 0.0);
-		case 2:  return make_f64x4(0.0, 1.0, 0.0, 0.0);
-		case 4:  return make_f64x4(0.0, 0.0, 1.0, 0.0);
-		case 8:  return make_f64x4(0.0, 0.0, 0.0, 1.0);
-		default: return make_f64x4(1.0, 1.0, 1.0, 1.0);
-	}
-}
+__constant__ f64x4 leaf_partials[] = {
+	{1.0, 0.0, 0.0, 0.0},
+	{0.0, 1.0, 0.0, 0.0},
+	{0.0, 0.0, 1.0, 0.0},
+	{0.0, 0.0, 0.0, 1.0},
+	{1.0, 1.0, 1.0, 1.0},
+};
 
 // Leaf index
 #define lidx(node) \
@@ -71,10 +69,10 @@ void propose(
 		f64x4 partial_left, partial_right;
 
 		if (right < NUM_LEAVES) {
-			partial_left = get_leaf_partial(leaves[lidx(left)]);
-			partial_right = get_leaf_partial(leaves[lidx(right)]);
+			partial_left = leaf_partials[leaves[lidx(left)]];
+			partial_right = leaf_partials[leaves[lidx(right)]];
 		} else if (left < NUM_LEAVES) {
-			partial_left = get_leaf_partial(leaves[lidx(left)]);
+			partial_left = leaf_partials[leaves[lidx(left)]];
 			partial_right = partials[sidx(right)];
 		} else {
 			partial_left = partials[sidx(left)];
