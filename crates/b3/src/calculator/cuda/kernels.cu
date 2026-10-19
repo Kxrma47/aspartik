@@ -2,15 +2,11 @@
 
 using namespace cooperative_groups;
 
-__device__ f64 sum(const f64x4 v) {
-    return v.x + v.y + v.z + v.w;
-}
-
-__device__ f64 dot(const f64x4 a, const f64x4 b) {
+__device__ inline f64 dot(const f64x4 a, const f64x4 b) {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
 
-__device__ f64x4 hadamard(const f64x4 a, const f64x4 b) {
+__device__ inline f64x4 hadamard(const f64x4 a, const f64x4 b) {
 	return make_f64x4(
 		a.x * b.x,
 		a.y * b.y,
@@ -58,7 +54,7 @@ __device__ f64x4 hadamard(const f64x4 a, const f64x4 b) {
 	projections[spidx(nodes[i])] = projection; \
 
 // Update partial likelihoods for edges which go to leaves
-entrypoint __launch_bounds__(BLOCK_SIZE)
+entrypoint __launch_bounds__(256)
 void update_leaves(
 	const u8* __restrict__ leaves,
 	f64* __restrict__ projections,
@@ -67,10 +63,7 @@ void update_leaves(
 	const u32* __restrict__ nodes,
 	const f64x4* __restrict__ transitions
 ) {
-	u32 pattern = blockIdx.x * blockDim.x + threadIdx.x;
-	if (pattern >= NUM_PATTERNS) {
-		return;
-	}
+	PATTERN_PRELUDE
 	u32 sub = threadIdx.y;
 	u32 i = blockIdx.y;
 
@@ -178,20 +171,17 @@ void update_likelihoods(
 ) {
 	PATTERN_PRELUDE
 
-	f64x4 pre_likelihood = hadamard(
+	f64x4 root_likelihood = hadamard(
 		projections[sidx(left_child)],
 		projections[sidx(right_child)]
 	);
-	f64x4 likelihood = hadamard(
-		pre_likelihood,
-		frequencies
-	);
-
-	f64 sum = likelihood.x + likelihood.y + likelihood.z + likelihood.w;
-	likelihoods[pattern] = log(sum);
+	f64 likelihood = dot(root_likelihood, frequencies);
 
 	scales[sidx(root)] = 0;
 	if (scales[soidx(root)]) {
 		scale_sums[pattern] -= SCALE_LN;
 	}
+
+	likelihood = log(likelihood) - scale_sums[pattern];
+	likelihoods[pattern] = likelihood;
 }

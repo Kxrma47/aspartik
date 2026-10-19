@@ -126,13 +126,6 @@ impl Calculator<f64> for CudaCalculator {
 			&mut *self.likelihoods_host,
 		)?;
 
-		let scale_sums = self.stream.clone_dtoh(&self.scale_sums)?;
-		for (likelihood, scale) in
-			self.likelihoods_host.iter_mut().zip(scale_sums)
-		{
-			*likelihood -= f64::from(scale);
-		}
-
 		Ok(())
 	}
 
@@ -216,7 +209,7 @@ impl CudaCalculator {
 		let mut builder =
 			self.stream.launch_builder(&self.update_leaves_fn);
 
-		let block_size = 16;
+		let block_size = 64;
 		let num_pattern_blocks = self.num_patterns.div_ceil(block_size);
 		let cfg = LaunchConfig {
 			grid_dim: (num_pattern_blocks, leaves_end, 1),
