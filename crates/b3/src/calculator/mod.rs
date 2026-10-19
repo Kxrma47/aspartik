@@ -64,9 +64,18 @@ pub trait Calculator<F> {
 
 #[derive(Debug, Clone, Copy)]
 enum CalculatorKind {
-	Cpu { num_threads: usize },
-	Cuda { device: usize },
-	Cuda2 { device: usize, block_size: u32 },
+	Cpu {
+		num_threads: usize,
+	},
+	Cuda {
+		device: usize,
+		prop_block_size: u32,
+		leaf_block_size: u32,
+	},
+	Cuda2 {
+		device: usize,
+		block_size: u32,
+	},
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -87,11 +96,23 @@ impl CalculatorConfig {
 		}
 	}
 
-	#[pyo3(name = "CUDA", signature = (device = 0))]
+	#[pyo3(
+		name = "CUDA",
+		signature = (device = 0, prop_block_size = 64, leaf_block_size = 256)
+	)]
 	#[classmethod]
-	fn cuda(_cls: Py<PyType>, device: usize) -> Self {
+	fn cuda(
+		_cls: Py<PyType>,
+		device: usize,
+		prop_block_size: u32,
+		leaf_block_size: u32,
+	) -> Self {
 		Self {
-			kind: CalculatorKind::Cuda { device },
+			kind: CalculatorKind::Cuda {
+				device,
+				prop_block_size,
+				leaf_block_size,
+			},
 			scale_ln: 30,
 		}
 	}
@@ -130,11 +151,17 @@ impl CalculatorConfig {
 				);
 				Ok(Box::new(calc))
 			}
-			CalculatorKind::Cuda { device } => {
+			CalculatorKind::Cuda {
+				device,
+				prop_block_size,
+				leaf_block_size,
+			} => {
 				let calc = CudaCalculator::new(
 					num_patterns,
 					samples,
 					self.scale_ln,
+					prop_block_size,
+					leaf_block_size,
 					device,
 				)?;
 				Ok(Box::new(calc))

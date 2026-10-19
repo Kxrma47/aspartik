@@ -54,7 +54,7 @@ __device__ inline f64x4 hadamard(const f64x4 a, const f64x4 b) {
 	projections[spidx(nodes[i])] = projection; \
 
 // Update partial likelihoods for edges which go to leaves
-entrypoint __launch_bounds__(256)
+entrypoint __launch_bounds__(LEAF_BLOCK_SIZE)
 void update_leaves(
 	const u8* __restrict__ leaves,
 	f64* __restrict__ projections,
@@ -70,7 +70,7 @@ void update_leaves(
 	CALCULATE_LEAF_PROJECTION
 }
 
-entrypoint __launch_bounds__(BLOCK_SIZE)
+entrypoint __launch_bounds__(PROP_BLOCK_SIZE)
 void propose(
 	const u8* __restrict__ leaves,
 	f64* __restrict__ projections,

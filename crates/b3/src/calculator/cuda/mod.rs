@@ -69,6 +69,8 @@ pub struct CudaCalculator {
 
 	/// Total number of sites
 	num_patterns: u32,
+	prop_block_size: u32,
+	leaf_block_size: u32,
 }
 
 impl Calculator<f64> for CudaCalculator {
@@ -172,12 +174,11 @@ impl CudaCalculator {
 	) -> Result<()> {
 		let mut builder = self.stream.launch_builder(&self.propose_fn);
 
-		let block_size = 16 * 4;
 		let num_pattern_blocks =
-			(self.num_patterns * 4).div_ceil(block_size);
+			(self.num_patterns * 4).div_ceil(self.prop_block_size);
 		let cfg = LaunchConfig {
 			grid_dim: (num_pattern_blocks, 1, 1),
-			block_dim: (block_size, 1, 1),
+			block_dim: (self.prop_block_size, 1, 1),
 			shared_mem_bytes: 0,
 		};
 
@@ -209,11 +210,11 @@ impl CudaCalculator {
 		let mut builder =
 			self.stream.launch_builder(&self.update_leaves_fn);
 
-		let block_size = 64;
-		let num_pattern_blocks = self.num_patterns.div_ceil(block_size);
+		let num_pattern_blocks =
+			(self.num_patterns * 4).div_ceil(self.leaf_block_size);
 		let cfg = LaunchConfig {
 			grid_dim: (num_pattern_blocks, leaves_end, 1),
-			block_dim: (block_size, 4, 1),
+			block_dim: (self.leaf_block_size / 4, 4, 1),
 			shared_mem_bytes: 0,
 		};
 
@@ -243,7 +244,13 @@ impl CudaCalculator {
 		let mut builder =
 			self.stream.launch_builder(&self.update_likelihoods_fn);
 
-		let cfg = self.cfg(32, 1);
+		let block_size = 32;
+		let num_site_blocks = self.num_patterns.div_ceil(block_size);
+		let cfg = LaunchConfig {
+			grid_dim: (num_site_blocks, 1, 1),
+			block_dim: (block_size, 1, 1),
+			shared_mem_bytes: 0,
+		};
 
 		builder.arg(&self.projections);
 		builder.arg(&self.likelihoods);
@@ -264,19 +271,12 @@ impl CudaCalculator {
 		Ok(())
 	}
 
-	fn cfg(&self, block_size: u32, dim2: u32) -> LaunchConfig {
-		let num_site_blocks = self.num_patterns.div_ceil(block_size);
-		LaunchConfig {
-			grid_dim: (num_site_blocks, dim2, 1),
-			block_dim: (block_size, 1, 1),
-			shared_mem_bytes: 0,
-		}
-	}
-
 	pub fn new(
 		num_patterns: usize,
 		leaves: Vec<u8>,
 		scale_ln: u32,
+		prop_block_size: u32,
+		leaf_block_size: u32,
 		cuda_device: usize,
 	) -> Result<Self> {
 		// SAFETY: since the function tries to link the library [0], it
@@ -345,6 +345,8 @@ impl CudaCalculator {
 				format!("-DSCALE_LN={scale_ln}"),
 				format!("-DSCALE_THRESHOLD={scale_threshold}"),
 				format!("-DSCALE_MULT={scale_mult}"),
+				format!("-DPROP_BLOCK_SIZE={prop_block_size}"),
+				format!("-DLEAF_BLOCK_SIZE={leaf_block_size}"),
 			],
 			..Default::default()
 		};
@@ -380,6 +382,8 @@ impl CudaCalculator {
 			scale_sums_backup,
 
 			num_patterns: num_patterns as u32,
+			prop_block_size,
+			leaf_block_size,
 		})
 	}
 }
