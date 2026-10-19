@@ -44,6 +44,24 @@ def test_names(rng):
     assert tree.names == names
 
 
+@pytest.mark.parametrize("tree", random_trees(4, 10, num=10))
+def test_to_binary(tree, rng):
+    binary = tree.to_binary()
+
+    assert binary.num_leaves == tree.num_leaves
+    assert binary.num_internals == tree.num_internals
+    assert binary.root == tree.root
+
+    for node in binary.nodes():
+        if node == binary.root:
+            continue
+        length = binary.edge_length(node)
+        assert length is not None
+        assert length == pytest.approx(tree.edge_length(node))
+
+    assert tree.to_binary().to_newick() == binary.to_newick()
+
+
 @pytest.mark.parametrize("tree", random_trees(10, 20, num=15))
 def test_swap_parents(tree, rng):
     a, a_parent = tree.random_nonroot_node(rng)
@@ -81,7 +99,7 @@ def test_dump_load_mcmc(msa: MSA, rng: RNG):
     deserialized_tree = DatedTree(msa.sequence_names(), rng)
     deserialized_tree.load(tree_state)
 
-    assert tree.to_newick() == deserialized_tree.to_newick()
+    assert tree.to_binary().to_newick() == deserialized_tree.to_binary().to_newick()
 
 
 def test_ola(rng: RNG):

@@ -42,8 +42,6 @@ def replicate_beast1(
         for name, param in parameters.items():
             match param:
                 case DatedTree():
-                    print(param.to_newick())
-                    print(NewickTree.from_newick(tree))
                     param.load_newick(NewickTree.from_newick(tree))
                 case Real():
                     param.set(float(row[name]))

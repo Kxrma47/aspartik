@@ -75,7 +75,7 @@ def test_dump_restore():
     tree0, tree1 = mcmc0.parameters[4], mcmc1.parameters[4]
     assert isinstance(tree0, DatedTree)
     assert isinstance(tree1, DatedTree)
-    assert tree0.to_newick() == tree1.to_newick()
+    assert tree0.to_binary().to_newick() == tree1.to_binary().to_newick()
     assert mcmc0.prior == mcmc1.prior
 
 

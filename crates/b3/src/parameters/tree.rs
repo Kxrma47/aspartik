@@ -1,9 +1,10 @@
 #![allow(clippy::clone_on_copy)]
 
 use anyhow::{Context, Result, bail, ensure};
+use buffer::Buffer;
 use bytemuck::allocation::cast_vec;
 use parking_lot::Mutex;
-use picoarrow::array::Array;
+use picoarrow::array::{Array, ArrayUtf8, Nullable};
 use pyo3::{exceptions::PyValueError, prelude::*, types::PyAny};
 use rand::{RngExt, seq::SliceRandom};
 
@@ -19,8 +20,8 @@ use bitmap::Bitmap;
 use data::{
 	PyTaxonSet, TaxonSet,
 	tree::{
-		Internal, Leaf, Node, TOMBSTONE, Tree, TreeBuilder,
-		python::PyTreeBuilder,
+		BinaryTree, Internal, Leaf, Node, TOMBSTONE, Tree, TreeBuilder,
+		python::PyBinaryTree, python::PyTreeBuilder,
 	},
 };
 use rng::{PyRng, Rng};
@@ -834,45 +835,45 @@ impl DatedTree {
 		(0..root).chain(root + 1..self.num_nodes())
 	}
 
-	pub fn to_newick(
+	pub fn to_binary(
 		&self,
 		internal_ids: bool,
 		clock_rate: &dyn Fn(u32) -> f64,
-	) -> String {
-		let root = *self.root();
-		let root_name = if internal_ids {
-			root.0.to_string()
-		} else {
-			String::new()
-		};
-		let mut tree = TreeBuilder::new();
-		let builder_root = tree.add_dummy_node();
-		tree.set_root(builder_root);
-		tree.set_node_name(builder_root, &root_name);
-		let mut stack = vec![(root, builder_root)];
-		while let Some((source, target)) = stack.pop() {
-			let Some(source) = self.as_internal(source) else {
-				continue;
+	) -> BinaryTree {
+		let num_leaves = self.num_leaves();
+		let num_nodes = self.num_nodes();
+		let num_internals = self.num_internals();
+
+		let mut edge_lengths = Vec::with_capacity(num_nodes as usize);
+		for node in self.nodes() {
+			let length = if node == *self.root() {
+				0.0
+			} else {
+				self.edge_length(node.0) * clock_rate(node.0)
 			};
-			let (left, right) = self.children_of(source);
-			let mut next = Vec::with_capacity(2);
-			for child in [left, right] {
-				let name = if self.is_leaf(child) {
-					self.names.get(child.usize()).to_owned()
-				} else if internal_ids {
-					child.0.to_string()
-				} else {
-					String::new()
-				};
-				let length = self.edge_length(child.0)
-					* clock_rate(child.0);
-				let child_target =
-					tree.add_node(&name, length, target);
-				next.push((child, child_target));
-			}
-			stack.extend(next.into_iter().rev());
+			edge_lengths.push(length);
 		}
-		tree.to_newick()
+
+		let mut internal_names = ArrayUtf8::<Nullable>::new();
+		if internal_ids {
+			for internal in self.internals() {
+				internal_names
+					.push_some(&internal.0.to_string())
+					.unwrap();
+			}
+		} else {
+			internal_names.push_nulls(num_internals as usize);
+		}
+
+		BinaryTree::new(
+			num_leaves,
+			self.root().0,
+			Buffer::from_slice(&self.children),
+			Buffer::from_slice(&self.parents),
+			Buffer::from_slice(&edge_lengths),
+			self.names.clone(),
+			internal_names,
+		)
 	}
 
 	fn internal_heights(&self) -> Vec<f64> {
@@ -1382,23 +1383,19 @@ impl_pyparameter_common!(PyDatedTree, DatedTree, {
 		self.inner().validate()
 	}
 
-	/// Returns the tree topology in the Newick format
-	///
-	/// Leaf nodes will be labeled with the names passed to the constructor
-	/// while the internal nodes are unlabeled.
-	#[pyo3(signature = (internal_ids = false, clock = None))]
-	fn to_newick(
-		&self,
-		internal_ids: bool,
-		clock: Option<Py<PyClock>>,
-	) -> String {
+	#[pyo3(signature = (clock = None))]
+	fn to_binary(&self, clock: Option<Py<PyClock>>) -> PyBinaryTree {
 		if let Some(clock) = clock {
 			let clock = clock.get().inner();
-			self.inner().to_newick(internal_ids, &|edge| {
-				clock.get_rate(edge)
-			})
+			PyBinaryTree::from(
+				self.inner().to_binary(false, &|edge| {
+					clock.get_rate(edge)
+				}),
+			)
 		} else {
-			self.inner().to_newick(internal_ids, &|_| 1.0)
+			PyBinaryTree::from(
+				self.inner().to_binary(false, &|_| 1.0),
+			)
 		}
 	}
 
