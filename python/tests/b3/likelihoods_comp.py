@@ -37,7 +37,7 @@ def test_replicate_likelihood():
             substitution=GTR(frequencies, rates),
             clock=Clock.Strict(clock_rate),
             tree=tree,
-            calculator=Calculator.CUDA(),
+            calculator=Calculator.CUDAPropagations(),
         )
     except Exception:
         cuda_calculator = None

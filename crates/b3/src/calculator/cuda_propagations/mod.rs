@@ -8,9 +8,9 @@ use cudarc::{
 	nvrtc::{CompileOptions, compile_ptx_with_opts},
 };
 
-use std::{env, sync::Arc};
+use std::sync::Arc;
 
-use super::Calculator;
+use super::{Calculator, cccl_qual_path, cuda_path};
 use crate::{Transitions, parameters::DatedTree};
 use sk::EditBuf;
 
@@ -20,7 +20,7 @@ type Transition = [f64; 16];
 const CUDA_SRC: &str =
 	concat!(include_str!("typedefs.h"), include_str!("kernels.cu"),);
 
-pub struct CudaCalculator {
+pub struct CudaPropagationsCalculator {
 	stream: Arc<CudaStream>,
 
 	propose_fn: CudaFunction,
@@ -73,7 +73,7 @@ pub struct CudaCalculator {
 	leaf_block_size: u32,
 }
 
-impl Calculator<f64> for CudaCalculator {
+impl Calculator<f64> for CudaPropagationsCalculator {
 	fn propose(
 		&mut self,
 		tree: &DatedTree,
@@ -162,7 +162,7 @@ impl Calculator<f64> for CudaCalculator {
 	}
 }
 
-impl CudaCalculator {
+impl CudaPropagationsCalculator {
 	/// Updates both leaves and internal nodes
 	///
 	/// Asynchronous.
@@ -309,8 +309,8 @@ impl CudaCalculator {
 
 		let stream = context.new_stream()?;
 
-		// SAFETY: `CudaLikelihood` only uses a single stream, so
-		// there's no need for cross-stream synchronization
+		// SAFETY: we only use a single stream, so there's no need for
+		// cross-stream synchronization
 		unsafe { context.disable_event_tracking() };
 
 		let leaves = stream.clone_htod(&leaves)?;
@@ -386,19 +386,4 @@ impl CudaCalculator {
 			leaf_block_size,
 		})
 	}
-}
-
-pub(super) fn cuda_path() -> String {
-	env::var("CUDA_PATH")
-		.or_else(|_| env::var("CUDA_HOME"))
-		.unwrap_or_else(|_| "/usr/local/cuda".to_string())
-}
-
-pub(super) fn cccl_qual_path() -> String {
-	let arch = match env::consts::ARCH {
-		"x86_64" => "x86_64",
-		_ => unimplemented!(),
-	};
-	let os = env::consts::OS;
-	format!("{}/targets/{arch}-{os}/include/cccl/", cuda_path())
 }

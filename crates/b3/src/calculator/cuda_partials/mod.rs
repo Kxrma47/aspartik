@@ -10,10 +10,7 @@ use cudarc::{
 
 use std::sync::Arc;
 
-use super::{
-	Calculator,
-	cuda::{cccl_qual_path, cuda_path},
-};
+use super::{Calculator, cccl_qual_path, cuda_path};
 use crate::{Transitions, parameters::DatedTree};
 use sk::EditBuf;
 
@@ -24,7 +21,7 @@ const CUDA_SRC: &str =
 	concat!(include_str!("typedefs.h"), include_str!("kernels.cu"),);
 
 /// Partials-based CUDA likelihood calculator
-pub struct Cuda2Calculator {
+pub struct CudaPartialsCalculator {
 	stream: Arc<CudaStream>,
 
 	propose_fn: CudaFunction,
@@ -62,7 +59,7 @@ pub struct Cuda2Calculator {
 	block_size: u32,
 }
 
-impl Calculator<f64> for Cuda2Calculator {
+impl Calculator<f64> for CudaPartialsCalculator {
 	fn propose(
 		&mut self,
 		tree: &DatedTree,
@@ -134,7 +131,7 @@ impl Calculator<f64> for Cuda2Calculator {
 	}
 }
 
-impl Cuda2Calculator {
+impl CudaPartialsCalculator {
 	fn update_partials(
 		&self,
 		num_internals: u32,
@@ -215,8 +212,8 @@ impl Cuda2Calculator {
 
 		let stream = context.new_stream()?;
 
-		// SAFETY: `Cuda2Calculator` only uses a single stream, so
-		// there's no need for cross-stream synchronization
+		// SAFETY: we only use a single stream, so there's no need for
+		// cross-stream synchronization
 		unsafe { context.disable_event_tracking() };
 
 		let leaves = stream.clone_htod(&leaves)?;

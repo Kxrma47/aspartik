@@ -3,19 +3,34 @@
 use anyhow::Result;
 use pyo3::{prelude::*, types::PyType};
 
-use std::borrow::BorrowMut;
+use std::{borrow::BorrowMut, env};
 
 use crate::{Transitions, parameters::DatedTree};
 
 mod cpu4;
-mod cuda;
-mod cuda2;
+mod cuda_partials;
+mod cuda_propagations;
 mod state;
 
 pub use cpu4::Cpu4Calculator;
-pub use cuda::CudaCalculator;
-pub use cuda2::Cuda2Calculator;
+pub use cuda_partials::CudaPartialsCalculator;
+pub use cuda_propagations::CudaPropagationsCalculator;
 pub use state::StateCalculator;
+
+pub(super) fn cuda_path() -> String {
+	env::var("CUDA_PATH")
+		.or_else(|_| env::var("CUDA_HOME"))
+		.unwrap_or_else(|_| "/usr/local/cuda".to_string())
+}
+
+pub(super) fn cccl_qual_path() -> String {
+	let arch = match env::consts::ARCH {
+		"x86_64" => "x86_64",
+		_ => unimplemented!(),
+	};
+	let os = env::consts::OS;
+	format!("{}/targets/{arch}-{os}/include/cccl/", cuda_path())
+}
 
 /// Felsenstein's pruning tree likelihood calculator
 ///
@@ -67,12 +82,12 @@ enum CalculatorKind {
 	Cpu {
 		num_threads: usize,
 	},
-	Cuda {
+	CUDAPropagations {
 		device: usize,
 		prop_block_size: u32,
 		leaf_block_size: u32,
 	},
-	Cuda2 {
+	CUDAPartials {
 		device: usize,
 		block_size: u32,
 	},
@@ -97,18 +112,18 @@ impl CalculatorConfig {
 	}
 
 	#[pyo3(
-		name = "CUDA",
+		name = "CUDAPropagations",
 		signature = (device = 0, prop_block_size = 64, leaf_block_size = 256)
 	)]
 	#[classmethod]
-	fn cuda(
+	fn cuda_propagations(
 		_cls: Py<PyType>,
 		device: usize,
 		prop_block_size: u32,
 		leaf_block_size: u32,
 	) -> Self {
 		Self {
-			kind: CalculatorKind::Cuda {
+			kind: CalculatorKind::CUDAPropagations {
 				device,
 				prop_block_size,
 				leaf_block_size,
@@ -117,11 +132,18 @@ impl CalculatorConfig {
 		}
 	}
 
-	#[pyo3(name = "CUDA2", signature = (device = 0, block_size = 32))]
+	#[pyo3(name = "CUDAPartials", signature = (device = 0, block_size = 32))]
 	#[classmethod]
-	fn cuda2(_cls: Py<PyType>, device: usize, block_size: u32) -> Self {
+	fn cuda_partials(
+		_cls: Py<PyType>,
+		device: usize,
+		block_size: u32,
+	) -> Self {
 		Self {
-			kind: CalculatorKind::Cuda2 { device, block_size },
+			kind: CalculatorKind::CUDAPartials {
+				device,
+				block_size,
+			},
 			scale_ln: 30,
 		}
 	}
@@ -151,12 +173,12 @@ impl CalculatorConfig {
 				);
 				Ok(Box::new(calc))
 			}
-			CalculatorKind::Cuda {
+			CalculatorKind::CUDAPropagations {
 				device,
 				prop_block_size,
 				leaf_block_size,
 			} => {
-				let calc = CudaCalculator::new(
+				let calc = CudaPropagationsCalculator::new(
 					num_patterns,
 					samples,
 					self.scale_ln,
@@ -166,8 +188,8 @@ impl CalculatorConfig {
 				)?;
 				Ok(Box::new(calc))
 			}
-			CalculatorKind::Cuda2 { device, block_size } => {
-				let calc = Cuda2Calculator::new(
+			CalculatorKind::CUDAPartials { device, block_size } => {
+				let calc = CudaPartialsCalculator::new(
 					num_patterns,
 					samples,
 					self.scale_ln,

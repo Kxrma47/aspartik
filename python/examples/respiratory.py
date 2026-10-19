@@ -83,7 +83,7 @@ try:
         substitution=HKY(frequencies, kappa),
         clock=Clock.Strict(clock_rate),
         tree=tree,
-        calculator=Calculator.CUDA(),
+        calculator=Calculator.CUDAPropagations(),
     )
 except Exception as e:
     print(f"failed to create CUDALikelihood: {e}")

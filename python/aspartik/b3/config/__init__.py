@@ -874,7 +874,7 @@ def _b3_config(c: MCMCConfig):
                 substitution=sub_model,
                 clock=clock,
                 tree=tree,
-                calculator=Calculator.CUDA(),
+                calculator=Calculator.CUDAPropagations(),
             )
         case "cuda2":
             likelihood = DNALikelihood(
@@ -882,7 +882,7 @@ def _b3_config(c: MCMCConfig):
                 substitution=sub_model,
                 clock=clock,
                 tree=tree,
-                calculator=Calculator.CUDA2(),
+                calculator=Calculator.CUDAPartials(),
             )
 
     callbacks = []
