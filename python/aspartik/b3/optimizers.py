@@ -9,7 +9,7 @@ class Optimizer(Protocol):
     def every(self) -> int: ...
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class LinearOptimizer(Optimizer):
     """
     Aggressive b3-specific optimizer
@@ -38,7 +38,7 @@ class LinearOptimizer(Optimizer):
             return self.magnitude * 10 * (1.0 - step_ratio)
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class BeastOptimizer(Optimizer):
     """
     An optimizer with a reciprocal tuning rate

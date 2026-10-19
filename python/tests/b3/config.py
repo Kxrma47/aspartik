@@ -1,4 +1,5 @@
 import pytest
+from utils import all_pairs
 
 from aspartik.b3.config import MCMCConfig
 from aspartik.b3.optimizers import BeastOptimizer, LinearOptimizer
@@ -7,15 +8,12 @@ from aspartik.data.msa import MSA
 APES_MSA = MSA.from_fasta_file("data/alignments/apes.fasta")
 
 
-@pytest.mark.parametrize("calculator", ["cpu"])
-@pytest.mark.parametrize("substitution_model", ["JC", "K80", "HKY", "GTR"])
-@pytest.mark.parametrize("operator_mix", ["classic", "default"])
-@pytest.mark.parametrize(
-    "optimizer", [None, LinearOptimizer(1_000_000), BeastOptimizer()]
-)
-@pytest.mark.parametrize("clock_rate", [None, 1.0])
-@pytest.mark.parametrize(
-    "tree_prior",
+parameters = [
+    ["cpu"],  # calculator
+    ["JC", "K80", "HKY", "GTR"],  # substitution_model
+    ["classic", "default"],  # operator_mix
+    [None, LinearOptimizer(1_000_000), BeastOptimizer()],  # optimizer
+    [None, 1.0],  # clock_rate
     [
         "yule",
         "constant",
@@ -24,12 +22,19 @@ APES_MSA = MSA.from_fasta_file("data/alignments/apes.fasta")
         "bdsky:20",
         "skyline",
         "skyline:5",
-    ],
+    ],  # tree_prior
+    [None, 100],  # print_every
+    [None, "target/test_config.trace"],  # trace_path
+    [None, "target/test_config.opstats"],  # opstats_path
+    [False, True],  # timer
+]
+
+
+@pytest.mark.parametrize(
+    "calculator, substitution_model, operator_mix, optimizer, clock_rate,"
+    " tree_prior, print_every, trace_path, opstats_path, timer",
+    all_pairs(parameters),
 )
-@pytest.mark.parametrize("print_every", [None, 100])
-@pytest.mark.parametrize("trace_path", [None, "target/test_config.trace"])
-@pytest.mark.parametrize("opstats_path", [None, "target/test_config.opstats"])
-@pytest.mark.parametrize("timer", [False, True])
 def test_config(
     calculator,
     substitution_model,
