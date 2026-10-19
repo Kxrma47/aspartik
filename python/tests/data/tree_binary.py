@@ -4,6 +4,7 @@ from dendropy.calculate import treecompare
 from utils import random_integer
 
 from array import array
+from pathlib import Path
 
 from aspartik.data import TaxonSet
 from aspartik.data.tree import (
@@ -284,3 +285,27 @@ def test_robinson_foulds_sim(size: int, rng: RNG):
         return treecompare.symmetric_difference(a, b)
 
     assert a.robinson_foulds(b) == dendropy_distance(a.to_newick(), b.to_newick())
+
+
+@pytest.mark.parametrize(
+    "path",
+    sorted(Path("data/runs").glob("*/beast*.trees")),
+    ids=lambda path: path.parent.name,
+)
+def test_robinson_foulds_matrix_on_beast_trees(path):
+    builder = TreeBuilder()
+    newicks = path.read_text().splitlines()
+    builder.load_newick(newicks[0])
+    first = builder.to_binary()
+    taxa = first.taxa
+
+    trees = [first]
+    for newick in newicks[1:]:
+        builder.load_newick(newick)
+        trees.append(builder.to_binary(taxa))
+
+    matrix = robinson_foulds_matrix(trees)
+
+    assert trees
+    assert len(matrix) == len(trees) ** 2
+    assert all(matrix[index * len(trees) + index] == 0 for index in range(len(trees)))
