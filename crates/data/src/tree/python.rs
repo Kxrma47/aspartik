@@ -244,9 +244,7 @@ impl PyTreeBuilder {
 	fn to_binary(&self, taxa: Option<PyTaxonSet>) -> Result<PyBinaryTree> {
 		let inner = self.inner();
 		let tree = match taxa {
-			Some(taxa) => {
-				inner.to_binary_with_taxa(taxa.0.clone())?
-			}
+			Some(taxa) => inner.to_binary_with_taxa(&taxa.0)?,
 			None => inner.to_binary()?,
 		};
 		Ok(PyBinaryTree { inner: tree })
@@ -335,9 +333,7 @@ impl PyBinaryTree {
 	) -> Result<Self> {
 		let builder = TreeBuilder::from_newick(newick)?;
 		let tree = match taxa {
-			Some(taxa) => {
-				builder.to_binary_with_taxa(taxa.0.clone())?
-			}
+			Some(taxa) => builder.to_binary_with_taxa(&taxa.0)?,
 			None => builder.to_binary()?,
 		};
 		Ok(Self { inner: tree })

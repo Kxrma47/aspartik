@@ -18,7 +18,7 @@ pub use parser::Parser;
 pub use phred::Phred;
 #[cfg(feature = "python")]
 pub use taxon_set::PyTaxonSet;
-pub use taxon_set::TaxonSet;
+pub use taxon_set::{TaxonMap, TaxonSet};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;

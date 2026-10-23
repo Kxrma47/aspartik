@@ -1,9 +1,9 @@
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use picoarrow::array::{Array, ArrayUtf8, NonNullable, Nullable};
 use smallvec::SmallVec;
 
 use super::{BinaryTree, Node, Tree, newick::parse_newick};
-use crate::TaxonSet;
+use crate::{TaxonMap, TaxonSet};
 use buffer::Buffer;
 
 #[derive(Debug, Clone, Default)]
@@ -155,21 +155,21 @@ impl TreeBuilder {
 			if !self.children_of(node).is_empty() {
 				continue;
 			}
-			out.push(&self.node_names[node.usize()]).unwrap();
+			out.push(self.name_of(node)).unwrap();
 		}
 		out.into()
 	}
 
 	pub fn to_binary_with_taxa(
 		&self,
-		taxon_set: TaxonSet,
+		taxon_set: &TaxonSet,
 	) -> Result<BinaryTree> {
-		to_binary(self, taxon_set)
+		builder_to_binary(self, taxon_set.make_map())
 	}
 
 	pub fn to_binary(&self) -> Result<BinaryTree> {
 		let taxon_set = self.make_taxon_set();
-		self.to_binary_with_taxa(taxon_set)
+		self.to_binary_with_taxa(&taxon_set)
 	}
 
 	pub fn load_newick(&mut self, newick: &str) -> Result<()> {
@@ -184,10 +184,13 @@ impl TreeBuilder {
 	}
 }
 
-fn to_binary(builder: &TreeBuilder, taxon_set: TaxonSet) -> Result<BinaryTree> {
+pub fn builder_to_binary(
+	builder: &TreeBuilder,
+	taxon_map: TaxonMap,
+) -> Result<BinaryTree> {
 	let root = builder.root().ok_or_else(|| anyhow!("tree has no root"))?;
 	let num_nodes = builder.num_nodes() as u32;
-	let num_leaves = taxon_set.len() as u32;
+	let num_leaves = taxon_map.taxon_set().len() as u32;
 	ensure!(
 		num_leaves >= 2,
 		"Expected at least two leaves, got {num_leaves}"
@@ -203,12 +206,9 @@ fn to_binary(builder: &TreeBuilder, taxon_set: TaxonSet) -> Result<BinaryTree> {
 		if builder.children_of(node).is_empty() {
 			let name = builder.name(node);
 			// TODO: that's very slow
-			let taxon = taxon_set
-				.iter()
-				.position(|t| t == name)
-				.ok_or_else(|| {
-					anyhow!("Unknown taxon: {name:?}")
-				})?;
+			let taxon = taxon_map.get(name).with_context(|| {
+				anyhow!("Unknown taxon: {name:?}")
+			})?;
 			mapping[node.usize()] = taxon as u32;
 		} else {
 			mapping[node.usize()] = next_internal;
@@ -252,7 +252,7 @@ fn to_binary(builder: &TreeBuilder, taxon_set: TaxonSet) -> Result<BinaryTree> {
 		children,
 		parents,
 		edge_lengths,
-		taxon_set,
+		taxon_map.taxon_set().clone(),
 		internal_names,
 	);
 	Ok(binary)

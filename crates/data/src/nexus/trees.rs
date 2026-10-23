@@ -1,11 +1,11 @@
 use anyhow::{Result, bail};
-
 use picoarrow::array::{ArrayUtf8, NonNullable};
+
 use std::io::BufRead;
 
 use super::{NexusParser, parse_token};
 use crate::{
-	TaxonSet,
+	TaxonMap, TaxonSet,
 	tree::{BinaryTree, builder::TreeBuilder},
 };
 
@@ -51,7 +51,7 @@ where
 	let mut out = vec![];
 	let mut line = String::new();
 	let mut parser = NexusParser::default();
-	let mut translation: Option<(TaxonSet, TaxonSet)> = None;
+	let mut translation: Option<(TaxonSet, TaxonSet, TaxonMap)> = None;
 	let mut builder = TreeBuilder::new();
 
 	let mut callback = |block: &str, command: &str| {
@@ -61,7 +61,9 @@ where
 		if command.get(..9).is_some_and(|prefix| {
 			prefix.eq_ignore_ascii_case("translate")
 		}) {
-			translation = Some(parse_translate(command)?);
+			let (from, to) = parse_translate(command)?;
+			let map = from.make_map();
+			translation = Some((from, to, map));
 			return Ok(());
 		}
 
@@ -72,9 +74,8 @@ where
 			let newick = &command[idx..];
 			builder.load_newick(newick)?;
 			let tree = if let Some(translation) = &translation {
-				let mut out = builder.to_binary_with_taxa(
-					translation.0.clone(),
-				)?;
+				let mut out = builder
+					.to_binary_with_taxa(&translation.0)?;
 				out.set_taxa(translation.1.clone());
 				out
 			} else {

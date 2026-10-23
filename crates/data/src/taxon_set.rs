@@ -1,10 +1,18 @@
+use hashbrown::HashTable;
 use picoarrow::array::{Array, ArrayUtf8, NonNullable};
 #[cfg(feature = "python")]
 use pyo3::{prelude::*, types::PyType};
+use rustc_hash::FxHasher;
+
+use std::{
+	hash::{Hash, Hasher},
+	iter::FromIterator,
+	ops::Deref,
+	sync::Arc,
+};
+
 #[cfg(feature = "python")]
 use util::atomic::MonotonicUsize;
-
-use std::{iter::FromIterator, ops::Deref, sync::Arc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaxonSet {
@@ -20,6 +28,10 @@ impl TaxonSet {
 
 	pub fn ranged_ints(len: usize) -> Self {
 		Self::from_iter((0..len).map(|i| i.to_string()))
+	}
+
+	pub fn make_map(&self) -> TaxonMap {
+		TaxonMap::new(self)
 	}
 }
 
@@ -111,5 +123,46 @@ impl PyTaxonSetIter {
 		let out = self.taxon_set.get(index);
 		self.index.add(1);
 		Some(out.to_owned())
+	}
+}
+
+/// A hash map which allows to quickly get the taxon index by name
+pub struct TaxonMap {
+	taxon_set: TaxonSet,
+	hash: HashTable<usize>,
+}
+
+fn str_hasher(name: &str) -> u64 {
+	let mut hasher = FxHasher::default();
+	name.hash(&mut hasher);
+	hasher.finish()
+}
+
+impl TaxonMap {
+	pub fn new(taxon_set: &TaxonSet) -> Self {
+		let mut hash = HashTable::with_capacity(taxon_set.len());
+
+		for (index, name) in taxon_set.iter().enumerate() {
+			let name_hash = str_hasher(name);
+			hash.insert_unique(name_hash, index, |&index| {
+				str_hasher(taxon_set.get(index))
+			});
+		}
+
+		TaxonMap {
+			taxon_set: taxon_set.clone(),
+			hash,
+		}
+	}
+
+	pub fn get(&self, name: &str) -> Option<usize> {
+		let hash = str_hasher(name);
+		self.hash
+			.find(hash, |&index| self.taxon_set.get(index) == name)
+			.copied()
+	}
+
+	pub fn taxon_set(&self) -> &TaxonSet {
+		&self.taxon_set
 	}
 }
