@@ -1,5 +1,3 @@
-#![allow(clippy::clone_on_copy)]
-
 use anyhow::{Error, Result, bail};
 #[cfg(feature = "python")]
 use pyo3::prelude::*;

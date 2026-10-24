@@ -1,5 +1,3 @@
-#![allow(clippy::clone_on_copy)]
-
 mod binary;
 pub mod builder;
 mod distances;
@@ -27,11 +25,7 @@ pub const TOMBSTONE: u32 = u32::MAX;
 )]
 #[cfg_attr(
 	feature = "python",
-	pyo3::pyclass(
-		module = "aspartik.data.tree",
-		frozen,
-		skip_from_py_object
-	)
+	pyo3::pyclass(module = "aspartik.data.tree", frozen)
 )]
 #[repr(transparent)]
 pub struct Node(pub u32);

@@ -1,5 +1,3 @@
-#![allow(clippy::clone_on_copy)]
-
 use anyhow::Result;
 use pyo3::{prelude::*, types::PyType};
 

@@ -1,5 +1,3 @@
-#![allow(clippy::clone_on_copy)]
-
 use anyhow::{Context, Result, bail, ensure};
 use buffer::Buffer;
 use bytemuck::allocation::cast_vec;

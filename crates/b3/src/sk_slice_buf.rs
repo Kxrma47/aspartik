@@ -1,19 +1,19 @@
-use bytemuck::AnyBitPattern;
+use bytemuck::Zeroable;
 use computare_buffer::SliceBuffer;
 
 use std::ops::Index;
 
 use sk::EditBuf;
 
-pub struct SkSliceBuf<T> {
+pub struct SkSliceBuf<T: Copy> {
 	edits: EditBuf,
 	slices: SliceBuffer<T>,
 }
 
-impl<T> SkSliceBuf<T> {
+impl<T: Copy> SkSliceBuf<T> {
 	pub fn new(size: usize, len: usize) -> Self
 	where
-		T: AnyBitPattern,
+		T: Zeroable,
 	{
 		Self {
 			edits: EditBuf::new(len),
@@ -38,7 +38,7 @@ impl<T> SkSliceBuf<T> {
 	}
 }
 
-impl<T> Index<usize> for SkSliceBuf<T> {
+impl<T: Copy> Index<usize> for SkSliceBuf<T> {
 	type Output = [T];
 
 	fn index(&self, index: usize) -> &[T] {

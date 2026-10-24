@@ -21,14 +21,7 @@ use crate::seq::Character;
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 #[cfg_attr(
 	feature = "python",
-	pyclass(
-		skip_from_py_object,
-		name = "AminoAcid",
-		module = "aspartik.data",
-		frozen,
-		eq,
-		str,
-	)
+	pyclass(name = "AminoAcid", module = "aspartik.data", frozen, eq, str,)
 )]
 pub enum AminoAcid {
 	Alanine = 0,

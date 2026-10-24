@@ -260,12 +260,7 @@ impl PyTreeBuilder {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[pyclass(
-	name = "SvgOptions",
-	module = "aspartik.data.tree",
-	frozen,
-	skip_from_py_object
-)]
+#[pyclass(name = "SvgOptions", module = "aspartik.data.tree", frozen)]
 pub struct PySvgOptions {
 	inner: TreeSvgOptions,
 }
