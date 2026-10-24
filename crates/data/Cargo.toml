@@ -14,7 +14,7 @@ util = { workspace = true }
 
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true, features = ["derive"] }
-bytemuck = { workspace = true }
+bytemuck = { workspace = true, features = ["derive"] }
 hashbrown = { workspace = true }
 logos = { workspace = true }
 parking_lot = { workspace = true, optional = true }
