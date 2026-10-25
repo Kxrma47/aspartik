@@ -4,17 +4,16 @@ pub mod beast_eigen;
 pub mod const_matrix;
 mod dim;
 mod ext;
-mod matrix;
 
+pub use computare_linalg::{Matrix, MatrixRef};
 pub use const_matrix::ConstMatrixRef;
 pub use dim::Dim;
-pub use ext::{MatrixArrayExt, MatrixSliceExt};
-pub use matrix::{MatrixMut, MatrixRef};
+pub use ext::{MatrixArrayExt, MatrixCopyExt, MatrixSliceExt};
 
 pub fn mul(
-	lhs: MatrixRef<'_, f64>,
-	rhs: MatrixRef<'_, f64>,
-	mut dst: MatrixMut<'_, f64>,
+	lhs: &MatrixRef<f64>,
+	rhs: &MatrixRef<f64>,
+	dst: &mut MatrixRef<f64>,
 ) {
 	assert_eq!(lhs.num_cols(), rhs.num_rows());
 	assert_eq!(dst.num_rows(), lhs.num_rows());
@@ -28,9 +27,9 @@ pub fn mul(
 		for j in 0..cols {
 			let mut sum = 0.0;
 			for k in 0..inner {
-				sum += lhs[(i, k)] * rhs[(k, j)];
+				sum += lhs.at(i, k) * rhs.at(k, j);
 			}
-			dst[(i, j)] = sum;
+			*dst.at_mut(i, j) = sum;
 		}
 	}
 }

@@ -8,8 +8,8 @@ authors.workspace = true
 
 [dependencies]
 arbitrary = { workspace = true, optional = true }
-bytemuck = { workspace = true }
 computare-core = { workspace = true }
+computare-linalg = { workspace = true }
 
 [dev-dependencies]
 arbitrary = { workspace = true }

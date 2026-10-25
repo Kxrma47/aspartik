@@ -154,7 +154,7 @@ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 [[package]]
 name = "computare-buffer"
 version = "0.1.0-alpha.0"
-source = "git+https://github.com/kaathewisegit/computare#0660b7030b393aa0ade32a1865730770a983907b"
+source = "git+https://github.com/kaathewisegit/computare#d7b755066039578e7d08f58c744859d88e4c40bb"
 dependencies = [
  "bytemuck",
 ]
@@ -162,12 +162,12 @@ dependencies = [
 [[package]]
 name = "computare-core"
 version = "0.1.0-alpha.0"
-source = "git+https://github.com/kaathewisegit/computare#0660b7030b393aa0ade32a1865730770a983907b"
+source = "git+https://github.com/kaathewisegit/computare#d7b755066039578e7d08f58c744859d88e4c40bb"
 
 [[package]]
 name = "computare-distributions"
 version = "0.1.0-alpha.0"
-source = "git+https://github.com/kaathewisegit/computare#0660b7030b393aa0ade32a1865730770a983907b"
+source = "git+https://github.com/kaathewisegit/computare#d7b755066039578e7d08f58c744859d88e4c40bb"
 dependencies = [
  "computare-core",
  "computare-special",
@@ -175,9 +175,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "computare-linalg"
+version = "0.1.0-alpha.0"
+source = "git+https://github.com/kaathewisegit/computare#d7b755066039578e7d08f58c744859d88e4c40bb"
+dependencies = [
+ "bytemuck",
+ "computare-buffer",
+ "computare-core",
+]
+
+[[package]]
 name = "computare-special"
 version = "0.1.0-alpha.0"
-source = "git+https://github.com/kaathewisegit/computare#0660b7030b393aa0ade32a1865730770a983907b"
+source = "git+https://github.com/kaathewisegit/computare#d7b755066039578e7d08f58c744859d88e4c40bb"
 dependencies = [
  "computare-core",
  "libm",
@@ -345,8 +355,8 @@ version = "0.1.0-alpha.21"
 dependencies = [
  "arbitrary",
  "arbtest",
- "bytemuck",
  "computare-core",
+ "computare-linalg",
 ]
 
 [[package]]

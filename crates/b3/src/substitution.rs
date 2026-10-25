@@ -5,7 +5,8 @@ use std::ops::{Deref, DerefMut};
 
 use crate::parameters::{Parameter, PyReal, PyRealVector};
 use linalg::{
-	MatrixArrayExt, MatrixMut, MatrixSliceExt, beast_eigen,
+	Matrix, MatrixArrayExt, MatrixCopyExt, MatrixRef, MatrixSliceExt,
+	beast_eigen,
 	const_matrix::{from_diagonal, mul as cmul},
 	mul,
 };
@@ -14,7 +15,7 @@ use util::py_bail;
 pub trait SubstitutionModel {
 	fn update(&mut self) -> Result<bool>;
 
-	fn write_transition(&mut self, distance: f64, dst: MatrixMut<'_, f64>);
+	fn write_transition(&mut self, distance: f64, dst: &mut MatrixRef<f64>);
 
 	fn write_frequencies(&self, dst: &mut [f64]);
 
@@ -97,7 +98,11 @@ impl SubstitutionModel for JC {
 		Ok(false)
 	}
 
-	fn write_transition(&mut self, distance: f64, dst: MatrixMut<'_, f64>) {
+	fn write_transition(
+		&mut self,
+		distance: f64,
+		dst: &mut MatrixRef<f64>,
+	) {
 		let exp = (-4.0 / 3.0 * distance).exp();
 
 		let diagonal = 0.25 + 0.75 * exp;
@@ -170,7 +175,11 @@ impl SubstitutionModel for K80 {
 		}
 	}
 
-	fn write_transition(&mut self, distance: f64, dst: MatrixMut<'_, f64>) {
+	fn write_transition(
+		&mut self,
+		distance: f64,
+		dst: &mut MatrixRef<f64>,
+	) {
 		let kappa = self.cached_kappa;
 
 		let frac1 = -4.0 / (kappa + 2.0);
@@ -203,10 +212,11 @@ impl SubstitutionModel for K80 {
 	}
 }
 
-fn transition_freqs(freqs: &[f64; 4], mut dst: MatrixMut<'_, f64>) {
+#[expect(clippy::needless_range_loop)]
+fn transition_freqs(freqs: &[f64; 4], dst: &mut MatrixRef<f64>) {
 	for i in 0..4 {
 		for j in 0..4 {
-			dst[(i, j)] = freqs[j];
+			*dst.at_mut(i, j) = freqs[j];
 		}
 	}
 }
@@ -215,14 +225,15 @@ fn transition_freqs(freqs: &[f64; 4], mut dst: MatrixMut<'_, f64>) {
 ///
 /// `exp(X)` is defined as `∑1/n! Xⁿ`.  When `X = Q t`, where `t` is small, we
 /// can discard all items past `n = 1`.  Thus, `exp(Q t) ≈ I + Q t`.
-fn transition_q(q: &M4, distance: f64, mut dst: MatrixMut<'_, f64>) {
+#[expect(clippy::needless_range_loop)]
+fn transition_q(q: &M4, distance: f64, dst: &mut MatrixRef<f64>) {
 	for i in 0..4 {
 		for j in 0..4 {
-			dst[(i, j)] = q[i][j] * distance;
+			*dst.at_mut(i, j) = q[i][j] * distance;
 		}
 	}
 	for i in 0..4 {
-		dst[(i, i)] = 1.0;
+		*dst.at_mut(i, i) = 1.0;
 	}
 }
 
@@ -357,7 +368,11 @@ impl SubstitutionModel for HKY {
 		}
 	}
 
-	fn write_transition(&mut self, distance: f64, dst: MatrixMut<'_, f64>) {
+	fn write_transition(
+		&mut self,
+		distance: f64,
+		dst: &mut MatrixRef<f64>,
+	) {
 		if distance > 20.0 {
 			transition_freqs(&self.cached_frequencies, dst);
 			return;
@@ -528,7 +543,11 @@ impl SubstitutionModel for GTR {
 		}
 	}
 
-	fn write_transition(&mut self, distance: f64, dst: MatrixMut<'_, f64>) {
+	fn write_transition(
+		&mut self,
+		distance: f64,
+		dst: &mut MatrixRef<f64>,
+	) {
 		if distance > 20.0 {
 			transition_freqs(&self.cached_frequencies, dst);
 			return;
@@ -682,24 +701,28 @@ impl SubstitutionModel for GenericSubstitution {
 		}
 	}
 
-	fn write_transition(&mut self, distance: f64, dst: MatrixMut<'_, f64>) {
+	fn write_transition(
+		&mut self,
+		distance: f64,
+		dst: &mut MatrixRef<f64>,
+	) {
 		let n = self.eigenvalues.len();
-		assert!((*dst).is_square());
-		assert_eq!((*dst).num_cols(), n);
+		assert!(dst.is_square());
+		assert_eq!(dst.num_cols(), n);
 
-		let mut scratch_ref = self.scratch.as_mat_mut(n, n);
+		let scratch_ref = self.scratch.as_mat_mut(n, n);
 
 		let p_ref = self.p.as_mat(n, n);
 		let inv_p_ref = self.inv_p.as_mat(n, n);
 
-		let mut diag_ref = self.diag.as_mat_mut(n, n);
+		let diag_ref = self.diag.as_mat_mut(n, n);
 		for i in 0..n {
-			diag_ref[(i, i)] =
+			*diag_ref.at_mut(i, i) =
 				(self.eigenvalues[i] * distance).exp();
 		}
 
-		mul(p_ref, *diag_ref, scratch_ref.reborrow());
-		mul(*scratch_ref, inv_p_ref, dst);
+		mul(p_ref, diag_ref, &mut *scratch_ref);
+		mul(scratch_ref, inv_p_ref, dst);
 	}
 
 	fn write_frequencies(&self, dst: &mut [f64]) {

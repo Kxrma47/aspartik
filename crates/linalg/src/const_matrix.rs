@@ -26,10 +26,12 @@ impl<'a, T, const N: usize, const M: usize> ConstMatrixRef<'a, T, N, M> {
 		}
 	}
 
-	pub fn as_ref(self) -> MatrixRef<'a, T> {
+	pub fn as_ref(self) -> &'a MatrixRef<T> {
 		// SAFETY: the data will live at least `'a` because of the
 		// `self` borrow, and the pointer is valid by construction.
-		unsafe { MatrixRef::from_raw_parts(self.ptr, self.dim()) }
+		unsafe {
+			MatrixRef::from_raw_parts(self.ptr, N as u32, M as u32)
+		}
 	}
 }
 

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use linalg::MatrixMut;
+use linalg::MatrixRef;
 
 use crate::{
 	SkSliceBuf, parameters::DatedTree, substitution::SubstitutionModel,
@@ -34,7 +34,7 @@ impl Transitions {
 			let time_length = tree.edge_length(edge);
 			let length = time_length * clock_rate(edge);
 
-			let m_ref = MatrixMut::from_slice(
+			let m_ref = MatrixRef::from_slice_mut(
 				self.data.update(edge as usize),
 				size,
 				size,
