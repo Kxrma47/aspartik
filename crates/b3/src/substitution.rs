@@ -4,12 +4,8 @@ use pyo3::{exceptions::PyTypeError, prelude::*};
 use std::ops::{Deref, DerefMut};
 
 use crate::parameters::{Parameter, PyReal, PyRealVector};
-use linalg::{
-	Matrix, MatrixArrayExt, MatrixCopyExt, MatrixRef, MatrixSliceExt,
-	beast_eigen,
-	const_matrix::{from_diagonal, mul as cmul},
-	mul,
-};
+use computare_linalg::{RowMatrix, ops::mat_mul_u};
+use linalg::{Matrix, MatrixRef, beast_eigen};
 use util::py_bail;
 
 pub trait SubstitutionModel {
@@ -69,6 +65,41 @@ impl DerefMut for Substitution {
 
 type M4 = [[f64; 4]; 4];
 
+fn copy4(dst: &mut MatrixRef<f64>, src: &M4) {
+	dst.as_slice_mut().copy_from_slice(src.as_flattened());
+}
+
+fn diagonal4(values: [f64; 4]) -> M4 {
+	let mut out = [[0.0; 4]; 4];
+	for (i, value) in values.into_iter().enumerate() {
+		out[i][i] = value;
+	}
+	out
+}
+
+fn mul3<A, B, C, Dst>(a: &A, b: &B, c: &C, dst: &mut Dst)
+where
+	A: Matrix<Item = f64> + ?Sized,
+	B: Matrix<Item = f64> + ?Sized,
+	C: Matrix<Item = f64> + ?Sized,
+	Dst: Matrix<Item = f64> + ?Sized,
+{
+	assert_eq!(a.num_cols(), b.num_rows());
+	assert_eq!(b.num_cols(), c.num_rows());
+	assert_eq!(dst.num_rows(), a.num_rows());
+	assert_eq!(dst.num_cols(), c.num_cols());
+
+	let mut tmp = RowMatrix::zeroed(b.num_cols(), a.num_rows());
+	// SAFETY: all indices are within the dimensions of the matrices.
+	unsafe {
+		mat_mul_u(a, b, &mut *tmp);
+	};
+	// SAFETY: all indices are within the dimensions of the matrices.
+	unsafe {
+		mat_mul_u(&*tmp, c, dst);
+	};
+}
+
 /// Jukes-Cantor
 ///
 /// A simple model with equal state transition rates.
@@ -114,7 +145,7 @@ impl SubstitutionModel for JC {
 			[other, other, diagonal, other],
 			[other, other, other, diagonal],
 		];
-		dst.copy_from(out.as_mat());
+		copy4(dst, &out);
 	}
 
 	fn write_frequencies(&self, dst: &mut [f64]) {
@@ -198,7 +229,7 @@ impl SubstitutionModel for K80 {
 			[transition, transversion, diagonal, transversion],
 			[transversion, transition, transversion, diagonal],
 		];
-		dst.copy_from(out.as_mat());
+		copy4(dst, &out);
 	}
 
 	fn write_frequencies(&self, dst: &mut [f64]) {
@@ -382,10 +413,9 @@ impl SubstitutionModel for HKY {
 		}
 
 		let diag: M4 =
-			from_diagonal(&self.diag.map(|v| (v * distance).exp()));
+			diagonal4(self.diag.map(|v| (v * distance).exp()));
 
-		let out = cmul(&cmul(&self.p, &diag), &self.inv_p);
-		dst.copy_from(out.as_mat());
+		mul3(&self.p, &diag, &self.inv_p, dst);
 	}
 
 	fn write_frequencies(&self, dst: &mut [f64]) {
@@ -557,10 +587,9 @@ impl SubstitutionModel for GTR {
 		}
 
 		let diag: M4 =
-			from_diagonal(&self.diag.map(|v| (v * distance).exp()));
+			diagonal4(self.diag.map(|v| (v * distance).exp()));
 
-		let out = cmul(&cmul(&self.p, &diag), &self.inv_p);
-		dst.copy_from(out.as_mat());
+		mul3(&self.p, &diag, &self.inv_p, dst);
 	}
 
 	fn write_frequencies(&self, dst: &mut [f64]) {
@@ -585,11 +614,11 @@ pub struct GenericSubstitution {
 	frequencies: Py<PyRealVector>,
 	rates: Py<PyRealVector>,
 
-	p: Vec<f64>,
-	inv_p: Vec<f64>,
+	p: RowMatrix<f64>,
+	inv_p: RowMatrix<f64>,
 	eigenvalues: Vec<f64>,
-	diag: Vec<f64>,
-	scratch: Vec<f64>,
+	diag: RowMatrix<f64>,
+	scratch: RowMatrix<f64>,
 	has_changed: bool,
 }
 
@@ -604,11 +633,11 @@ impl GenericSubstitution {
 		let mut out = Self {
 			frequencies,
 			rates,
-			p: vec![0.0; n * n],
-			inv_p: vec![0.0; n * n],
+			p: RowMatrix::zeroed(n, n),
+			inv_p: RowMatrix::zeroed(n, n),
 			eigenvalues: vec![0.0; n],
-			diag: vec![0.0; n * n],
-			scratch: vec![0.0; n * n],
+			diag: RowMatrix::zeroed(n, n),
+			scratch: RowMatrix::zeroed(n, n),
 			has_changed: false,
 		};
 		out.update_matrices();
@@ -680,11 +709,17 @@ impl GenericSubstitution {
 			beast_eigen::DefaultEigenSystem::new(self.diag.len());
 		let decomposition = eigen_sys.decompose_matrix(&mut q).unwrap();
 
-		self.p.copy_from_slice(decomposition.get_eigen_vectors());
-		self.inv_p.copy_from_slice(
+		self.p.as_slice_mut()
+			.copy_from_slice(decomposition.get_eigen_vectors());
+		self.inv_p.as_slice_mut().copy_from_slice(
 			decomposition.get_inverse_eigen_vectors(),
 		);
-		self.diag.copy_from_slice(decomposition.get_eigen_values());
+		self.diag.for_each_mut(|value| *value = 0.0);
+		for (i, value) in
+			decomposition.get_eigen_values().iter().enumerate()
+		{
+			*self.diag.at_mut(i, i) = *value;
+		}
 	}
 }
 
@@ -710,19 +745,12 @@ impl SubstitutionModel for GenericSubstitution {
 		assert!(dst.is_square());
 		assert_eq!(dst.num_cols(), n);
 
-		let scratch_ref = self.scratch.as_mat_mut(n, n);
-
-		let p_ref = self.p.as_mat(n, n);
-		let inv_p_ref = self.inv_p.as_mat(n, n);
-
-		let diag_ref = self.diag.as_mat_mut(n, n);
 		for i in 0..n {
-			*diag_ref.at_mut(i, i) =
+			*self.diag.at_mut(i, i) =
 				(self.eigenvalues[i] * distance).exp();
 		}
 
-		mul(p_ref, diag_ref, &mut *scratch_ref);
-		mul(scratch_ref, inv_p_ref, dst);
+		mul3(&*self.p, &*self.diag, &*self.inv_p, dst);
 	}
 
 	fn write_frequencies(&self, dst: &mut [f64]) {

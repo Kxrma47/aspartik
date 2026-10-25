@@ -1,14 +1,10 @@
 #[cfg(feature = "arbitrary")]
 pub mod arbitrary;
 pub mod beast_eigen;
-pub mod const_matrix;
 mod dim;
-mod ext;
 
 pub use computare_linalg::{Matrix, MatrixRef};
-pub use const_matrix::ConstMatrixRef;
 pub use dim::Dim;
-pub use ext::{MatrixArrayExt, MatrixCopyExt, MatrixSliceExt};
 
 pub fn mul(
 	lhs: &MatrixRef<f64>,
