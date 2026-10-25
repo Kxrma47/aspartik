@@ -205,7 +205,6 @@ pub fn builder_to_binary(
 	for node in builder.nodes() {
 		if builder.children_of(node).is_empty() {
 			let name = builder.name(node);
-			// TODO: that's very slow
 			let taxon = taxon_map.get(name).with_context(|| {
 				anyhow!("Unknown taxon: {name:?}")
 			})?;

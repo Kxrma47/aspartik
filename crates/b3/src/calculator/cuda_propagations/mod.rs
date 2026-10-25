@@ -196,7 +196,8 @@ impl CudaPropagationsCalculator {
 		builder.arg(&leaves_end);
 		builder.arg(&internals_start);
 
-		// SAFETY: TODO
+		// SAFETY: Arguments must match the kernel, other than that
+		// we're relying on the CUDA C++ kernel being correct.
 		unsafe { builder.launch(cfg) }
 			.with_context(|| anyhow!("update_all: {cfg:?}"))?;
 
@@ -225,7 +226,7 @@ impl CudaPropagationsCalculator {
 		builder.arg(&self.nodes);
 		builder.arg(&self.transitions);
 
-		// SAFETY: TODO
+		// SAFETY: see `update_all`
 		unsafe { builder.launch(cfg) }
 			.with_context(|| anyhow!("update_leaves: {cfg:?}"))?;
 
@@ -263,7 +264,7 @@ impl CudaPropagationsCalculator {
 		builder.arg(&right);
 		builder.arg(&frequencies);
 
-		// SAFETY: TODO
+		// SAFETY: see `update_all`
 		unsafe { builder.launch(cfg) }.with_context(|| {
 			anyhow!("update_likelihoods: {cfg:?}")
 		})?;

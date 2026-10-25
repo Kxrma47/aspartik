@@ -160,7 +160,8 @@ impl CudaPartialsCalculator {
 		builder.arg(&self.likelihoods);
 		builder.arg(&frequencies);
 
-		// SAFETY: TODO
+		// SAFETY: Arguments must match the kernel, other than that
+		// we're relying on the CUDA C++ kernel being correct.
 		unsafe { builder.launch(cfg) }
 			.with_context(|| anyhow!("update_partials: {cfg:?}"))?;
 
