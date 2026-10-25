@@ -503,47 +503,38 @@ impl GTR {
 		let [p_a, p_c, p_g, p_t] = self.cached_frequencies;
 		let [a, b, c, d, e, f] = self.get_rates();
 
-		let mut gtr = vec![
-			vec![
-				-a * p_c - b * p_g - c * p_t,
-				a * p_c,
-				b * p_g,
-				c * p_t,
-			],
-			vec![
-				a * p_a,
-				-a * p_a - d * p_g - e * p_t,
-				d * p_g,
-				e * p_t,
-			],
-			vec![
-				b * p_a,
-				d * p_c,
-				-b * p_a - d * p_c - f * p_t,
-				f * p_t,
-			],
-			vec![
-				c * p_a,
-				e * p_c,
-				f * p_g,
-				-c * p_a - e * p_c - f * p_g,
-			],
+		let gtr = [
+			-a * p_c - b * p_g - c * p_t,
+			a * p_c,
+			b * p_g,
+			c * p_t,
+			//
+			a * p_a,
+			-a * p_a - d * p_g - e * p_t,
+			d * p_g,
+			e * p_t,
+			//
+			b * p_a,
+			d * p_c,
+			-b * p_a - d * p_c - f * p_t,
+			f * p_t,
+			//
+			c * p_a,
+			e * p_c,
+			f * p_g,
+			-c * p_a - e * p_c - f * p_g,
 		];
+		let mut gtr = RowMatrix::from_slice(&gtr, 4, 4);
 		let div = 2.0
 			* (a * p_a * p_c
 				+ b * p_a * p_g + c * p_a * p_t
 				+ d * p_c * p_g + e * p_c * p_t
 				+ f * p_g * p_t);
-		for row in &mut gtr {
-			for element in row {
-				*element /= div;
-			}
-		}
+		gtr.for_each_mut(|element| *element /= div);
 
-		#[expect(clippy::needless_range_loop)]
 		for i in 0..4 {
 			for j in 0..4 {
-				self.q[i][j] = gtr[i][j];
+				self.q[i][j] = *gtr.at(i, j);
 			}
 		}
 
@@ -659,19 +650,18 @@ impl GenericSubstitution {
 		}
 	}
 
-	#[expect(clippy::needless_range_loop)]
 	fn update_matrices(&mut self) {
 		let n = self.eigenvalues.len();
 		let freqs = self.frequencies.get().inner();
 		let rates = self.rates.get().inner();
 
-		let mut q = vec![vec![0.0; n]; n];
+		let mut q = RowMatrix::zeroed(n, n);
 
 		let mut rate_idx = 0;
 		// upper triangular
 		for i in 0..n {
 			for j in (i + 1)..n {
-				q[i][j] = freqs[j] * rates[rate_idx];
+				*q.at_mut(i, j) = freqs[j] * rates[rate_idx];
 				rate_idx += 1;
 			}
 		}
@@ -680,7 +670,7 @@ impl GenericSubstitution {
 		// lower triangular
 		for i in 0..n {
 			for j in 0..i {
-				q[i][j] = freqs[j] * rates[rate_idx];
+				*q.at_mut(i, j) = freqs[j] * rates[rate_idx];
 				rate_idx += 1;
 			}
 		}
@@ -693,17 +683,13 @@ impl GenericSubstitution {
 				if j == i {
 					continue;
 				}
-				sum += q[i][j];
+				sum += q.at(i, j);
 			}
-			q[i][i] = -sum;
+			*q.at_mut(i, i) = -sum;
 			scale += sum * freqs[i];
 		}
 
-		for row in &mut q {
-			for el in row {
-				*el /= scale;
-			}
-		}
+		q.for_each_mut(|el| *el /= scale);
 
 		let mut eigen_sys =
 			beast_eigen::DefaultEigenSystem::new(self.diag.len());
