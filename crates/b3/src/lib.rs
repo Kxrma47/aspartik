@@ -1,3 +1,4 @@
+pub mod beast_eigen;
 pub mod calculator;
 pub mod callback;
 pub mod clock;

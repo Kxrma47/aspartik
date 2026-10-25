@@ -4,8 +4,7 @@ use pyo3::{exceptions::PyTypeError, prelude::*};
 use std::ops::{Deref, DerefMut};
 
 use crate::parameters::{Parameter, PyReal, PyRealVector};
-use computare_linalg::{RowMatrix, ops::mat_mul_u};
-use linalg::{Matrix, MatrixRef, beast_eigen};
+use computare_linalg::{Matrix, MatrixRef, RowMatrix, ops::mat_mul_u};
 use util::py_bail;
 
 pub trait SubstitutionModel {
@@ -538,7 +537,8 @@ impl GTR {
 			}
 		}
 
-		let mut eigen_sys = beast_eigen::DefaultEigenSystem::new(4);
+		let mut eigen_sys =
+			crate::beast_eigen::DefaultEigenSystem::new(4);
 		let decomposition =
 			eigen_sys.decompose_matrix(&mut gtr).unwrap();
 
@@ -691,8 +691,9 @@ impl GenericSubstitution {
 
 		q.for_each_mut(|el| *el /= scale);
 
-		let mut eigen_sys =
-			beast_eigen::DefaultEigenSystem::new(self.diag.len());
+		let mut eigen_sys = crate::beast_eigen::DefaultEigenSystem::new(
+			self.diag.len(),
+		);
 		let decomposition = eigen_sys.decompose_matrix(&mut q).unwrap();
 
 		self.p.as_slice_mut()

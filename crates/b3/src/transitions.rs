@@ -1,5 +1,5 @@
 use anyhow::Result;
-use linalg::MatrixRef;
+use computare_linalg::MatrixRef;
 
 use crate::{
 	SkSliceBuf, parameters::DatedTree, substitution::SubstitutionModel,
