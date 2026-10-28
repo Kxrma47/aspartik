@@ -81,7 +81,9 @@ macro_rules! wrapper {
 			fn mean(&self, py: Python) -> Result<f64> {
 				#[expect(clippy::no_effect)]
 				$statistics;
-				Ok(self.make(py)?.mean()?)
+
+				let dist = self.make(py)?;
+				Ok(Statistics::mean(&dist)?)
 			}
 
 			fn median(&self, py: Python) -> Result<f64> {
@@ -97,7 +99,8 @@ macro_rules! wrapper {
 			}
 
 			fn std(&self, py: Python) -> Result<f64> {
-				Ok(self.make(py)?.std()?)
+				let dist = self.make(py)?;
+				Ok(Statistics::std(&dist)?)
 			}
 
 			fn entropy(&self, py: Python) -> Result<f64> {
@@ -128,12 +131,11 @@ macro_rules! wrapper {
 	};
 }
 
-// TODO: Beta, Gamma, InverseGamma, Normal, and Uniform have `&str` error types, which can't be
-// wrapped by anyhow
 wrapper! {
 	Beta { shape_a, shape_b };
 	repr("Beta(shape_a={}, shape_b={})", shape_a, shape_b);
 	Continuous true;
+	Statistics true;
 }
 
 wrapper! {
@@ -147,12 +149,14 @@ wrapper! {
 	Gamma { shape, scale };
 	repr("InverseGamma(shape={}, scale={})", shape, scale);
 	Continuous true;
+	Statistics true;
 }
 
 wrapper! {
 	InverseGamma { shape, scale };
 	repr("InverseGamma(shape={}, scale={})", shape, scale);
 	Continuous true;
+	Statistics true;
 }
 
 wrapper! {
@@ -173,12 +177,14 @@ wrapper! {
 	Normal { mean, std };
 	repr("Normal(mean={}, std={})", mean, std);
 	Continuous true;
+	Statistics true;
 }
 
 wrapper! {
 	Uniform { min, max };
 	repr("Uniform(min={}, max={})", min, max);
 	Continuous true;
+	Statistics true;
 }
 
 #[pymodule(name = "_distributions_rust_impl")]
