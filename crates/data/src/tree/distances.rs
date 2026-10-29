@@ -1,4 +1,5 @@
 use anyhow::{Result, ensure};
+use computare_linalg::{Matrix, RowMatrix};
 use hashbrown::HashTable;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use smallvec::SmallVec;
@@ -92,9 +93,9 @@ fn clade_hash(
 /// `f_c` is the number of trees containing clade `c`.
 ///
 /// [rf]: https://doi.org/10.1016/0025-5564(81)90043-2
-pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
+pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<RowMatrix<u32>> {
 	let Some(first_tree) = trees.first() else {
-		return Ok(Vec::new());
+		return Ok(RowMatrix::empty());
 	};
 
 	let num_leaves = first_tree.num_leaves();
@@ -134,9 +135,10 @@ pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
 	clades.sort_unstable();
 
 	let max_distance = (num_leaves - 2) * 2;
-	let mut distances = vec![vec![max_distance; trees.len()]; trees.len()];
-	for (index, row) in distances.iter_mut().enumerate() {
-		row[index] = 0;
+	let mut distances = RowMatrix::zeroed(trees.len(), trees.len());
+	distances.for_each_mut(|distance| *distance = max_distance);
+	for index in 0..trees.len() {
+		*distances.at_mut(index, index) = 0;
 	}
 
 	let mut slice_start = 0;
@@ -161,8 +163,8 @@ pub fn robinson_foulds_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<u32>>> {
 
 		for (offset, &first) in distinct_trees.iter().enumerate() {
 			for &second in &distinct_trees[offset + 1..] {
-				distances[first][second] -= 2;
-				distances[second][first] -= 2;
+				*distances.at_mut(first, second) -= 2;
+				*distances.at_mut(second, first) -= 2;
 			}
 		}
 
@@ -208,9 +210,9 @@ pub fn branch_score(first: &BinaryTree, second: &BinaryTree) -> Result<f64> {
 	Ok(squared.sqrt())
 }
 
-pub fn branch_score_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<f64>>> {
+pub fn branch_score_matrix(trees: &[&BinaryTree]) -> Result<RowMatrix<f64>> {
 	let Some(first_tree) = trees.first() else {
-		return Ok(Vec::new());
+		return Ok(RowMatrix::empty());
 	};
 
 	let num_leaves = first_tree.num_leaves();
@@ -244,7 +246,7 @@ pub fn branch_score_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<f64>>> {
 	clades.sort_unstable();
 
 	let mut norms = vec![0.0; trees.len()];
-	let mut distances = vec![vec![0.0; trees.len()]; trees.len()];
+	let mut distances = RowMatrix::zeroed(trees.len(), trees.len());
 	let mut start = 0;
 	while start < clades.len() {
 		let hash = clades[start].0;
@@ -261,7 +263,7 @@ pub fn branch_score_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<f64>>> {
 				let other_length = trees[second]
 					.edge_length(other_node)
 					.unwrap();
-				distances[first][second] +=
+				*distances.at_mut(first, second) +=
 					length * other_length;
 			}
 		}
@@ -270,8 +272,9 @@ pub fn branch_score_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<f64>>> {
 
 	for first in 0..trees.len() {
 		for second in first + 1..trees.len() {
+			let cross_product: f64 = *distances.at(first, second);
 			let squared = norms[first] + norms[second]
-				- 2.0 * distances[first][second];
+				- 2.0 * cross_product;
 			let distance = if squared
 				<= 8.0 * f64::EPSILON
 					* (norms[first] + norms[second])
@@ -288,8 +291,8 @@ pub fn branch_score_matrix(trees: &[&BinaryTree]) -> Result<Vec<Vec<f64>>> {
 			} else {
 				squared.sqrt()
 			};
-			distances[first][second] = distance;
-			distances[second][first] = distance;
+			*distances.at_mut(first, second) = distance;
+			*distances.at_mut(second, first) = distance;
 		}
 	}
 
@@ -326,9 +329,9 @@ impl BinaryTree {
 /// <https://doi.org/10.4230/LIPIcs.ESA.2017.21>.
 pub fn triplet_distance_matrix(
 	trees: &[&BinaryTree],
-) -> Result<Vec<Vec<u128>>> {
+) -> Result<RowMatrix<u128>> {
 	let Some(first_tree) = trees.first() else {
-		return Ok(Vec::new());
+		return Ok(RowMatrix::empty());
 	};
 
 	let num_leaves = first_tree.num_leaves();
@@ -344,13 +347,13 @@ pub fn triplet_distance_matrix(
 		);
 	}
 
-	let mut distances = vec![vec![0; trees.len()]; trees.len()];
+	let mut distances = RowMatrix::zeroed(trees.len(), trees.len());
 	for first in 0..trees.len() {
 		for second in 0..first {
 			let distance =
 				trees[first].triplet_distance(trees[second]);
-			distances[first][second] = distance;
-			distances[second][first] = distance;
+			*distances.at_mut(first, second) = distance;
+			*distances.at_mut(second, first) = distance;
 		}
 	}
 	Ok(distances)

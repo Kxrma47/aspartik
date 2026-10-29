@@ -501,8 +501,7 @@ pub fn py_branch_score_matrix(
 			.collect::<Vec<_>>();
 		branch_score_matrix(&trees)
 	})?;
-	let flat: Vec<f64> = distances.into_iter().flatten().collect();
-	let flat_bytes: &[u8] = bytemuck::cast_slice(&flat);
+	let flat_bytes: &[u8] = bytemuck::cast_slice(distances.as_slice());
 	let array_module = py.import("array")?;
 	let py_array = array_module.call_method1("array", ("d",))?;
 	py_array.call_method1("frombytes", (flat_bytes,))?;
@@ -539,15 +538,14 @@ pub fn py_robinson_foulds_matrix(
 	py: Python<'_>,
 	trees: Vec<Py<PyBinaryTree>>,
 ) -> Result<Py<PyAny>> {
-	let m = py.detach(move || {
+	let distances = py.detach(move || {
 		let trees = trees
 			.iter()
 			.map(|tree| &tree.get().inner)
 			.collect::<Vec<_>>();
 		robinson_foulds_matrix(&trees[..])
 	})?;
-	let flat: Vec<u32> = m.into_iter().flatten().collect();
-	let flat_bytes: &[u8] = bytemuck::cast_slice(&flat);
+	let flat_bytes: &[u8] = bytemuck::cast_slice(distances.as_slice());
 	let array_module = py.import("array")?;
 	let py_array = array_module.call_method1("array", ("I",))?;
 	py_array.call_method1("frombytes", (flat_bytes,))?;
@@ -566,11 +564,10 @@ pub fn py_triplet_distance_matrix(
 			.collect::<Vec<_>>();
 		triplet_distance_matrix(&trees)
 	})?;
-	let flat = distances
-		.into_iter()
-		.flatten()
-		.map(u64::try_from)
-		.collect::<std::result::Result<Vec<_>, _>>()?;
+	let mut flat = Vec::<u64>::with_capacity(distances.num_elements());
+	for &distance in distances.as_slice() {
+		flat.push(u64::try_from(distance)?);
+	}
 	let flat_bytes: &[u8] = bytemuck::cast_slice(&flat);
 	let array_module = py.import("array")?;
 	let py_array = array_module.call_method1("array", ("Q",))?;

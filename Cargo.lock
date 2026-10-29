@@ -227,6 +227,7 @@ dependencies = [
  "buffer",
  "bytemuck",
  "computare-core",
+ "computare-linalg",
  "hashbrown",
  "logos",
  "parking_lot",
